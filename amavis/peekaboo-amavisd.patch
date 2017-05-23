@@ -1,0 +1,86 @@
+diff --git a/amavis/bin/amavisd-new-2.11.0/amavisd b/amavis/bin/amavisd-new-2.11.0/amavisd
+index 7f93194..d6ab174 100755
+--- a/amavis/bin/amavisd-new-2.11.0/amavisd
++++ b/amavis/bin/amavisd-new-2.11.0/amavisd
+@@ -407,6 +407,7 @@ BEGIN {
+       %dkim_signing_keys_by_domain
+       @dkim_signing_keys_list @dkim_signing_keys_storage
+       $file $altermime $enable_anomy_sanitizer
++      $enable_dump_info $dump_info_tempdir
+     )],
+     'sa' =>  # global SpamAssassin settings
+     [qw(
+@@ -31596,6 +31597,44 @@ sub determine_file_types_fileutility($$) {
+   1;
+ }
+ 
++# please refer to README.dump-info
++sub dump_info {
++    #do_log(0,"dump_info");
++    my ($part, $tempdir) = @_;
++    my $full_name = $part->full_name;
++    my $base_name = $part->base_name;
++    my $dir_name  = $part->dir_name;
++    my $own_tempdir = '/tmp';
++    $own_tempdir = $dump_info_tempdir if defined $dump_info_tempdir;
++    $tempdir =~ s|/+[^/]+$||;
++    $dir_name =~ s|^$tempdir/|$own_tempdir/|;
++    $dir_name =~ s|/parts||;
++    mkdir $dir_name, 0770 or warn "couldn't create $dir_name: $!" unless -d $dir_name;
++    my $info_file = "$dir_name/$base_name.info";
++    if (open my $info_fh, ">", $info_file) {
++        printf $info_fh "[attachment]\n";
++        for my $field (qw(
++                       full_name
++                       name_declared
++                       type_declared
++                       type_long
++                       type_short
++                       size
++                       digest
++                       attributes
++                       queue_id
++                      )) {
++            printf $info_fh "%-15s: %s\n", "$field", $part->can($field) ? $part->$field() : $Amavis::MSGINFO->$field();
++        }
++        close $info_fh;
++
++        system 'cp', $full_name, $dir_name if -w $dir_name;
++
++    } else {
++        warn "couldn't create $info_file: $!";
++    }
++}
++
+ sub decompose_mail($$) {
+   my($tempdir,$file_generator_object) = @_;
+ 
+@@ -31655,6 +31694,12 @@ TIER:
+     for my $part (@parts) {
+       if ($part->exists && !defined($hold)) {
+         my($hold_tmp, $over_levels_tmp) = decompose_part($part, $tempdir);
++
++        # create p*.info files in /tmp/<hash>/...
++        if ($enable_dump_info) {
++            dump_info($part, $tempdir);
++        }
++
+         $hold = $hold_tmp if $hold_tmp;
+         $over_levels ||= $over_levels_tmp;
+       }
+diff --git a/amavis/bin/amavisd-new-2.11.0/amavisd.conf-default b/amavis/bin/amavisd-new-2.11.0/amavisd.conf-default
+index 716bcd0..b8fa0c5 100644
+--- a/amavis/bin/amavisd-new-2.11.0/amavisd.conf-default
++++ b/amavis/bin/amavisd-new-2.11.0/amavisd.conf-default
+@@ -944,4 +944,11 @@ use strict;
+     ##   @addr_extension_virus_maps  @addr_extension_spam_maps
+     ##   @addr_extension_banned_maps @addr_extension_bad_header_maps
+ 
++
++## dump-info, please see file README.dump-info for more info.
++
++# $enable_dump_info  = 0;       # set to 1 to enable dump_info feature
++# $dump_info_tempdir = '/tmp';  # base directory where dump_info() will put its stuff
++
++
+ 1;  # insure a defined return value
