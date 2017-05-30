@@ -196,40 +196,6 @@ class PeekabooDaemonListener(object):
         return s
 
 
-def __get_dev_status(config):
-    """
-    State, code, and changes from git
-
-    TODO: Remove for production.
-    """
-    logger.debug("State, Code and Changes from git")
-    # user and groups
-    uid = pwd.getpwuid(os.getuid())[0]
-    groups = ', '.join([grp.getgrgid(g).gr_name for g in os.getgroups()])
-    logger.debug('User: %s, groups: %s' % (uid, groups))
-
-    logger.debug("permissions on %s" % config.sock_file)
-    os.system("ls -la %s" % config.sock_file)
-
-    # put most resent git commit id and comment into log
-    os.system("git status")     # info about modified files
-    os.system("git log -1")     # full info of last commit
-    os.system("git log --oneline --decorate | head -5")   # last 5 commits
-
-    # put local changes into log
-    os.system("git diff | cat")
-
-    # put installed pip packages into log
-    logger.debug("pip check for installed requirements and versions")
-    os.system("bash -c \"comm --nocheck-order -23 requirements.txt"
-              "<(pip freeze)\"")
-
-    # put database state into log
-    logger.debug("database schema and count of records")
-    os.system("sqlite3 analysis.db \".schema\"")
-    os.system("sqlite3 analysis.db \"SELECT COUNT(*) FROM sample\"")
-
-
 def main():
     arg_parser = ArgumentParser()
     arg_parser.add_argument('-c', '--config', action='store', required=False,
@@ -288,10 +254,6 @@ def main():
     # write PID file
     pid = str(os.getpid())
     file(config.pid_file, "w").write("%s\n" % pid)
-
-    # show development status (latest git changes etc.) in debug mode
-    if config.log_level == 'DEBUG':
-        __get_dev_status(config)
 
     # start thread to handle socket connections from amavis
     listener = PeekabooDaemonListener(config)
