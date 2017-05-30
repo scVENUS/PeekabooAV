@@ -36,6 +36,7 @@ import string
 import shutil
 from ConfigParser import ConfigParser
 from random import choice
+from datetime import datetime
 from oletools.olevba import VBA_Parser
 from . import logger
 from .pjobs import Jobs
@@ -362,6 +363,14 @@ class Sample(object):
         if not self.has_attr('file_stat'):
             self.set_attr('file_stat', os.stat(self.__file_path))
         return self.get_attr('file_stat').st_size
+
+    @property
+    def analyses_time(self):
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+        if not self.has_attr('analyses_time'):
+            self.set_attr('analyses_time', timestamp)
+        return timestamp
+
 
     @property
     def requested_domains(self):

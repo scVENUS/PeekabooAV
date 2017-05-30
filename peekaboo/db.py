@@ -25,7 +25,8 @@
 
 from __future__ import print_function
 from __future__ import absolute_import
-from sqlalchemy import Column, Integer, String
+from datetime import datetime
+from sqlalchemy import Column, Integer, String, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.engine import create_engine
 from sqlalchemy.orm.session import sessionmaker
@@ -48,13 +49,15 @@ class SampleInfo(Base):
 
     id = Column(Integer, primary_key=True)
     sample_sha256_hash = Column(String(64), nullable=True)
-    # TODO: Add date field containing analysis time.
+    analyses_time = Column(DateTime, nullable=False)
     result = Column(String(255), nullable=True)
     reason = Column(String(1024), nullable=True)
 
     def __repr__(self):
-        return ("<SampleInfo(sample_sha256_hash='%s', result='%s', reason='%s')>"
-                % (self.sample_sha256_hash, self.result, self.reason))
+        return ("<SampleInfo(sample_sha256_hash='%s', result='%s', reason='%s', "
+                "analyses_time='%s')>"
+                % (self.sample_sha256_hash, self.result, self.reason,
+                   self.analyses_time.strftime("%Y-%m-%d %H:%M")))
 
 
 class PeekabooDBHandler(object):
@@ -93,6 +96,7 @@ class PeekabooDBHandler(object):
         self.lock.acquire()
         session = self.Session()
         sample_info = SampleInfo(sample_sha256_hash=sample.sha256sum,
+                                 analyses_time=datetime.strptime(sample.analyses_time, "%Y-%m-%d %H:%M"),
                                  result=sample.get_result().name,
                                  reason=sample.reason)
         session.add(sample_info)
@@ -190,9 +194,10 @@ class PeekabooDBHandler(object):
         """
         session = self.Session()
         for sample_info in session.query(SampleInfo).order_by(SampleInfo.id):
-            print('%s: %s, %s' % (sample_info.sample_sha256_hash,
-                                  sample_info.get_result().name,
-                                  sample_info.reason))
+            print('%s: %s, %s, %s' % (sample_info.sample_sha256_hash,
+                                      sample_info.analyses_time.strftime("%Y-%m-%d %H:%M"),
+                                      sample_info.result,
+                                      sample_info.reason))
         session.close_all()
 
     def _clear_sample_info_table(self):
