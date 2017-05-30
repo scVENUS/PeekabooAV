@@ -149,9 +149,12 @@ class Sample(object):
 
         # kind of dirty hack to acquire ownership of that directory
         logger.debug('Invoking chown2me...')
-        # TODO: test if this works. chown2me crashes
-        #       if it cannot write its logfile
-        os.system(self.__config.chown2me_exec)
+        proc = subprocess.Popen(self.__config.chown2me_exec,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE)
+        proc.wait()
+        if proc.returncode != 0:
+            logger.error('chown2me exited with code %d' % proc.returncode)
 
         try:
             meta_info = SampleMetaInfo(os.path.join(self.__wd,
