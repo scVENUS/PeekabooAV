@@ -122,16 +122,11 @@ class PeekabooConfig(object):
         logger.setLevel(self.log_level)
 
     def __str__(self):
-        """
-        TODO: Dump configuration object as JSON.
-        """
-        result = '<PeekabooConfig('
+        sections = {}
         for section in self.__config.sections():
-            result += section + ': {'
+            sections[section] = {}
             for key, value in self.__config.items(section):
-                result += '%s: %s, ' % (key, value)
-            result += '}, '
-        result += ')>'
-        return result
+                sections[section][key] = value
+        return '<PeekabooConfig(%s)>' % str(sections)
 
     __repr__ = __str__
