@@ -26,7 +26,7 @@
 from __future__ import absolute_import
 import sys
 import logging
-from ConfigParser import ConfigParser, NoSectionError, NoOptionError
+from ConfigParser import SafeConfigParser, NoSectionError, NoOptionError
 from . import logger
 
 
@@ -57,7 +57,7 @@ class PeekabooConfig(object):
         self.__parse(config_file)
 
     def __parse(self, config_file):
-        config = ConfigParser()
+        config = SafeConfigParser()
         config.read(config_file)
         self.__config = config
         try:

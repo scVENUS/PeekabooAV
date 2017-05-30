@@ -34,7 +34,7 @@ import subprocess
 import json
 import string
 import shutil
-from ConfigParser import ConfigParser
+from ConfigParser import SafeConfigParser
 from random import choice
 from datetime import datetime
 from oletools.olevba import VBA_Parser
@@ -60,16 +60,16 @@ class SampleMetaInfo(object):
 
     def _read(self):
         """
-        Utilizes ConfigParser to parse the .info file (ini format).
+        Utilizes SafeConfigParser to parse the .info file (ini format).
 
-        @see: ConfigParser
+        @see: SafeConfigParser
         """
         if not os.path.exists(self.__meta_info_path):
             raise OSError('No metadata available for %s'
                           % self.__meta_info_path)
         else:
             logger.debug('Reading metadata for %s' % self.__meta_info_path)
-            meta_info = ConfigParser()
+            meta_info = SafeConfigParser()
             meta_info.read(self.__meta_info_path)
             self.__meta_info = meta_info
 
