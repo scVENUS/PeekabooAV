@@ -385,13 +385,12 @@ class Sample(object):
                                      file_for_analysis],
                                      stdout=subprocess.PIPE,
                                      stderr=subprocess.PIPE)
+                p.wait()
             except Exception as e:
                 logger.error("Popen: %s" % str(e))
                 raise e
-            logger.debug('%s %s' % (p, p.returncode))
 
-            # TODO: check return code if submit worked
-            if False:  # not p.returncode == 0:
+            if not p.returncode == 0:
                 # TODO: tell opponent on socket that file has not been checked
                 logger.error('submit didn\'t work')
             else:
