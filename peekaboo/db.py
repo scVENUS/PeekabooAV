@@ -30,6 +30,7 @@ from sqlalchemy import Column, Integer, String, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.engine import create_engine
 from sqlalchemy.orm.session import sessionmaker
+from sqlalchemy.orm.util import has_identity
 from . import logger
 from .ruleset import RuleResult, Result
 from .util import log_exception
@@ -149,11 +150,10 @@ class PeekabooDBHandler(object):
         :param sha256: The SHA-256 hash to check for.
         """
         session = self.Session()
-        rows = session.query(SampleInfo).filter_by(sample_sha256_hash=sha256)
-        # TODO: Replace this dirty hack..
-        for sample in rows:
-            if sample.result != 'inProgress':
-                return True
+        sample = session.query(SampleInfo).filter(SampleInfo.sample_sha256_hash == sha256,
+                                                  SampleInfo.result != 'inProgress').scalar()
+        if sample is not None:
+            return True
         return False
 
     def in_progress(self, sha256):
@@ -163,10 +163,9 @@ class PeekabooDBHandler(object):
         :param sha256: The SHA-256 hash to check for.
         """
         session = self.Session()
-        rows = session.query(SampleInfo).filter_by(sample_sha256_hash=sha256,
-                                                   result='inProgress')
-        # TODO: Replace this dirty hack..
-        for __ in rows:
+        sample = session.query(SampleInfo).filter(SampleInfo.sample_sha256_hash == sha256,
+                                                  SampleInfo.result == 'inProgress').scalar()
+        if sample is not None:
             return True
         return False
 
