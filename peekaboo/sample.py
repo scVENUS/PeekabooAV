@@ -32,6 +32,7 @@ import mimetypes
 import re
 import subprocess
 import json
+import errno
 import string
 import shutil
 from ConfigParser import SafeConfigParser
@@ -41,6 +42,7 @@ from oletools.olevba import VBA_Parser
 from . import logger
 from .pjobs import Jobs
 from .ruleset import Result
+from .util import log_exception
 
 
 class SampleMetaInfo(object):
@@ -177,7 +179,13 @@ class Sample(object):
         message = "Datei \"%s\" %s wird analysiert\n" % (self.__filename,
                                                          self.sha256sum)
         if self.__socket:
-            self.__socket.send(message)
+            try:
+                self.__socket.send(message)
+            except Exception as e:
+                if e.errno == errno.EPIPE:
+                    logger.warning('Unable send message "%s". Broken pipe.' % message)
+                else:
+                    log_exception(e)
 
     def get_attr(self, key):
         """
@@ -502,8 +510,10 @@ class Sample(object):
                 try:
                     self.__socket.send(message)
                 except Exception as e:
-                    logger.warning("sample.result 1: %s" % type(e))
-                    raise e
+                    if e.errno == errno.EPIPE:
+                        logger.warning('Unable send message "%s". Broken pipe.' % message)
+                    else:
+                        log_exception(e)
 
             # check if result of this rule is worse than what we know so far
             logger.debug("Current result: %s, Ruleset result: %s"
@@ -525,8 +535,10 @@ class Sample(object):
             try:
                 self.__socket.send(message)
             except Exception as e:
-                logger.error("sample.result 2: %s" % type(e))
-                raise e
+                if e.errno == errno.EPIPE:
+                    logger.warning('Unable send message "%s". Broken pipe.' % message)
+                else:
+                    log_exception(e)
 
         if Jobs.remove_job(self.__socket, self) <= 0:
             # returns count of remaining samples for this connection
@@ -546,8 +558,10 @@ class Sample(object):
                 try:
                     self.__socket.close()
                 except Exception as e:
-                    logger.warning("sample.result 3: %s" % type(e))
-                    raise e
+                    if e.errno == errno.EPIPE:
+                        logger.warning('Unable to close the socket. Broken pipe.')
+                    else:
+                        log_exception(e)
 
     def __gen_job_hash(self, size=20):
         """
