@@ -369,10 +369,11 @@ class Sample(object):
 
     @property
     def analyses_time(self):
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
         if not self.has_attr('analyses_time'):
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
             self.set_attr('analyses_time', timestamp)
-        return timestamp
+            return timestamp
+        return self.get_attr('analyses_time')
 
 
     @property
