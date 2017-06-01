@@ -485,7 +485,7 @@ class Sample(object):
             logger.debug('Known sample info not logged to database')
         else:
             logger.debug('Saving results to database')
-            self.__db_con.sample_info2db(self)
+            self.__db_con.update_sample_info(self)
 
     def set_job_id(self, job_id):
         if not self.has_attr('job_id'):
