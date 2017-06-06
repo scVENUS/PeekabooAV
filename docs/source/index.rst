@@ -10,18 +10,18 @@ Peekaboo Extended Email Attachment Behavior Observation Owl
 
 Status: **DRAFT**.
 
-Currently, the main use case of Peekaboo is to listen for connections from
-AMaViSd, which supplies a path in file system for every e-mail
-processed.
-Peekaboo will check the files using cuckoo sandbox and
-supply analysis results back to AMaViSd (bad | checked | good | ignored).
-Also, Peekaboo will run a static analysis using its own ruleset before
-submitting any files to Cuckoo.
+* PeekabooAV is an Anti Virus software
+* It gets email attachments from AMaViSd, checks them, uses Cuckoo for behavioral checks, and evaluates and rates fully automatic
+* PeekabooAV is written in Python, multi-threaded, scalable, has a very powerful ruleset, and is easy to extend and personalize
+* It is able to detect: malware by its behavior, exploitation of zero days, and targeted attacks
 
-* bad - for files that match any of the configured signature rules
-* good - for files that are manually marked as good
-* ignored - for files that file type does not match file types for analysis
-* checked - for every file that has been analyzed and is not bad
+**The main developers are:**
+
+* Felix Bauer
+* Sebastian Deiss
+* Christoph Herrmann
+
+For news and announcements follow us on twitter [@peekabooAV](https://twitter.com/peekabooav).
 
 
 .. toctree::
