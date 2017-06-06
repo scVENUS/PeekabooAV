@@ -13,7 +13,7 @@ Peekaboo Extended Email Attachment Behavior Observation Owl
 * Sebastian Deiss
 * Christoph Herrmann
 
-For news and announcements follow us on twitter @peekabooAV.
+For news and announcements follow us on twitter [@peekabooAV](https://twitter.com/peekabooav).
 
 
 ## Requirements ##
@@ -25,8 +25,8 @@ For news and announcements follow us on twitter @peekabooAV.
 
 ## Installation ##
 
-### Get Peekaboo ###
-Use the following commands to clone the Peekaboo repositories to your system:
+### Get PeekabooAV ###
+Clone the repository.
 
 ```shell
 git clone https://github.com/scVENUS/PeekabooAV.git
@@ -42,24 +42,43 @@ pip install -r requirements.txt
 cd bin/
 make chown2me
 sudo setcap cap_chown+ep chown2me
-chown cuckoo:cuckoo chown2me
 ```
 
-### Configuration ###
-Simply copy ``peekaboo.conf.sample`` to ``peekaboo.conf`` and edit it to fit your requirements.
-
-### Startup ###
-Now, you can run Peekaboo with
+### Install PeekabooAV ###
 ```shell
-python peekaboo_debug.py -c /path/to/your/peekaboo.conf
-```
-
-**Note:** If you put your ``peekaboo.conf`` in the base directory
-of the repository you can ommit the ``-c`` option.
-Also, for detailed command line options run
-```shell
-python peekaboo_debug.py --help
+python setup.py install
 ```
 
 ### Advanced Installations ###
 For a more advanced installation, please refer to our documentation located in the ``docs`` folder.
+
+
+## Configuration ##
+Take a look at ``peekaboo.conf.sample``.
+
+
+## Usage ##
+Now, you can run PeekabooAV with
+```shell
+peekaboo -c /path/to/your/peekaboo.conf
+```
+
+**Note:** If you have your PeekabooAV configuration file named ``peekaboo.conf``
+and put it in the base directory of the repository you can omit the ``-c`` option.  
+Also, for detailed command line options run
+```shell
+peekaboo --help
+```
+
+### Usage without Installation ###
+You can run PeekabooAV without installing it using the ``peekaboo_debug.py`` script.
+```shell
+python peekaboo_debug.py -c /path/to/your/peekaboo.conf
+```
+
+**Note:** ``peekaboo_debug.py`` provides the same command line options like ``peekaboo``.
+They can be displayed by running
+
+```shell
+python peekaboo_debug.py --help
+```
