@@ -84,7 +84,7 @@ int main(){
         strcat(fullpath,dir->d_name);
         fprintf(logfile_fd, "chown for %s\n", fullpath);
         // change owner to 1000
-        int res = chown(fullpath, uid, gid);
+        int res = lchown(fullpath, uid, gid);
         if (res != 0){
           perror("chown");
           return res;
