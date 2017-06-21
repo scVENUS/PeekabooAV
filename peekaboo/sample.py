@@ -434,8 +434,7 @@ class Sample(object):
 
             # stop worker
             sys.stdout.flush()
-            raise ValueError('Cuckoo report not yet available. Sample '
-                             'submitted for analysis')
+            raise Exception('Kill ruleset for now')
         return self.get_attr('cuckoo_report')
 
     def cuckoo_analysis_failed(self):

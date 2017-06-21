@@ -118,9 +118,8 @@ def rule(sample, rule_function, args={}):
     # catch all exceptions in rule
     except Exception as e:
         # in case this our Sample is requesting the Cuckoo report
-        if type(e) == ValueError and \
-           e.args == ValueError('Cuckoo report not yet available. Sample '
-                                'submitted for analysis').args:
+        if type(e) == Exception and \
+            e.args == Exception('Kill ruleset for now').args:
             raise
 
         logger.info("Unexpected error in '%s' for %s" % (function_name,
@@ -230,7 +229,7 @@ def already_in_progress(s):
                           further_analysis=True)
         except ValueError:
             s.set_attr("pending", True)
-            raise Exception
+            raise Exception('Kill ruleset for now')
 
 
 def known(s):
