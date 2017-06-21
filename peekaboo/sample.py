@@ -145,9 +145,9 @@ class Sample(object):
 
         # update database with state inProgress if sample unknown
         # to avoid multiple concurrent analysis
-        self.__result = Result.inProgress
-        if not self.__db_con.known(self.sha256sum):
-            self.__db_con.sample_info2db(self)
+        #self.__result = Result.inProgress
+        #if not self.__db_con.known(self.sha256sum):
+        #    self.__db_con.sample_info2db(self)
 
         # kind of dirty hack to acquire ownership of that directory
         logger.debug('Invoking chown2me...')
@@ -430,8 +430,7 @@ class Sample(object):
                         try:
                             self.__socket.send(message)
                         except Exception as e:
-                            print("Popen: %s" % e)
-                            raise e
+                            log_exception(e)
 
             # stop worker
             sys.stdout.flush()
@@ -485,7 +484,7 @@ class Sample(object):
             logger.debug('Known sample info not logged to database')
         else:
             logger.debug('Saving results to database')
-            self.__db_con.update_sample_info(self)
+            self.__db_con.sample_info2db(self)
 
     def set_job_id(self, job_id):
         if not self.has_attr('job_id'):

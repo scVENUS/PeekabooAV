@@ -27,7 +27,7 @@ from __future__ import absolute_import
 import threading
 from Queue import Queue
 from . import logger
-from .ruleset import evaluate
+from .ruleset import evaluate, Result
 from .util import log_exception
 
 
@@ -122,6 +122,34 @@ class Jobs(object):
         Jobs.__in_use.release()
         return requested_sample
 
+    @staticmethod
+    def get_samples_by_sha256(sha256sum):
+        Jobs.__in_use.acquire()
+        matching_samples = []
+        for __, samples in Jobs.__queue.iteritems():
+            for sample in samples:
+                if sha256sum == sample.sha256sum:
+                    matching_samples.append(sample)
+        Jobs.__in_use.release()
+        return matching_samples
+
+    @staticmethod
+    def get_samples_for_conn(sock_con):
+        Jobs.__in_use.acquire()
+        matching_samples = []
+        for con in Jobs.__queue.iteritems():
+            if con == sock_con:
+                matching_samples = Jobs.__queue[con]
+        Jobs.__in_use.release()
+        return matching_samples
+
+    @staticmethod
+    def in_progress(sha256sum):
+        sample = Jobs.get_sample_by_sha256(sha256sum)
+        if sample is not None and sample.get_result() == Result.inProgress:
+            return True
+        return False
+
 
 class Workers(object):
     """
@@ -168,6 +196,10 @@ class Workers(object):
 
             try:
                 evaluate(s)
+
+                for s in Jobs.get_samples_by_sha256(s.sha256sum):
+                    logger.debug('Processing queued sample %s' % s)
+                    Workers.submit_job(s, Workers.__class__)
             except ValueError as e:
                 # catch 'cuckooReport not yet available. Sample submitted for
                 # analysis' exception

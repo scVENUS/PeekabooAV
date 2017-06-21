@@ -28,6 +28,7 @@ import traceback
 import re
 from enum import Enum, unique
 from . import logger
+from .pjobs import Jobs, Workers
 
 
 '''
@@ -98,9 +99,6 @@ def evaluate(sample):
     evaluate_rules(sample)
 
     logger.debug("Rules evaluated")
-    # TODO: might be better to do this for each rule individually
-    sample.report()
-    sample.save_result()
 
 
 def rule(sample, rule_function, args={}):
@@ -148,9 +146,9 @@ def evaluate_rules(sample):
 
 # TODO (cuckooWrapper needs to check if there is other samples in pjobs with
 # the same hash)
-#    p = rule(  already_inProgress                   ,s)
-#    if not p.further_analysis:
-#        raise Exception
+    p = rule(s, already_in_progress)
+    if not p.further_analysis:
+        return
 
     p = rule(s, known)
     if not p.further_analysis:
@@ -188,12 +186,51 @@ def evaluate_rules(sample):
     if not p.further_analysis:
         return
 
+    # active rules, non reporting
+    report(sample)
+    queue_identical_samples(sample) # depends on already_in_progress
+
 #                   __ ____   _   _  _      _____  ____
 #                  / /|  _ \ | | | || |    | ____|/ ___|
 #                 / / | |_) || | | || |    |  _|  \___ \
 #                / /  |  _ < | |_| || |___ | |___  ___) |
 #               /_/   |_| \_\ \___/ |_____||_____||____/
     return None
+
+
+def report(s):
+    # TODO: might be better to do this for each rule individually
+    s.report()
+    s.save_result()
+
+
+def queue_identical_samples(s):
+    for sample in Jobs.get_samples_by_sha256(s.sha256):
+        Workers.submit_job(sample, 'Ruleset')
+
+
+def already_in_progress(s):
+    tb = traceback.extract_stack()
+    tb = tb[-1]
+    position = "%s:%s" % (tb[2], tb[1])
+      
+    if len(pjobs.get_samples_by_sha256(s.sha256sum)) == 1:
+        s.set_attr("pending", False)
+        return RuleResult(position,
+                          result=s.get_result(),
+                          reason='Datei wird jetzt Analysiert',
+                          further_analysis=True)
+    else:
+        try:
+            s.get_attr("pending")
+            s.set_attr("pending", False)
+            return RuleResult(position,
+                          result=s.get_result(),
+                          reason='Datei wird jetzt Analysiert',
+                          further_analysis=True)
+        except ValueError:
+            s.set_attr("pending", True)
+            raise Exception
 
 
 def known(s):

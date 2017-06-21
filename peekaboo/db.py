@@ -82,8 +82,6 @@ class PeekabooDBHandler(object):
             if not self.db_con.dialect.has_table(self.engine, 'sample_info'):
                 Base.metadata.create_all(self.engine)
                 logger.debug('Created database schema')
-            else:
-                self._clear_in_progress()
         except Exception as e:
             log_exception(e)
             raise e

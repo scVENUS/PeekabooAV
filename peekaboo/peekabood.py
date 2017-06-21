@@ -149,7 +149,8 @@ class PeekabooDaemonListener(object):
                     # before all file could be added
                     for s in for_analysis:
                         Jobs.add_job(conn, s)
-                        self.workers.submit_job(s, self.__class__)
+                        if not Jobs.in_progress(s.sha256sum):
+                            self.workers.submit_job(s, self.__class__)
 
                     if len(for_analysis) == 0:
                         conn.close()
