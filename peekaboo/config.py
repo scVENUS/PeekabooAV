@@ -47,6 +47,7 @@ class PeekabooConfig(object):
         self.worker_count = 3
         self.sample_base_dir = None
         self.job_hash_regex = None
+        self.use_debug_module = None
         self.db_url = None
         self.cuckoo_storage = None
         self.cuckoo_exec = None
@@ -71,6 +72,8 @@ class PeekabooConfig(object):
             self.worker_count = int(config.get('global', 'worker_count'))
             self.sample_base_dir = config.get('global', 'sample_base_dir')
             self.job_hash_regex = config.get('global', 'job_hash_regex')
+            self.use_debug_module = True if config.get('global', 'use_debug_module') == \
+                                            'yes' else False
             self.db_url = config.get('db', 'url')
             self.cuckoo_storage = config.get('cuckoo', 'storage_path')
             self.cuckoo_exec = config.get('cuckoo', 'exec')
