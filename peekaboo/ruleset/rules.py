@@ -2,7 +2,7 @@
 #                                                                             #
 # Peekaboo Extended Email Attachment Behavior Observation Owl                 #
 #                                                                             #
-# ruleset.py                                                                  #
+# ruleset/rules.py                                                            #
 ###############################################################################
 #                                                                             #
 # Copyright (C) 2016-2017  science + computing ag                             #
@@ -25,180 +25,9 @@
 
 import traceback
 import re
-from enum import Enum, unique
 from peekaboo import logger
+from peekaboo.ruleset import Result, RuleResult
 import peekaboo.pjobs
-
-'''
-# this module contains methods and data structures which allow to
-# create a ruleset to decide good or bad for any given file
-#
-# works together with peekaboo
-# and uses cuckoo
-'''
-
-
-@unique
-class Result(Enum):
-    """
-    @author: Felix Bauer
-    """
-    inProgress = 0
-    unchecked = 1
-    unknown = 2
-    ignored = 3
-    checked = 4
-    good = 5
-    bad = 6
-
-    @staticmethod
-    def from_string(result_str):
-        for i in Result:
-            if i.name == result_str:
-                return i
-        raise ValueError('%s: Element not found' % result_str)
-
-    def __gt__(self, other):
-        return self.value >= other.value
-
-    def __lt__(self, other):
-        return other.value >= self.value
-
-
-class RuleResult:
-    """
-    @author: Felix Bauer
-    """
-    def __init__(self, rule,
-                 result=Result.unknown,
-                 reason='regel ohne Ergebnis',
-                 further_analysis=True):
-        self.rule = None
-        self.result = Result.unchecked
-        self.rule = rule
-        self.result = result
-        self.reason = reason
-        self.further_analysis = further_analysis
-
-    def __str__(self):
-        return ("Ergebnis \"%s\" der Regel %s - %s, Analyse wird fortgesetzt: %s."\
-                                                        % (self.result.name,
-                                                           self.rule,
-                                                           self.reason,
-                                                           'Ja' if self.further_analysis else 'Nein'))
-
-    __repr__ = __str__
-
-
-def evaluate(sample):
-    """
-    function that is run by a worker for every Sample object.
-    """
-    evaluate_rules(sample)
-
-    logger.debug("Rules evaluated")
-
-
-def rule(sample, rule_function, args={}):
-    """
-    rule wrapper for in/out logging and reporting
-    """
-    function_name = rule_function.func_name
-    logger.debug("Processing rule '%s' for %s" % (function_name, sample))
-
-    try:
-        if args:
-            res = rule_function(sample, args)
-        else:
-            res = rule_function(sample)
-
-        sample.add_rule_result(res)
-    # catch all exceptions in rule
-    except Exception as e:
-        # in case this our Sample is requesting the Cuckoo report
-        if type(e) == Exception and \
-            e.args == Exception('Kill ruleset for now').args:
-            raise
-
-        logger.info("Unexpected error in '%s' for %s" % (function_name,
-                                                         sample))
-        # create "fake" RuleResult
-        res = RuleResult("rule_wrapper", result=Result.unknown,
-                         reason="Regel mit Fehler abgebrochen",
-                         further_analysis=True)
-        sample.add_rule_result(res)
-        raise
-
-    logger.debug("Rule '%s' processed for %s" % (function_name, sample))
-    return res
-
-
-def evaluate_rules(sample):
-    s = sample
-#                      ____   _   _  _      _____  ____
-#                     |  _ \ | | | || |    | ____|/ ___|
-#                     | |_) || | | || |    |  _|  \___ \
-#                     |  _ < | |_| || |___ | |___  ___) |
-#                     |_| \_\ \___/ |_____||_____||____/
-
-# TODO (cuckooWrapper needs to check if there is other samples in pjobs with
-# the same hash)
-    p = rule(s, already_in_progress)
-    if not p.further_analysis:
-        return
-
-    p = rule(s, known)
-    if not p.further_analysis:
-        return
-
-    p = rule(s, file_larger_than, {"byte": 5})
-    if not p.further_analysis:
-        return
-
-    p = rule(s, file_type_on_whitelist)
-    if not p.further_analysis:
-        return
-
-    p = rule(s, file_type_on_greylist)
-    if not p.further_analysis:
-        return
-
-    p = rule(s, office_macro)
-    if not p.further_analysis:
-        return
-
-    p = rule(s, requests_evil_domain)
-    if not p.further_analysis:
-        return
-
-    p = rule(s, cuckoo_evil_sig)
-    if not p.further_analysis:
-        return
-
-    p = rule(s, cuckoo_analysis_failed)
-    if not p.further_analysis:
-        return
-
-    p = rule(s, final_rule)
-    if not p.further_analysis:
-        return
-
-    # active rules, non reporting
-    report(sample)
-    queue_identical_samples(sample) # depends on already_in_progress
-
-#                   __ ____   _   _  _      _____  ____
-#                  / /|  _ \ | | | || |    | ____|/ ___|
-#                 / / | |_) || | | || |    |  _|  \___ \
-#                / /  |  _ < | |_| || |___ | |___  ___) |
-#               /_/   |_| \_\ \___/ |_____||_____||____/
-    return None
-
-
-def report(s):
-    # TODO: might be better to do this for each rule individually
-    s.report()
-    s.save_result()
 
 
 def queue_identical_samples(s):
@@ -211,7 +40,7 @@ def already_in_progress(s):
     tb = tb[-1]
     position = "%s:%s" % (tb[2], tb[1])
 
-    if len(peekaboo.pjobs.get_samples_by_sha256(s.sha256sum)) == 1:
+    if len(peekaboo.pjobs.Jobs.get_samples_by_sha256(s.sha256sum)) == 1:
         s.set_attr("pending", False)
         return RuleResult(position,
                           result=s.get_result(),

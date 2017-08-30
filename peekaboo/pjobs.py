@@ -26,7 +26,8 @@
 import threading
 from Queue import Queue
 from peekaboo import logger
-import peekaboo.ruleset
+from peekaboo.ruleset import Result
+from peekaboo.ruleset.processor import evaluate
 
 
 class Jobs(object):
@@ -144,7 +145,7 @@ class Jobs(object):
     @staticmethod
     def in_progress(sha256sum):
         sample = Jobs.get_sample_by_sha256(sha256sum)
-        if sample is not None and sample.get_result() == peekaboo.ruleset.Result.inProgress:
+        if sample is not None and sample.get_result() == Result.inProgress:
             return True
         return False
 
@@ -193,7 +194,7 @@ class Workers(object):
             s.init()
 
             try:
-                peekaboo.ruleset.evaluate(s)
+                evaluate(s)
 
                 for s in Jobs.get_samples_by_sha256(s.sha256sum):
                     logger.debug('Processing queued sample %s' % s)
