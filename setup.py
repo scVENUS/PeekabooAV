@@ -79,7 +79,7 @@ setup(
     author_email='felix.bauer@atos.net, sebastian.deiss@atos.net',
     entry_points={
         'console_scripts': [
-            'peekaboo = peekaboo.peekabood:main',
+            'peekaboo = peekaboo.daemon:run',
         ],
     }
 )
