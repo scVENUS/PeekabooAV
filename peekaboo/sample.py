@@ -42,7 +42,6 @@ from oletools.olevba import VBA_Parser
 from . import logger
 from .pjobs import Jobs
 from .ruleset import Result
-from .util import log_exception
 
 
 class SampleMetaInfo(object):
@@ -185,7 +184,7 @@ class Sample(object):
                 if e.errno == errno.EPIPE:
                     logger.warning('Unable send message "%s". Broken pipe.' % message)
                 else:
-                    log_exception(e)
+                    logger.exception(e)
 
     def get_attr(self, key):
         """
@@ -430,7 +429,7 @@ class Sample(object):
                         try:
                             self.__socket.send(message)
                         except Exception as e:
-                            log_exception(e)
+                            logger.exception(e)
 
             # stop worker
             sys.stdout.flush()
@@ -511,7 +510,7 @@ class Sample(object):
                     if e.errno == errno.EPIPE:
                         logger.warning('Unable send message "%s". Broken pipe.' % message)
                     else:
-                        log_exception(e)
+                        logger.exception(e)
 
             # check if result of this rule is worse than what we know so far
             logger.debug("Current result: %s, Ruleset result: %s"
@@ -536,7 +535,7 @@ class Sample(object):
                 if e.errno == errno.EPIPE:
                     logger.warning('Unable send message "%s". Broken pipe.' % message)
                 else:
-                    log_exception(e)
+                    logger.exception(e)
 
         if Jobs.remove_job(self.__socket, self) <= 0:
             # returns count of remaining samples for this connection
@@ -559,7 +558,7 @@ class Sample(object):
                     if e.errno == errno.EPIPE:
                         logger.warning('Unable to close the socket. Broken pipe.')
                     else:
-                        log_exception(e)
+                        logger.exception(e)
 
     def __gen_job_hash(self, size=20):
         """

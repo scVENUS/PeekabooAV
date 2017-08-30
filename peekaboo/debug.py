@@ -46,8 +46,7 @@ import os
 import fileinput
 import sys
 import threading
-from . import logger
-from peekaboo.util import log_exception
+from peekaboo import logger
 
 
 def debug():
@@ -89,7 +88,7 @@ def debug():
             try:
                 exec line
             except Exception as e:
-                log_exception(e)
+                logger.exception(e)
             sys.stdout.write('> ')
 
         sys.stdin = stdin

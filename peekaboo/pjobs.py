@@ -28,7 +28,6 @@ import threading
 from Queue import Queue
 from . import logger
 from .ruleset import evaluate, Result
-from .util import log_exception
 
 
 class Jobs(object):
@@ -203,7 +202,7 @@ class Workers(object):
             except ValueError as e:
                 # catch 'cuckooReport not yet available. Sample submitted for
                 # analysis' exception
-                log_exception(e)
+                logger.exception(e)
 
             # TODO: do checks here
             #   e.g. - check if there is dead inProgress entries in DB

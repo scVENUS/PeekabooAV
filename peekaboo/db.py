@@ -33,7 +33,6 @@ from sqlalchemy.orm.session import sessionmaker
 from sqlalchemy.orm.util import has_identity
 from . import logger
 from .ruleset import RuleResult, Result
-from .util import log_exception
 import threading
 
 
@@ -83,7 +82,7 @@ class PeekabooDBHandler(object):
                 Base.metadata.create_all(self.engine)
                 logger.debug('Created database schema')
         except Exception as e:
-            log_exception(e)
+            logger.exception(e)
             raise e
 
     def sample_info2db(self, sample):
