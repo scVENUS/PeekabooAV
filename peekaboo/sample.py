@@ -23,7 +23,6 @@
 ###############################################################################
 
 
-from __future__ import absolute_import
 import os
 import sys
 import hashlib
@@ -39,9 +38,9 @@ from ConfigParser import SafeConfigParser
 from random import choice
 from datetime import datetime
 from oletools.olevba import VBA_Parser
-from . import logger
-from .pjobs import Jobs
-from .ruleset import Result
+from peekaboo import logger
+import peekaboo.pjobs as pjobs
+import peekaboo.ruleset as ruleset
 
 
 class SampleMetaInfo(object):
@@ -109,7 +108,7 @@ class Sample(object):
         # A symlink that points to the actual file named
         # <sha256sum>.suffix
         self.__symlink = None
-        self.__result = Result.unchecked
+        self.__result = ruleset.Result.unchecked
         # Additional attributes for a sample object (e. g. dump info)
         self.__attributes = {}
         self.initalized = False
@@ -521,9 +520,9 @@ class Sample(object):
                 self.set_attr('reason', rr.reason)
 
         # check if result still init value inProgress
-        if self.__result == Result.inProgress:
+        if self.__result == ruleset.Result.inProgress:
             logger.warning('Ruleset result forces to unchecked.')
-            self.__result = Result.unchecked
+            self.__result = ruleset.Result.unchecked
 
         message = "Die Datei \"%s\" wurde als \"%s\" eingestuft\n\n" \
                   % (self.__filename, self.__result.name)
@@ -537,7 +536,7 @@ class Sample(object):
                 else:
                     logger.exception(e)
 
-        if Jobs.remove_job(self.__socket, self) <= 0:
+        if pjobs.Jobs.remove_job(self.__socket, self) <= 0:
             # returns count of remaining samples for this connection
             logger.debug('Closing connection.')
             # delete all files created by dump_info

@@ -23,11 +23,10 @@
 ###############################################################################
 
 
-from __future__ import absolute_import
 import threading
 from Queue import Queue
-from . import logger
-from .ruleset import evaluate, Result
+from peekaboo import logger
+import peekaboo.ruleset
 
 
 class Jobs(object):
@@ -145,7 +144,7 @@ class Jobs(object):
     @staticmethod
     def in_progress(sha256sum):
         sample = Jobs.get_sample_by_sha256(sha256sum)
-        if sample is not None and sample.get_result() == Result.inProgress:
+        if sample is not None and sample.get_result() == peekaboo.ruleset.Result.inProgress:
             return True
         return False
 
@@ -194,7 +193,7 @@ class Workers(object):
             s.init()
 
             try:
-                evaluate(s)
+                peekaboo.ruleset.evaluate(s)
 
                 for s in Jobs.get_samples_by_sha256(s.sha256sum):
                     logger.debug('Processing queued sample %s' % s)

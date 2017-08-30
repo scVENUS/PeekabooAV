@@ -39,8 +39,6 @@
 # print pjobs.Jobs.jobs
 
 
-from __future__ import print_function
-from __future__ import absolute_import
 import socket
 import os
 import fileinput

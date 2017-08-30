@@ -24,7 +24,6 @@
 
 
 from __future__ import print_function
-from __future__ import absolute_import
 import os
 import sys
 import threading
@@ -37,12 +36,12 @@ import logging
 from argparse import ArgumentParser
 from sdnotify import SystemdNotifier
 from twisted.internet import reactor
-from . import _owl, __version__, logger
-from .pjobs import Jobs, Workers
-from .sample import Sample
-from .config import PeekabooConfig
-from .db import PeekabooDBHandler
-from .cuckoo_wrapper import CuckooManager
+from peekaboo import _owl, __version__, logger
+from peekaboo.config import PeekabooConfig
+from peekaboo.cuckoo_wrapper import CuckooManager
+import peekaboo.db as db
+import peekaboo.sample as sample
+import peekaboo.pjobs as pjobs
 
 
 # marker to stop other threads on exit
@@ -60,7 +59,7 @@ class PeekabooDaemonListener(object):
     """
     def __init__(self, config):
         self.config = config
-        self.workers = Workers(config.worker_count)
+        self.workers = pjobs.Workers(config.worker_count)
         if os.path.exists(config.sock_file):
             os.remove(config.sock_file)
 
@@ -106,7 +105,7 @@ class PeekabooDaemonListener(object):
                 # check if there are more than twice as many samples in
                 # queue waiting to be processed as there are worker
                 # threads:
-                if Workers.q.qsize() > self.config.worker_count * 2:
+                if pjobs.Workers.q.qsize() > self.config.worker_count * 2:
                     conn.send("WARNING: queue size > %d, rejected connection from amavis\n"
                               % (self.config.worker_count * 2))
                     conn.close()
@@ -148,8 +147,8 @@ class PeekabooDaemonListener(object):
                     # introduced after issue where results were reported
                     # before all file could be added
                     for s in for_analysis:
-                        Jobs.add_job(conn, s)
-                        if not Jobs.in_progress(s.sha256sum):
+                        pjobs.Jobs.add_job(conn, s)
+                        if not pjobs.Jobs.in_progress(s.sha256sum):
                             self.workers.submit_job(s, self.__class__)
 
                     if len(for_analysis) == 0:
@@ -179,11 +178,11 @@ class PeekabooDaemonListener(object):
         if not os.path.isfile(p):
             logger.debug('%s is not a file' % p)
             return None
-        s = Sample(self.config, conn, p)
+        s = sample.Sample(self.config, conn, p)
         logger.debug('Created sample %s' % s)
 
         # check if sample is already in progress
-        existing = Jobs.get_sample_by_sha256(s.sha256sum)
+        existing = pjobs.Jobs.get_sample_by_sha256(s.sha256sum)
         if existing is not None:
             logger.info("Same sample detected %s and %s"
                         % (s, existing))
@@ -229,7 +228,7 @@ def main():
 
     # establish a connection to the database
     try:
-        db_con = PeekabooDBHandler(config.db_url)
+        db_con = db.PeekabooDBHandler(config.db_url)
         config.add_db_con(db_con)
     except Exception as e:
         logger.critical(str(e))

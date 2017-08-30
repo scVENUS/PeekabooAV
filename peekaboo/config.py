@@ -23,11 +23,10 @@
 ###############################################################################
 
 
-from __future__ import absolute_import
 import sys
 import logging
 from ConfigParser import SafeConfigParser, NoSectionError, NoOptionError
-from . import logger
+from peekaboo import logger
 
 
 class PeekabooConfig(object):

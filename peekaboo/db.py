@@ -24,16 +24,14 @@
 
 
 from __future__ import print_function
-from __future__ import absolute_import
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.engine import create_engine
 from sqlalchemy.orm.session import sessionmaker
-from sqlalchemy.orm.util import has_identity
-from . import logger
-from .ruleset import RuleResult, Result
+from peekaboo import logger
 import threading
+import peekaboo.ruleset as ruleset
 
 
 Base = declarative_base()
@@ -113,13 +111,13 @@ class PeekabooDBHandler(object):
         session = self.Session()
         sample = session.query(SampleInfo).filter_by(sample_sha256_hash=sha256).first()
         if sample:
-            result = RuleResult('db',
-                                result=Result.from_string(sample.result),
+            result = ruleset.RuleResult('db',
+                                result=ruleset.Result.from_string(sample.result),
                                 reason=sample.reason,
                                 further_analysis=True)
         else:
-            result = RuleResult('db',
-                                result=Result.unknown,
+            result = ruleset.RuleResult('db',
+                                result=ruleset.Result.unknown,
                                 reason="Datei ist dem System noch nicht bekannt",
                                 further_analysis=True)
         session.close_all()

@@ -23,12 +23,11 @@
 ###############################################################################
 
 
-from __future__ import absolute_import
 import re
 import os
 from twisted.internet import protocol
-from .pjobs import Jobs, Workers
-from . import logger
+from peekaboo import logger
+import peekaboo.pjobs as pjobs
 
 
 class CuckooManager(protocol.ProcessProtocol):
@@ -78,14 +77,14 @@ class CuckooManager(protocol.ProcessProtocol):
             job_id = int(m.group(1))
             logger.info("Analysis done for task #%d" % job_id)
 
-            logger.debug("Queued jobs %d" % Jobs.length())
-            sample = Jobs.get_sample_by_job_id(job_id)
+            logger.debug("Queued jobs %d" % pjobs.Jobs.length())
+            sample = pjobs.Jobs.get_sample_by_job_id(job_id)
             if sample:
                 logger.debug('Requesting Cuckoo report for sample %s' % sample)
                 sample.parse_cuckoo_report()
 
-                Workers.submit_job(sample, self.__class__)
-                logger.debug("Queued jobs %d" % Jobs.length())
+                pjobs.Workers.submit_job(sample, self.__class__)
+                logger.debug("Queued jobs %d" % pjobs.Jobs.length())
             else:
                 logger.info('No job found for ID %d' % job_id)
 

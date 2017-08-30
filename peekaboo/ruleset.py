@@ -23,13 +23,11 @@
 ###############################################################################
 
 
-from __future__ import absolute_import
 import traceback
 import re
 from enum import Enum, unique
-from . import logger
-from .pjobs import Jobs, Workers
-
+from peekaboo import logger
+import peekaboo.pjobs
 
 '''
 # this module contains methods and data structures which allow to
@@ -204,16 +202,16 @@ def report(s):
 
 
 def queue_identical_samples(s):
-    for sample in Jobs.get_samples_by_sha256(s.sha256):
-        Workers.submit_job(sample, 'Ruleset')
+    for sample in peekaboo.pjobs.Jobs.get_samples_by_sha256(s.sha256):
+        peekaboo.pjobs.Workers.submit_job(sample, 'Ruleset')
 
 
 def already_in_progress(s):
     tb = traceback.extract_stack()
     tb = tb[-1]
     position = "%s:%s" % (tb[2], tb[1])
-      
-    if len(pjobs.get_samples_by_sha256(s.sha256sum)) == 1:
+
+    if len(peekaboo.pjobs.get_samples_by_sha256(s.sha256sum)) == 1:
         s.set_attr("pending", False)
         return RuleResult(position,
                           result=s.get_result(),
@@ -221,6 +219,7 @@ def already_in_progress(s):
                           further_analysis=True)
     else:
         try:
+            # get_attr raises a ValueError if an attribute is not set
             s.get_attr("pending")
             s.set_attr("pending", False)
             return RuleResult(position,
