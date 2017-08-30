@@ -30,8 +30,8 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.engine import create_engine
 from sqlalchemy.orm.session import sessionmaker
 from peekaboo import logger
+from peekaboo.ruleset import Result, RuleResult
 import threading
-import peekaboo.ruleset as ruleset
 
 
 Base = declarative_base()
@@ -108,19 +108,21 @@ class PeekabooDBHandler(object):
         :param sha256: The SHA-256 checksum of the sample.
         :return: Returns a RuleResult object containing the sample information.
         """
+        self.lock.acquire()
         session = self.Session()
         sample = session.query(SampleInfo).filter_by(sample_sha256_hash=sha256).first()
         if sample:
-            result = ruleset.RuleResult('db',
-                                result=ruleset.Result.from_string(sample.result),
+            result = RuleResult('db',
+                                result=Result.from_string(sample.result),
                                 reason=sample.reason,
                                 further_analysis=True)
         else:
-            result = ruleset.RuleResult('db',
-                                result=ruleset.Result.unknown,
+            result = RuleResult('db',
+                                result=Result.unknown,
                                 reason="Datei ist dem System noch nicht bekannt",
                                 further_analysis=True)
         session.close_all()
+        self.lock.release()
         return result
 
     def update_sample_info(self, sample):
@@ -129,12 +131,14 @@ class PeekabooDBHandler(object):
 
         :param sample: The sample object containing the info to update
         """
+        self.lock.acquire()
         session = self.Session()
         query = session.query(SampleInfo).filter(SampleInfo.sample_sha256_hash == sample.sha256sum)
         query.update({'result': sample.get_result().name,
                       'reason': sample.reason})
         session.commit()
         session.close_all()
+        self.lock.release()
         logger.debug('Updated sample info in the database for sample %s.'
                      % sample)
 
@@ -144,9 +148,12 @@ class PeekabooDBHandler(object):
 
         :param sha256: The SHA-256 hash to check for.
         """
+        self.lock.acquire()
         session = self.Session()
         sample = session.query(SampleInfo).filter(SampleInfo.sample_sha256_hash == sha256,
                                                   SampleInfo.result != 'inProgress').scalar()
+        session.close_all()
+        self.lock.release()
         if sample is not None:
             return True
         return False
@@ -157,9 +164,11 @@ class PeekabooDBHandler(object):
 
         :param sha256: The SHA-256 hash to check for.
         """
+        self.lock.acquire()
         session = self.Session()
         sample = session.query(SampleInfo).filter(SampleInfo.sample_sha256_hash == sha256,
                                                   SampleInfo.result == 'inProgress').scalar()
+        self.lock.release()
         if sample is not None:
             return True
         return False
