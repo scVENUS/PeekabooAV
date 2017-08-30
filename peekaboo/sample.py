@@ -161,6 +161,9 @@ class Sample(object):
                                                     self.__filename + '.info'))
             self.__meta_info = meta_info.get()
             logger.debug(self.__meta_info)
+            # Add the information from the dump info file as attributes to the sample object.
+            for info in self.__meta_info.items('attachment'):
+                self.set_attr('dump_info_' + info[0], info[1])
         except OSError:
             logger.info('No metadata available for file %s' % self.__file_path)
 
@@ -273,10 +276,11 @@ class Sample(object):
 
     @property
     def file_extension(self):
-        if not self.has_attr('file_extension'):
+        if not self.has_attr('dump_info_type_short'):
             file_ext = os.path.splitext(self.__filename)[1][1:]
             self.set_attr('file_extension', file_ext)
-        return self.get_attr('file_extension')
+            return self.get_attr('file_extension')
+        return self.get_attr('dump_info_type_short')
 
     @property
     def mimetypes(self):
