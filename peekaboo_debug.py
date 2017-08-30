@@ -35,12 +35,9 @@ import sys
 import os
 
 
-# Add peekaboo to PYTHONPATH
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-# Import the daemon
-from peekaboo import daemon
-
-
 if __name__ == '__main__':
+    # Add peekaboo to PYTHONPATH
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    # Import the daemon
+    from peekaboo import daemon
     daemon.run()
