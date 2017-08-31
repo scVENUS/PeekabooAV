@@ -54,6 +54,9 @@ class PeekabooConfig(object):
         self.cuckoo_submit = None
         self.db_con = None
         ##############################################
+        # setup default logging to log any errors during the
+        # parsing of the config file.
+        self.setup_logging()
         self.__parse(config_file)
 
     def __parse(self, config_file):
