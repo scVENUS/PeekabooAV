@@ -12,9 +12,10 @@ First, create a directory for Peekaboo and its components
 
 .. code-block:: shell
 
-   sudo adduser peekaboo
-   usermod -a -G amavis peekaboo
-   sudo -u peekaboo mkdir -p /opt/peekaboo/bin
+    groupadd -g 150 peekaboo
+    useradd -g 150 -u 150 -m -d /opt/peekaboo peekaboo
+    gpasswd -a amavis peekaboo
+    gpasswd -a peekaboo amavis
 
 If you plan to use AMaViSd to analyse email attachments with Peekaboo,
 the Peekaboo user must be a member of the ``amavis`` group in order to access
@@ -123,11 +124,28 @@ Please refer to the Cuckoo documentation available at https://cuckoo.sh/docs/ind
 
 AMaViSd
 -------
-First, replace your AMaViSd with our patched version of AMaViSd.
+First, replace your AMaViSd with our patched version of AMaViSd. To do so, download the AMaViSd 2.11.0 source code
+and extract ``amavisd.conf-default`` and ``amavisd``.
 
-Now, edit ``/etc/amavis/amavis.conf``:
+.. code-block:: shell
 
-.. code-block:: none
+    curl https://www.ijs.si/software/amavisd/amavisd-new-2.11.0.tar.xz -o amavisd-new-2.11.0.tar.xz
+    tar xvf amavisd-new-2.11.0.tar.xz  amavisd-new-2.11.0/amavisd.conf-default
+    tar xvf amavisd-new-2.11.0.tar.xz  amavisd-new-2.11.0/amavisd
+
+Now, you can apply our patch.
+
+.. code-block:: shell
+
+    cd amavisd-new-2.11.0/
+    patch -p4 < ../peekaboo-amavisd.patch
+    patch -p1 < ../debian-find_config_files.patch
+    mv amavisd /usr/sbin/amavisd-new
+
+
+Next, edit ``/etc/amavis/amavis.conf``:
+
+.. code-block:: perl
    
    $mydomain = 'peekaboo.test';
    $myhostname = 'host.peekaboo.test';
@@ -139,27 +157,42 @@ Now, edit ``/etc/amavis/amavis.conf``:
 
 Put the following code into ``/etc/amavis/conf.d/15-av_scanners``:
 
-.. code-block:: none
-   
-   ['Peekaboo',
-   \&ask_daemon, ["{}\n", "/opt/peekaboo/peekaboo.sock"],
-   qr/wurde als "(unknown|checked|good|ignored)" eingestuft/m,
-   qr/wurde als "bad" eingestuft/m ],
+.. code-block:: perl
+
+    @av_scanners = (
+        ['Peekaboo-Analysis',
+        \&ask_daemon, ["{}\n", "/var/lib/peekaboo/peekaboo.sock"],
+        qr/wurde als "(unknown|checked|good|ignored)" eingestuft/m,
+        qr/wurde als "bad" eingestuft/m ],
+    );
+
+    1;  # ensure a defined return
+
+
+Now change ``/etc/amavis/conf.d/15-content_filter_mode`` to:
+
+.. code-block:: perl
+
+    @bypass_virus_checks_maps = (
+        \%bypass_virus_checks, \@bypass_virus_checks_acl, \$bypass_virus_checks_re);
 
 
 and for mail notifications for the user ``peekaboo`` add this line to
+
 ``/etc/amavis/conf.d/25-amavis_helpers``:
 
-.. code-block:: none
+.. code-block:: perl
    
    $virus_admin = 'peekaboo';
 
 Let AMaViSd use unique directories for temporary files. This configuration is mandatory for Peekaboo.
 So, edit ``/etc/amavis/conf.d/50-user``:
 
-.. code-block:: none
+.. code-block:: perl
    
    $max_requests = 1;
+   $enable_dump_info  = 1;       # set to 1 to enable dump_info feature
+   $dump_info_tempdir = '/tmp';  # base directory where dump_info() will put its stuff
 
 
 Postfix
