@@ -35,12 +35,13 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from peekaboo.sample import Sample
 from peekaboo.ruleset import RuleResult, Result
+from peekaboo.db import PeekabooDBHandler
 
 
 class PeekabooDummyConfig(object):
     def __init__(self):
         self.db_con = None
-        self.job_hash_regex = r"^.*\['(.*)'\].*$"
+        self.job_hash_regex = r'/var/lib/amavis/tmp/([^/]+)/parts.*'
         self.sample_base_dir = '/tmp'
         self.chown2me_exec = 'bin/chown2me'
 
@@ -53,6 +54,9 @@ class PeekabooDummyConfig(object):
 
 class PeekabooDummyDB(object):
     def sample_info2db(self, sample):
+        pass
+
+    def get_sample_info(self, sha256):
         pass
 
     def get_rule_result(self, sha256):
@@ -86,12 +90,103 @@ class PeekabooDummyDB(object):
         pass
 
 
+class TestDatabase(unittest.TestCase):
+    """
+    Unittests for Peekaboo's database module.
+
+    @author: Sebastian Deiss
+    """
+    @classmethod
+    def setUpClass(cls):
+        cls.test_db = os.path.abspath('./test.db')
+        cls.conf = PeekabooDummyConfig()
+        db_con = PeekabooDBHandler('sqlite:///' + cls.test_db)
+        cls.conf.add_db_con(db_con)
+        cls.sample = Sample(cls.conf, None, os.path.realpath(__file__))
+        result = RuleResult('Unittest',
+                            Result.ignored,
+                            'This is just a testcase',
+                            further_analysis=False)
+        cls.sample.add_rule_result(result)
+        cls.sample.determine_result()
+        cls.conf.db_con.sample_info2db(cls.sample)
+
+    def test_get_sample_info(self):
+        sample_info = self.conf.db_con.get_sample_info(self.sample.sha256sum)
+        self.assertEqual(self.sample.sha256sum, sample_info.sample_sha256_hash)
+
+    def test_get_rule_result(self):
+        sha256sum = self.sample.sha256sum
+        rule_result = self.conf.db_con.get_rule_result(sha256sum)
+        # RuleResults from the DB have 'db' as rule name
+        self.assertEqual(rule_result.rule, 'db')
+        self.assertEqual(rule_result.result, Result.ignored)
+        self.assertEqual(rule_result.reason, 'This is just a testcase')
+        # We assert True since the DB rule result always sets further_analysis to True
+        self.assertTrue(rule_result.further_analysis)
+
+    def test_update_sample_info(self):
+        result = RuleResult('Unittest',
+                            Result.checked,
+                            'This is another testcase.',
+                            further_analysis=False)
+        self.sample.add_rule_result(result)
+        self.sample.determine_result()
+        self.conf.db_con.update_sample_info(self.sample)
+        rule_result = self.conf.db_con.get_rule_result(self.sample.sha256sum)
+        self.assertEqual(rule_result.result, Result.checked)
+        self.assertEqual(rule_result.reason, 'This is another testcase.')
+
+    def test_known(self):
+        self.assertTrue(self.conf.db_con.known(self.sample.sha256sum))
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.conf.db_con.close()
+        os.unlink(cls.test_db)
+
+
 class TestSample(unittest.TestCase):
-    def setUp(self):
-        self.conf = PeekabooDummyConfig()
+    """
+    Unittests for Samples.
+
+    @author: Sebastian Deiss
+    """
+    @classmethod
+    def setUpClass(cls):
+        cls.conf = PeekabooDummyConfig()
         db_con = PeekabooDummyDB()
-        self.conf.add_db_con(db_con)
-        self.sample = Sample(self.conf, None, os.path.realpath(__file__))
+        cls.conf.add_db_con(db_con)
+        cls.sample = Sample(cls.conf, None, os.path.realpath(__file__))
+        test_meta_info = '[attachment]\n'
+        test_meta_info += 'full_name     : /tmp/test.pyc\n'
+        test_meta_info += 'name_declared : test.pyc\n'
+        test_meta_info += 'type_declared : application/x-bytecode.python\n'
+        test_meta_info += 'type_long     : application/x-python-bytecode\n'
+        test_meta_info += 'type_short    : pyc\n'
+        test_meta_info += 'size          : 200\n'
+        test_meta_info += 'digest        :\n'
+        test_meta_info += 'attributes    :\n'
+        test_meta_info += 'queue_id      :\n'
+
+        with open('./test_meta_info.info', 'w+') as f:
+            f.write(test_meta_info)
+
+    def test_attribute_dict(self):
+        self.sample.set_attr('Unittest', 'Hello World!')
+        self.assertTrue(self.sample.has_attr('Unittest'))
+        self.assertEqual(self.sample.get_attr('Unittest'), 'Hello World!')
+        self.sample.set_attr('Unittest', 'Test', override=True)
+        self.assertEqual(self.sample.get_attr('Unittest'), 'Test')
+
+    def test_job_hash_regex(self):
+        path_with_job_hash = '/var/lib/amavis/tmp/amavis-20170831T132736-07759-iSI0rJ4b/parts'
+        sample = Sample(self.conf, None, path_with_job_hash)
+        job_hash = sample.get_job_hash()
+        self.assertEqual(job_hash, 'amavis-20170831T132736-07759-iSI0rJ4b',
+                         'Job hash regex is not working')
+        job_hash = self.sample.get_job_hash()
+        self.assertIn('peekaboo_job', job_hash)
 
     def test_sample_attributes(self):
         self.assertEqual(self.sample.get_filename(), 'test.py')
@@ -105,8 +200,15 @@ class TestSample(unittest.TestCase):
         self.assertFalse(self.sample.office_macros)
         self.assertFalse(self.sample.known)
 
-    def tearDown(self):
-        self.conf.db_con.close()
+    def test_sample_attributes_with_meta_info(self):
+        self.assertEqual(self.sample.file_extension, 'py')
+        self.sample.load_meta_info('./test_meta_info.info')
+        self.assertEqual(self.sample.file_extension, 'pyc')
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.conf.db_con.close()
+        os.unlink('./test_meta_info.info')
 
     def __contains_mime(self, mimetypes, mime):
         if mime in mimetypes:
@@ -117,6 +219,7 @@ class TestSample(unittest.TestCase):
 def main():
     suite = unittest.TestSuite()
     suite.addTest(unittest.makeSuite(TestSample))
+    suite.addTest(unittest.makeSuite(TestDatabase))
     # TODO: We need more tests!!!
 
     runner = unittest.TextTestRunner(verbosity=2)

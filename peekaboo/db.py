@@ -28,7 +28,8 @@ from datetime import datetime
 from sqlalchemy import Column, Integer, String, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.engine import create_engine
-from sqlalchemy.orm.session import sessionmaker
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import scoped_session
 from peekaboo import logger
 from peekaboo.ruleset import Result, RuleResult
 import threading
@@ -72,8 +73,9 @@ class PeekabooDBHandler(object):
         """
         self.engine = create_engine(db_url)
         self.db_con = None
-        self.Session = sessionmaker(bind=self.engine)
-        self.lock = threading.Lock()
+        session_factory = sessionmaker(bind=self.engine)
+        self.Session = scoped_session(session_factory)
+        self.lock = threading.RLock()
         try:
             self.db_con = self.engine.connect()
             if not self.db_con.dialect.has_table(self.engine, 'sample_info'):
@@ -89,17 +91,16 @@ class PeekabooDBHandler(object):
 
         :param sample: The sample object to get the info from.
         """
-        self.lock.acquire()
-        session = self.Session()
-        sample_info = SampleInfo(sample_sha256_hash=sample.sha256sum,
-                                 analyses_time=datetime.strptime(sample.analyses_time, "%Y-%m-%d %H:%M"),
-                                 result=sample.get_result().name,
-                                 reason=sample.reason)
-        session.add(sample_info)
-        session.commit()
-        session.close_all()
-        self.lock.release()
-        logger.debug('Added sample %s to the database.' % sample)
+        with self.lock:
+            session = self.Session()
+            sample_info = SampleInfo(sample_sha256_hash=sample.sha256sum,
+                                     analyses_time=datetime.strptime(sample.analyses_time, "%Y-%m-%d %H:%M"),
+                                     result=sample.get_result().name,
+                                     reason=sample.reason)
+            session.add(sample_info)
+            session.commit()
+            session.close_all()
+            logger.debug('Added sample %s to the database.' % sample)
 
     def get_rule_result(self, sha256):
         """
@@ -108,22 +109,30 @@ class PeekabooDBHandler(object):
         :param sha256: The SHA-256 checksum of the sample.
         :return: Returns a RuleResult object containing the sample information.
         """
-        self.lock.acquire()
-        session = self.Session()
-        sample = session.query(SampleInfo).filter_by(sample_sha256_hash=sha256).first()
-        if sample:
-            result = RuleResult('db',
-                                result=Result.from_string(sample.result),
-                                reason=sample.reason,
-                                further_analysis=True)
-        else:
-            result = RuleResult('db',
-                                result=Result.unknown,
-                                reason="Datei ist dem System noch nicht bekannt",
-                                further_analysis=True)
-        session.close_all()
-        self.lock.release()
+        with self.lock:
+            session = self.Session()
+            sample = session.query(SampleInfo).filter_by(sample_sha256_hash=sha256).first()
+            if sample:
+                result = RuleResult('db',
+                                    result=Result.from_string(sample.result),
+                                    reason=sample.reason,
+                                    further_analysis=True)
+            else:
+                result = RuleResult('db',
+                                    result=Result.unknown,
+                                    reason="Datei ist dem System noch nicht bekannt",
+                                    further_analysis=True)
+            session.close_all()
         return result
+
+    def get_sample_info(self, sha256):
+        with self.lock:
+            session = self.Session()
+            sample_infos = session.query(SampleInfo).filter_by(sample_sha256_hash=sha256).all()
+            if len(sample_infos) > 1:
+                raise ValueError('Multiple entries found for the same sample.')
+            session.close_all()
+        return sample_infos[0]
 
     def update_sample_info(self, sample):
         """
@@ -131,16 +140,15 @@ class PeekabooDBHandler(object):
 
         :param sample: The sample object containing the info to update
         """
-        self.lock.acquire()
-        session = self.Session()
-        query = session.query(SampleInfo).filter(SampleInfo.sample_sha256_hash == sample.sha256sum)
-        query.update({'result': sample.get_result().name,
-                      'reason': sample.reason})
-        session.commit()
-        session.close_all()
-        self.lock.release()
-        logger.debug('Updated sample info in the database for sample %s.'
-                     % sample)
+        with self.lock:
+            session = self.Session()
+            query = session.query(SampleInfo).filter(SampleInfo.sample_sha256_hash == sample.sha256sum)
+            query.update({'result': sample.get_result().name,
+                          'reason': sample.reason})
+            session.commit()
+            session.close_all()
+            logger.debug('Updated sample info in the database for sample %s.'
+                         % sample)
 
     def known(self, sha256):
         """
@@ -148,12 +156,11 @@ class PeekabooDBHandler(object):
 
         :param sha256: The SHA-256 hash to check for.
         """
-        self.lock.acquire()
-        session = self.Session()
-        sample = session.query(SampleInfo).filter(SampleInfo.sample_sha256_hash == sha256,
-                                                  SampleInfo.result != 'inProgress').scalar()
-        session.close_all()
-        self.lock.release()
+        with self.lock:
+            session = self.Session()
+            sample = session.query(SampleInfo).filter(SampleInfo.sample_sha256_hash == sha256,
+                                                      SampleInfo.result != 'inProgress').scalar()
+            session.close_all()
         if sample is not None:
             return True
         return False

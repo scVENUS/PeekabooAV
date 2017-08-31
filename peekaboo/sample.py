@@ -52,8 +52,8 @@ class SampleMetaInfo(object):
     @author: Sebastian Deiss
     @see: Sample
     """
-    def __init__(self, dump_info_path):
-        self.__meta_info_path = dump_info_path
+    def __init__(self, meta_info_path):
+        self.__meta_info_path = meta_info_path
         self.__meta_info = None
         ##############################################
         self._read()
@@ -64,14 +64,10 @@ class SampleMetaInfo(object):
 
         @see: SafeConfigParser
         """
-        if not os.path.exists(self.__meta_info_path):
-            raise OSError('No metadata available for %s'
-                          % self.__meta_info_path)
-        else:
-            logger.debug('Reading metadata for %s' % self.__meta_info_path)
-            meta_info = SafeConfigParser()
-            meta_info.read(self.__meta_info_path)
-            self.__meta_info = meta_info
+        logger.debug('Reading metadata for %s' % self.__meta_info_path)
+        meta_info = SafeConfigParser()
+        meta_info.read(self.__meta_info_path)
+        self.__meta_info = meta_info
 
     def get(self):
         """
@@ -112,6 +108,7 @@ class Sample(object):
         # Additional attributes for a sample object (e. g. dump info)
         self.__attributes = {}
         self.initalized = False
+        self.meta_info_loaded = False
 
     def init(self):
         """
@@ -128,17 +125,7 @@ class Sample(object):
 
         logger.debug("initializing sample")
 
-        job_hash = re.sub(self.__config.job_hash_regex, r'\1',
-                          self.__file_path)
-        if job_hash == self.__file_path:
-            # regex did not match.
-            # so we generate our own job hash and create the
-            # working directory.
-            job_hash = self.__gen_job_hash()
-            os.mkdir(os.path.join(self.__config.sample_base_dir,
-                                  job_hash))
-
-        logger.debug("job_hash: %s" % job_hash)
+        job_hash = self.get_job_hash()
         self.__wd = os.path.join(self.__config.sample_base_dir, job_hash)
 
         # update database with state inProgress if sample unknown
@@ -147,46 +134,21 @@ class Sample(object):
         #if not self.__db_con.known(self.sha256sum):
         #    self.__db_con.sample_info2db(self)
 
-        # kind of dirty hack to acquire ownership of that directory
-        logger.debug('Invoking chown2me...')
-        proc = subprocess.Popen(self.__config.chown2me_exec,
-                                stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE)
-        proc.wait()
-        if proc.returncode != 0:
-            logger.error('chown2me exited with code %d' % proc.returncode)
-
-        try:
-            meta_info = SampleMetaInfo(os.path.join(self.__wd,
-                                                    self.__filename + '.info'))
-            self.__meta_info = meta_info.get()
-            logger.debug(self.__meta_info)
-            # Add the information from the dump info file as attributes to the sample object.
-            for info in self.__meta_info.items('attachment'):
-                self.set_attr('dump_info_' + info[0], info[1])
-        except OSError:
-            logger.info('No metadata available for file %s' % self.__file_path)
-
-        # create a symlink to submit the file with correct file extension
-        # to cuckoo via submit.py
-        self.__symlink = '%s.%s' % (self.sha256sum,
-                                    self.file_extension)
-        logger.debug('ln -s %s %s' % (self.__file_path, os.path.join(self.__wd,
-                                                                self.__symlink)))
-
-        os.symlink(self.__file_path, os.path.join(self.__wd, self.__symlink))
+        self.chown2me()
+        self.load_meta_info(os.path.join(self.__wd,
+                                         self.__filename + '.info'))
+        self.create_symlink()
         self.initalized = True
 
         message = "Datei \"%s\" %s wird analysiert\n" % (self.__filename,
                                                          self.sha256sum)
-        if self.__socket:
-            try:
-                self.__socket.send(message)
-            except Exception as e:
-                if e.errno == errno.EPIPE:
-                    logger.warning('Unable send message "%s". Broken pipe.' % message)
-                else:
-                    logger.exception(e)
+        try:
+            self.__socket.send(message)
+        except Exception as e:
+            if e.errno == errno.EPIPE:
+                logger.warning('Unable send message "%s". Broken pipe.' % message)
+            else:
+                logger.exception(e)
 
     def get_attr(self, key):
         """
@@ -220,6 +182,55 @@ class Sample(object):
             return True
         return False
 
+    def get_job_hash(self):
+        job_hash = re.sub(self.__config.job_hash_regex, r'\1',
+                          self.__file_path)
+        if job_hash == self.__file_path:
+            # regex did not match.
+            # so we generate our own job hash and create the
+            # working directory.
+            job_hash = self.__gen_job_hash()
+            os.mkdir(os.path.join(self.__config.sample_base_dir,
+                                  job_hash))
+
+        logger.debug("job_hash: %s" % job_hash)
+        return job_hash
+
+    def chown2me(self):
+        """kinda dirty hack to acquire ownership of that directory. """
+        logger.debug('Invoking chown2me...')
+        proc = subprocess.Popen(self.__config.chown2me_exec,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE)
+        proc.wait()
+        if proc.returncode != 0:
+            logger.error('chown2me exited with code %d' % proc.returncode)
+
+    def load_meta_info(self, meta_info_file):
+        try:
+            meta_info = SampleMetaInfo(meta_info_file)
+            self.__meta_info = meta_info.get()
+            logger.debug('Parsing meta info file %s for file %s' % (meta_info_file, self.__file_path))
+            # Add the information from the dump info file as attributes to the sample object.
+            for info in self.__meta_info.items('attachment'):
+                logger.debug('meta_info_%s = %s' % (info[0], info[1]))
+                self.set_attr('meta_info_' + info[0], info[1])
+            self.meta_info_loaded = True
+        except OSError:
+            logger.info('No metadata available for file %s' % self.__file_path)
+
+    def create_symlink(self):
+        """ 
+        creates a symlink to submit the file with correct
+        file extension to cuckoo via submit.py.
+        """
+        self.__symlink = '%s.%s' % (self.sha256sum,
+                                    self.file_extension)
+        logger.debug('ln -s %s %s' % (self.__file_path, os.path.join(self.__wd,
+                                                                     self.__symlink)))
+
+        os.symlink(self.__file_path, os.path.join(self.__wd, self.__symlink))
+
     def get_file_path(self):
         return self.__file_path
 
@@ -237,7 +248,7 @@ class Sample(object):
         if self.has_attr('job_id'):
             job_id = self.get_attr('job_id')
 
-        return ("<Sample(filename='%s', kown='%s', meta_info_loaded='%s', job_id='%d',"
+        return ("<Sample(filename='%s', known='%s', meta_info_loaded='%s', job_id='%d',"
                 " result='%s', sha256sum='%s')>"
                 % (self.__filename,
                    'yes' if self.known else 'no',
@@ -276,11 +287,11 @@ class Sample(object):
 
     @property
     def file_extension(self):
-        if not self.has_attr('dump_info_type_short'):
+        if not self.has_attr('meta_info_type_short'):
             file_ext = os.path.splitext(self.__filename)[1][1:]
             self.set_attr('file_extension', file_ext)
             return self.get_attr('file_extension')
-        return self.get_attr('dump_info_type_short')
+        return self.get_attr('meta_info_type_short')
 
     @property
     def mimetypes(self):
@@ -296,29 +307,18 @@ class Sample(object):
 
         # get types from dump_info
         try:
-            declared_mt = self.__meta_info.get('attachment', 'type_declared')
+            declared_mt = self.get_mime_type_from_meta_info()
             mtypes.append(declared_mt)
         except Exception:
-            pass
+            if self.meta_info_loaded:
+                logger.warning('Cannot get mime types from meta info although meta info is loaded.')
 
-        # get type from file magic bytes
         if self.__symlink:
-            mt = magic.from_file(os.path.join(self.__wd, self.__symlink),
-                                 mime=True)
-        else:
-            mt = magic.from_file(self.__file_path, mime=True)
+            symlink_mt = self.guess_mime_type_from_filename(self.__symlink)
+            mtypes.append(symlink_mt)
 
-        if mt:
-            mtypes.append(mt)
-
-        if not mimetypes.inited:
-            mimetypes.init()
-            mimetypes.add_type('application/javascript', '.jse')
-
-        # Guess the type of a file based on its filename or URL
-        mt = mimetypes.guess_type(self.__file_path)[0]
-        if mt:
-            mtypes.append(mt)
+        file_mt = self.guess_mime_type_from_file_contents(self.__file_path)
+        mtypes.append(file_mt)
 
         if not self.has_attr('mimetypes'):
             self.set_attr('mimetypes', mtypes)
@@ -328,10 +328,30 @@ class Sample(object):
             new_mt = list(set(mtypes + current_mt))
             self.set_attr('mimetypes', new_mt)
 
-            logger.debug('Mime type returned as %s'
-                         % self.get_attr('mimetypes'))
+        logger.debug('Mime type returned as %s'
+                     % self.get_attr('mimetypes'))
 
         return self.get_attr('mimetypes')
+
+    def get_mime_type_from_meta_info(self):
+        declared_mt = self.__meta_info.get('attachment', 'type_declared')
+        return declared_mt
+
+    def guess_mime_type_from_filename(self, file_path):
+        """ Guess the type of a file based on its filename or URL. """
+        if not mimetypes.inited:
+            mimetypes.init()
+            mimetypes.add_type('application/javascript', '.jse')
+
+        mt = mimetypes.guess_type(file_path)[0]
+        if mt:
+            return mt
+
+    def guess_mime_type_from_file_contents(self, file_path):
+        """  Get type from file magic bytes. """
+        mt = magic.from_file(file_path, mime=True)
+        if mt:
+            return mt
 
     @property
     def job_id(self):
@@ -459,26 +479,26 @@ class Sample(object):
         Reads the JSON report from Cuckoo and loads it into the Sample object.
         """
         task_id = self.get_attr('job_id')
-        report_location = os.path.join(self.__config.cuckoo_storage,
+        cuckoo_report = os.path.join(self.__config.cuckoo_storage,
                                        'analyses/%d/reports/report.json'
                                        % task_id)
-        logger.debug('Accessing Cuckoo report at %s for task %d' % (report_location,
+        logger.debug('Accessing Cuckoo report at %s for task %d' % (cuckoo_report,
                                                                     task_id))
 
-        if not os.path.isfile(report_location):
+        if not os.path.isfile(cuckoo_report):
             raise OSError('Cuckoo report not found.')
         else:
-            report = open(report_location)
-            data = json.load(report)
-            self.set_attr('cuckoo_report', data)
+            with open(cuckoo_report) as data:
+                report = json.load(data)
+                self.set_attr('cuckoo_report', report)
 
     def add_rule_result(self, res):
         logger.debug('Adding rule result %s' % str(res))
-        ruleset_results = []
-        if self.has_attr('ruleset_results'):
-            ruleset_results = self.get_attr('ruleset_results')
-        ruleset_results.append(res)
-        self.set_attr('ruleset_results', ruleset_results)
+        rule_results = []
+        if self.has_attr('rule_results'):
+            rule_results = self.get_attr('rule_results')
+        rule_results.append(res)
+        self.set_attr('rule_results', rule_results)
 
     def save_result(self):
         if self.__db_con.known(self.sha256sum):
@@ -502,26 +522,18 @@ class Sample(object):
 #############################################
     def report(self):
         """ report result to socket connection """
-        for rr in self.get_attr('ruleset_results'):
-            message = "Datei \"%s\": %s\n" % (self.__filename, str(rr))
+        self.determine_result()
+
+        for rule_result in self.get_attr('rule_results'):
+            message = "Datei \"%s\": %s\n" % (self.__filename, str(rule_result))
             logger.info('Connection send: %s ' % message)
-
-            if self.__socket:
-                try:
-                    self.__socket.send(message)
-                except Exception as e:
-                    if e.errno == errno.EPIPE:
-                        logger.warning('Unable send message "%s". Broken pipe.' % message)
-                    else:
-                        logger.exception(e)
-
-            # check if result of this rule is worse than what we know so far
-            logger.debug("Current result: %s, Ruleset result: %s"
-                         % (self.__result, rr.result))
-
-            if rr.result > self.__result:
-                self.__result = rr.result
-                self.set_attr('reason', rr.reason)
+            try:
+                self.__socket.send(message)
+            except Exception as e:
+                if e.errno == errno.EPIPE:
+                    logger.warning('Unable send message "%s". Broken pipe.' % message)
+                else:
+                    logger.exception(e)
 
         # check if result still init value inProgress
         if self.__result == ruleset.Result.inProgress:
@@ -554,14 +566,23 @@ class Sample(object):
                 logger.debug('Clean up of %s complete' % self.__wd)
             else:
                 logger.info('Clean up of %s failed' % self.__wd)
-            if self.__socket:
-                try:
-                    self.__socket.close()
-                except Exception as e:
-                    if e.errno == errno.EPIPE:
-                        logger.warning('Unable to close the socket. Broken pipe.')
-                    else:
-                        logger.exception(e)
+
+            try:
+                self.__socket.close()
+            except Exception as e:
+                if e.errno == errno.EPIPE:
+                    logger.warning('Unable to close the socket. Broken pipe.')
+                else:
+                    logger.exception(e)
+
+    def determine_result(self):
+        for rule_result in self.get_attr('rule_results'):
+            logger.debug("Current result: %s, Rule result: %s"
+                         % (self.__result, rule_result.result))
+            # check if result of this rule is worse than what we know so far
+            if rule_result.result > self.__result:
+                self.__result = rule_result.result
+                self.set_attr('reason', rule_result.reason)
 
     def __gen_job_hash(self, size=20):
         """
