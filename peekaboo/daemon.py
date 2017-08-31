@@ -183,7 +183,8 @@ def run():
 
     # write PID file
     pid = str(os.getpid())
-    file(config.pid_file, "w").write("%s\n" % pid)
+    with open(config.pid_file, "w") as pidfile:
+        pidfile.write("%s\n" % pid)
 
     systemd = SystemdNotifier()
     server = PeekabooStreamServer(config.sock_file, PeekabooStreamRequestHandler, config=config)
