@@ -26,7 +26,7 @@
 import logging
 
 
-VERSION = (1, 0, 'a')
+VERSION = (1, 0, 'b')
 AUTHORS = ['Felix Bauer', 'Sebastian Deiss']
 
 __version__ = '.'.join(map(str, VERSION))
