@@ -56,7 +56,7 @@ class PeekabooConfig(object):
         ##############################################
         # setup default logging to log any errors during the
         # parsing of the config file.
-        self.setup_logging()
+        self.__setup_logging()
         self.__parse(config_file)
 
     def __parse(self, config_file):
@@ -81,6 +81,7 @@ class PeekabooConfig(object):
             self.cuckoo_storage = config.get('cuckoo', 'storage_path')
             self.cuckoo_exec = config.get('cuckoo', 'exec')
             self.cuckoo_submit = config.get('cuckoo', 'submit')
+            logger.setLevel(self.log_level)
         except NoSectionError as e:
             logger.error('configuration section not found')
             logger.error(str(e))
@@ -89,6 +90,16 @@ class PeekabooConfig(object):
             logger.error('configuration option not found')
             logger.error(str(e))
             sys.exit(1)
+
+    def change_log_level(self, log_level):
+        """
+        Overwrite the log level from the configuration file.
+
+        :param log_level: The new log level.
+        """
+        ll = self.__parse_log_level(log_level)
+        self.log_level = ll
+        logger.setLevel(ll)
 
     def add_db_con(self, db_con):
         self.db_con = db_con
@@ -110,7 +121,7 @@ class PeekabooConfig(object):
         elif log_level == 'DEBUG':
             return logging.DEBUG
 
-    def setup_logging(self):
+    def __setup_logging(self):
         """
         Setup logging to console.
         """

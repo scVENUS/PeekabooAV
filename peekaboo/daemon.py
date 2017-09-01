@@ -147,10 +147,10 @@ def run():
 
     # read configuration
     config = PeekabooConfig(args.config)
-    config.setup_logging()
+
     # Check if CLI arguments override the configuration
     if args.debug:
-        config.log_level = logging.DEBUG
+        config.change_log_level('DEBUG')
 
     # Log the configuration options if we are in debug mode
     if config.log_level == logging.DEBUG:
