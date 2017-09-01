@@ -83,12 +83,12 @@ class PeekabooConfig(object):
             self.cuckoo_submit = config.get('cuckoo', 'submit')
             logger.setLevel(self.log_level)
         except NoSectionError as e:
-            logger.error('configuration section not found')
-            logger.error(str(e))
+            logger.critical('configuration section not found')
+            logger.exception(e)
             sys.exit(1)
         except NoOptionError as e:
-            logger.error('configuration option not found')
-            logger.error(str(e))
+            logger.critical('configuration option not found')
+            logger.exception(e)
             sys.exit(1)
 
     def change_log_level(self, log_level):

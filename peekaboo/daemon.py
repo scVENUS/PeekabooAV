@@ -161,7 +161,7 @@ def run():
         db_con = PeekabooDBHandler(config.db_url)
         config.add_db_con(db_con)
     except Exception as e:
-        logger.critical(str(e))
+        logger.critical('Failed to establish a connection to the database.')
         sys.exit(1)
 
     # Import debug module if we are in debug mode
