@@ -168,7 +168,6 @@ class TestSample(unittest.TestCase):
         test_meta_info += 'digest        :\n'
         test_meta_info += 'attributes    :\n'
         test_meta_info += 'queue_id      :\n'
-
         with open('./test_meta_info.info', 'w+') as f:
             f.write(test_meta_info)
 
@@ -204,6 +203,26 @@ class TestSample(unittest.TestCase):
         self.assertEqual(self.sample.file_extension, 'py')
         self.sample.load_meta_info('./test_meta_info.info')
         self.assertEqual(self.sample.file_extension, 'pyc')
+
+
+    def test_sample_without_suffix(self):
+        test_meta_info = '[attachment]\n'
+        test_meta_info += 'full_name     : /tmp/junk\n'
+        test_meta_info += 'name_declared : Report.docx\n'
+        test_meta_info += 'type_declared : application/vnd.openxmlformats-officedocument.wordprocessingml.document\n'
+        test_meta_info += 'type_long     : application/vnd.openxmlformats-officedocument.wordprocessingml.document\n'
+        test_meta_info += 'type_short    : docx\n'
+        test_meta_info += 'size          : 212\n'
+        test_meta_info += 'digest        :\n'
+        test_meta_info += 'attributes    :\n'
+        test_meta_info += 'queue_id      :\n'
+        with open('./junk.info', 'w+') as f:
+            f.write(test_meta_info)
+        sample = Sample(self.conf, None, 'junk')
+        self.assertEqual(sample.file_extension, '')
+        sample.load_meta_info('./junk.info')
+        self.assertEqual(sample.file_extension, 'docx')
+        os.unlink('./junk.info')
 
     @classmethod
     def tearDownClass(cls):
