@@ -158,18 +158,6 @@ class TestSample(unittest.TestCase):
         db_con = PeekabooDummyDB()
         cls.conf.add_db_con(db_con)
         cls.sample = Sample(cls.conf, None, os.path.realpath(__file__))
-        test_meta_info = '[attachment]\n'
-        test_meta_info += 'full_name     : /tmp/test.pyc\n'
-        test_meta_info += 'name_declared : test.pyc\n'
-        test_meta_info += 'type_declared : application/x-bytecode.python\n'
-        test_meta_info += 'type_long     : application/x-python-bytecode\n'
-        test_meta_info += 'type_short    : pyc\n'
-        test_meta_info += 'size          : 200\n'
-        test_meta_info += 'digest        :\n'
-        test_meta_info += 'attributes    :\n'
-        test_meta_info += 'queue_id      :\n'
-        with open('./test_meta_info.info', 'w+') as f:
-            f.write(test_meta_info)
 
     def test_attribute_dict(self):
         self.sample.set_attr('Unittest', 'Hello World!')
@@ -200,10 +188,22 @@ class TestSample(unittest.TestCase):
         self.assertFalse(self.sample.known)
 
     def test_sample_attributes_with_meta_info(self):
+        test_meta_info = '[attachment]\n'
+        test_meta_info += 'full_name     : /tmp/test.pyc\n'
+        test_meta_info += 'name_declared : test.pyc\n'
+        test_meta_info += 'type_declared : application/x-bytecode.python\n'
+        test_meta_info += 'type_long     : application/x-python-bytecode\n'
+        test_meta_info += 'type_short    : pyc\n'
+        test_meta_info += 'size          : 200\n'
+        test_meta_info += 'digest        :\n'
+        test_meta_info += 'attributes    :\n'
+        test_meta_info += 'queue_id      :\n'
+        with open('./test_meta_info.info', 'w+') as f:
+            f.write(test_meta_info)
         self.assertEqual(self.sample.file_extension, 'py')
         self.sample.load_meta_info('./test_meta_info.info')
         self.assertEqual(self.sample.file_extension, 'pyc')
-
+        os.unlink('./test_meta_info.info')
 
     def test_sample_without_suffix(self):
         test_meta_info = '[attachment]\n'
@@ -227,7 +227,6 @@ class TestSample(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.conf.db_con.close()
-        os.unlink('./test_meta_info.info')
 
     def __contains_mime(self, mimetypes, mime):
         if mime in mimetypes:
