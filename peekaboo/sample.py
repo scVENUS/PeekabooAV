@@ -216,8 +216,9 @@ class Sample(object):
                 logger.debug('meta_info_%s = %s' % (info[0], info[1]))
                 self.set_attr('meta_info_' + info[0], info[1])
             self.meta_info_loaded = True
-        except OSError:
+        except Exception as e:
             logger.info('No metadata available for file %s' % self.__file_path)
+            logger.debug(e, exc_info=True)
 
     def create_symlink(self):
         """ 
