@@ -80,6 +80,7 @@ class PeekabooStreamRequestHandler(SocketServer.StreamRequestHandler):
         SocketServer.StreamRequestHandler.__init__(self, request, client_address, server)
 
     def handle(self):
+        self.request.sendall('Greetings from Peekaboo %s.' % __version__)
         # receive directory path
         path = self.request.recv(1024).rstrip()
         logger.info("Received %s" % path)
