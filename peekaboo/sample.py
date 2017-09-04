@@ -288,11 +288,17 @@ class Sample(object):
 
     @property
     def file_extension(self):
-        if not self.has_attr('meta_info_type_short'):
+        if self.has_attr('meta_info_name_declared'):
+            file_ext = self.get_attr('meta_info_name_declared').split('.')[-1]
+            if self.has_attr('file_extension'):
+                if self.get_attr('file_extension') != file_ext:
+                    self.set_attr('file_extension', file_ext, override=True)
+            else:
+                self.set_attr('file_extension', file_ext)
+        elif not self.has_attr('file_extension'):
             file_ext = os.path.splitext(self.__filename)[1][1:]
             self.set_attr('file_extension', file_ext)
-            return self.get_attr('file_extension')
-        return self.get_attr('meta_info_type_short')
+        return self.get_attr('file_extension')
 
     @property
     def mimetypes(self):
@@ -515,10 +521,6 @@ class Sample(object):
     def set_cuckoo_report(self, data):
         if not self.has_attr('cuckoo_report'):
             self.set_attr('cuckoo_report', data)
-
-    def set_reason(self, reason):
-        if not self.has_attr('reason'):
-            self.set_attr('reason', reason)
 
 #############################################
     def report(self):
