@@ -42,8 +42,8 @@ def evaluate(sample):
     function that is run by a worker for every Sample object.
     """
     process_rules(sample)
-
     logger.debug("Rules evaluated")
+    report(sample)
 
 
 def rule(sample, rule_function, args={}):
@@ -64,7 +64,7 @@ def rule(sample, rule_function, args={}):
     except Exception as e:
         # in case this our Sample is requesting the Cuckoo report
         if type(e) == Exception and \
-            e.args == Exception('Kill ruleset for now').args:
+           e.args == Exception('Kill ruleset for now').args:
             raise
 
         logger.info("Unexpected error in '%s' for %s" % (function_name,
@@ -90,9 +90,9 @@ def process_rules(sample):
 
 # TODO (cuckooWrapper needs to check if there is other samples in pjobs with
 # the same hash)
-    p = rule(s, already_in_progress)
-    if not p.further_analysis:
-        return
+    #p = rule(s, already_in_progress)
+    #if not p.further_analysis:
+    #    return
 
     p = rule(s, known)
     if not p.further_analysis:
@@ -131,8 +131,8 @@ def process_rules(sample):
         return
 
     # active rules, non reporting
-    report(sample)
-    queue_identical_samples(sample) # depends on already_in_progress
+#    report(sample)
+#    queue_identical_samples(sample) # depends on already_in_progress
 
 #                   __ ____   _   _  _      _____  ____
 #                  / /|  _ \ | | | || |    | ____|/ ___|
