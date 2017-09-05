@@ -225,12 +225,13 @@ class Sample(object):
         creates a symlink to submit the file with correct
         file extension to cuckoo via submit.py.
         """
-        self.__symlink = '%s.%s' % (self.sha256sum,
-                                    self.file_extension)
-        logger.debug('ln -s %s %s' % (self.__file_path, os.path.join(self.__wd,
-                                                                     self.__symlink)))
+        orig = os.path.join(self.__wd, self.__filename)
+        self.__symlink = '%s/%s.%s' % (self.__wd,
+                                       self.sha256sum,
+                                       self.file_extension)
+        logger.debug('ln -s %s %s' % (orig, self.__symlink))
 
-        os.symlink(self.__file_path, os.path.join(self.__wd, self.__symlink))
+        os.symlink(orig, self.__symlink)
 
     def get_file_path(self):
         return self.__file_path
