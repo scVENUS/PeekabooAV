@@ -200,7 +200,6 @@ class TestSample(unittest.TestCase):
         test_meta_info += 'queue_id      :\n'
         with open('./test_meta_info.info', 'w+') as f:
             f.write(test_meta_info)
-        self.assertEqual(self.sample.file_extension, 'py')
         self.sample.load_meta_info('./test_meta_info.info')
         self.assertEqual(self.sample.file_extension, 'pyc')
         os.unlink('./test_meta_info.info')
