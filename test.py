@@ -202,7 +202,6 @@ class TestSample(unittest.TestCase):
             f.write(test_meta_info)
         self.sample.load_meta_info('./test_meta_info.info')
         self.assertEqual(self.sample.file_extension, 'pyc')
-        os.unlink('./test_meta_info.info')
 
     def test_sample_without_suffix(self):
         test_meta_info = '[attachment]\n'
@@ -221,11 +220,12 @@ class TestSample(unittest.TestCase):
         self.assertEqual(sample.file_extension, '')
         sample.load_meta_info('./junk.info')
         self.assertEqual(sample.file_extension, 'docx')
-        os.unlink('./junk.info')
 
     @classmethod
     def tearDownClass(cls):
         cls.conf.db_con.close()
+        os.unlink('./test_meta_info.info')
+        os.unlink('./junk.info')
 
     def __contains_mime(self, mimetypes, mime):
         if mime in mimetypes:
