@@ -97,21 +97,21 @@ class PeekabooStreamRequestHandler(SocketServer.StreamRequestHandler):
                 sample = self._make_sample(path, self.request)
                 if sample:
                     for_analysis.append(sample)
-                else:
-                    # walk recursively through entries in directory
-                    for dirname, __, filenames in os.walk(path):
-                        for filename in filenames:
-                            logger.debug("Found file %s" % filename)
-                            p = os.path.join(dirname, filename)
-                            sample = self._make_sample(p, self.request)
-                            if sample:
-                                for_analysis.append(sample)
+            else:
+                # walk recursively through entries in directory
+                for dirname, __, filenames in os.walk(path):
+                    for filename in filenames:
+                        logger.debug("Found file %s" % filename)
+                        p = os.path.join(dirname, filename)
+                        sample = self._make_sample(p, self.request)
+                        if sample:
+                            for_analysis.append(sample)
 
-                # introduced after issue where results were reported
-                # before all file could be added
-                for s in for_analysis:
-                    pjobs.Jobs.add_job(self.request, s)
-                    self.workers.submit_job(s, self.__class__)
+            # introduced after issue where results were reported
+            # before all file could be added
+            for s in for_analysis:
+                pjobs.Jobs.add_job(self.request, s)
+                self.workers.submit_job(s, self.__class__)
 
     # TODO: do cleanup work here in finish()
 
