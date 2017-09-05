@@ -195,6 +195,13 @@ So, edit ``/etc/amavis/conf.d/50-user``:
    $dump_info_tempdir = '/tmp';  # base directory where dump_info() will put its stuff
 
 
+Finally, restart AMaViSd
+
+.. code-block:: shell
+
+    systemctl restart amavis
+
+
 Postfix
 -------
 
