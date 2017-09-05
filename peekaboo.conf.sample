@@ -36,6 +36,6 @@ url              :    sqlite:////path/to/database.db
 # Cuckoo specific settings
 #
 [cuckoo]
-exec             :    /usr/bin/cuckoo
-submit           :    /usr/lib/python2.7/site-packages/Cuckoo-2.0.0-py2.7.egg/cuckoo/core/submit.py
+exec             :    /usr/local/bin/cuckoo
+submit           :    /usr/local/bin/cuckoo submit
 storage_path     :    /home/peekaboo/.cuckoo/storage

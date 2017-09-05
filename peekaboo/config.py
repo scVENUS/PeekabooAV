@@ -80,7 +80,7 @@ class PeekabooConfig(object):
             self.db_url = config.get('db', 'url')
             self.cuckoo_storage = config.get('cuckoo', 'storage_path')
             self.cuckoo_exec = config.get('cuckoo', 'exec')
-            self.cuckoo_submit = config.get('cuckoo', 'submit')
+            self.cuckoo_submit = config.get('cuckoo', 'submit').split(' ')
             logger.setLevel(self.log_level)
         except NoSectionError as e:
             logger.critical('configuration section not found')

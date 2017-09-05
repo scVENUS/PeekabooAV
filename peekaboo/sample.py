@@ -432,8 +432,9 @@ class Sample(object):
             try:
                 file_for_analysis = os.path.join(self.__wd, self.__symlink)
                 logger.debug("Submitting %s to cuckoo" % file_for_analysis)
-                p = subprocess.Popen([self.__config.cuckoo_submit,
-                                     file_for_analysis],
+                proc = self.__config.cuckoo_submit
+                proc.append(file_for_analysis)
+                p = subprocess.Popen(proc,
                                      stdout=subprocess.PIPE,
                                      stderr=subprocess.PIPE)
                 p.wait()
