@@ -28,6 +28,7 @@ from Queue import Queue
 from peekaboo import logger
 from peekaboo.ruleset import Result
 from peekaboo.ruleset.processor import evaluate
+from peekaboo.exceptions import CuckooReportPendingException
 
 
 class Jobs(object):
@@ -153,6 +154,7 @@ class Jobs(object):
 class Workers(object):
     """
     @author: Felix Bauer
+    @author: Sebastian Deiss
     """
     count = None        # number of workers (set by constructor)
     run = True          # makes things end
@@ -199,7 +201,9 @@ class Workers(object):
                 for s in Jobs.get_samples_by_sha256(s.sha256sum):
                     logger.debug('Processing queued sample %s' % s)
                     Workers.submit_job(s, Workers.__class__)
-            except ValueError as e:
+            except CuckooReportPendingException as e:
+                logger.exception(e)
+            except Exception as e:
                 # catch 'cuckooReport not yet available. Sample submitted for
                 # analysis' exception
                 logger.exception(e)

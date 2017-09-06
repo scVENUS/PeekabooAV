@@ -39,6 +39,7 @@ from random import choice
 from datetime import datetime
 from oletools.olevba import VBA_Parser
 from peekaboo import logger
+from peekaboo.exceptions import CuckooReportPendingException
 import peekaboo.pjobs as pjobs
 import peekaboo.ruleset as ruleset
 
@@ -452,6 +453,7 @@ class Sample(object):
                 # process output to get jobID
                 m = re.match(".*added as task with ID ([0-9]*).*",
                              out.replace("\n", ""))
+
                 if m:
                     self.set_attr('job_id', int(m.group(1)))
                     message = 'Erfolgreich an Cuckoo gegeben %s als Job %d\n' \
@@ -465,7 +467,7 @@ class Sample(object):
 
             # stop worker
             sys.stdout.flush()
-            raise Exception('Kill ruleset for now')
+            raise CuckooReportPendingException()
         return self.get_attr('cuckoo_report')
 
     def cuckoo_analysis_failed(self):

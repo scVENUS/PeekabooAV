@@ -26,6 +26,7 @@
 from peekaboo import logger
 from peekaboo.ruleset import Result, RuleResult
 from peekaboo.ruleset.rules import *
+from peekaboo.exceptions import CuckooReportPendingException
 
 
 '''
@@ -60,21 +61,18 @@ def rule(sample, rule_function, args={}):
             res = rule_function(sample)
 
         sample.add_rule_result(res)
+    except CuckooReportPendingException as e:
+        # in case this our Sample is requesting the Cuckoo report
+        raise
     # catch all exceptions in rule
     except Exception as e:
-        # in case this our Sample is requesting the Cuckoo report
-        if type(e) == Exception and \
-           e.args == Exception('Kill ruleset for now').args:
-            raise
-
-        logger.info("Unexpected error in '%s' for %s" % (function_name,
-                                                         sample))
+        logger.warning("Unexpected error in '%s' for %s" % (function_name,
+                                                            sample))
         # create "fake" RuleResult
         res = RuleResult("rule_wrapper", result=Result.unknown,
                          reason="Regel mit Fehler abgebrochen",
                          further_analysis=True)
         sample.add_rule_result(res)
-        raise
 
     logger.debug("Rule '%s' processed for %s" % (function_name, sample))
     return res
