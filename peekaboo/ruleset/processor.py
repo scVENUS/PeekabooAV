@@ -23,6 +23,8 @@
 ###############################################################################
 
 
+import os
+from shutil import copyfile
 from peekaboo import logger
 from peekaboo.ruleset import Result, RuleResult
 from peekaboo.ruleset.rules import *
@@ -144,4 +146,34 @@ def process_rules(sample):
 def report(s):
     # TODO: might be better to do this for each rule individually
     s.report()
+    if s.get_result() == Result.bad:
+        dump_processing_info(s)
     s.save_result()
+
+
+def dump_processing_info(sample):
+    """
+    Saves the Cuckoo report as HTML + JSON and the meta info file (if available)
+    to a directory named after the job hash.
+    """
+    job_hash = sample.get_job_hash()
+    dump_dir = os.path.join(os.environ['HOME'], 'malware_reports', job_hash)
+    os.makedirs(dump_dir, 0770)
+    sample_hash = sample.sha256sum
+    logger.debug('Dumping processing info to %s for sample %s' %(dump_dir, sample))
+    # Cuckoo report
+    try:
+        # HTML
+        copyfile(sample.get_attr('cuckoo_json_report_file').replace('json', 'html'),
+                 os.path.join(dump_dir, sample_hash + '.html'))
+        # JSON
+        copyfile(sample.get_attr('cuckoo_json_report_file'),
+                 os.path.join(dump_dir, sample_hash + '.json'))
+    except Exception as e:
+        logger.exception(e)
+    try:
+        # meta info file
+        copyfile(sample.get_attr('meta_info_file'),
+                 os.path.join(dump_dir, sample_hash + '.info'))
+    except Exception as e:
+        logger.exception(e)

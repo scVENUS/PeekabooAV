@@ -136,8 +136,11 @@ class Sample(object):
         #    self.__db_con.sample_info2db(self)
 
         self.chown2me()
-        self.load_meta_info(os.path.join(self.__wd,
-                                         self.__filename + '.info'))
+
+        meta_info_file = os.path.join(self.__wd, self.__filename + '.info')
+        self.set_attr('meta_info_file', meta_info_file)
+        self.load_meta_info(meta_info_file)
+
         self.create_symlink()
         self.initalized = True
 
@@ -498,6 +501,7 @@ class Sample(object):
         cuckoo_report = os.path.join(self.__config.cuckoo_storage,
                                        'analyses/%d/reports/report.json'
                                        % task_id)
+        self.set_attr('cuckoo_json_report_file', cuckoo_report)
         logger.debug('Accessing Cuckoo report at %s for task %d' % (cuckoo_report,
                                                                     task_id))
 
@@ -522,6 +526,7 @@ class Sample(object):
         else:
             logger.debug('Saving results to database')
             self.__db_con.sample_info2db(self)
+        self._cleanup()
 
     def set_job_id(self, job_id):
         if not self.has_attr('job_id'):
@@ -564,6 +569,7 @@ class Sample(object):
                 else:
                     logger.exception(e)
 
+    def _cleanup(self):
         if pjobs.Jobs.remove_job(self.__socket, self) <= 0:
             # returns count of remaining samples for this connection
             logger.debug('Closing connection.')
