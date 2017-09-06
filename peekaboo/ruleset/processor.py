@@ -68,6 +68,7 @@ def rule(sample, rule_function, args={}):
     except Exception as e:
         logger.warning("Unexpected error in '%s' for %s" % (function_name,
                                                             sample))
+        logger.exception(e)
         # create "fake" RuleResult
         res = RuleResult("rule_wrapper", result=Result.unknown,
                          reason="Regel mit Fehler abgebrochen",
