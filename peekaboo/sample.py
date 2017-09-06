@@ -38,7 +38,7 @@ from ConfigParser import SafeConfigParser
 from random import choice
 from datetime import datetime
 from oletools.olevba import VBA_Parser
-from peekaboo import logger
+from peekaboo import logger, MultiRegexMatcher
 from peekaboo.exceptions import CuckooReportPendingException
 import peekaboo.pjobs as pjobs
 import peekaboo.ruleset as ruleset
@@ -451,8 +451,13 @@ class Sample(object):
                 logger.debug("Popen out: %s" % out)
                 logger.debug("Popen err: %s" % err)
                 # process output to get jobID
-                m = re.match(".*added as task with ID ([0-9]*).*",
-                             out.replace("\n", ""))
+                patterns = []
+                # Example: Success: File "/var/lib/peekaboo/.bashrc" added as task with ID #4
+                patterns.append(".*Success: File .* added as task with ID #([0-9]*).*")
+                patterns.append(".*added as task with ID ([0-9]*).*", )
+                matcher = MultiRegexMatcher(patterns)
+                m = matcher.match(out.replace("\n", ""))
+                logger.debug('Pattern %d matched.' % matcher.matched_pattern)
 
                 if m:
                     self.set_attr('job_id', int(m.group(1)))

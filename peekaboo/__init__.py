@@ -24,6 +24,7 @@
 
 
 import logging
+import re
 
 
 VERSION = (1, 0, 'b')
@@ -65,3 +66,34 @@ _owl = """
 """.format(__version__)
 
 logger = logging.getLogger('Peekaboo')
+
+
+#
+# Helpers
+#
+
+
+class MultiRegexMatcher(object):
+    """
+    Validate multiple regular expressions for the same string.
+
+    @author: Sebastian Deiss
+    """
+    def __init__(self, patterns):
+        self.__patterns = [(re.compile(pattern)) for pattern in patterns]
+        self.matched_pattern = 0    # No pattern matched (default value)
+
+    def match(self, str):
+        """
+        Try to apply the patterns at the start of the string.
+
+        :param str: The string to apply the pattern to.
+        :return: a match object, or None if no match was found.
+        """
+        iter_count = 1
+        for pattern in self.__patterns:
+            match = re.match(pattern, str)
+            if match:
+                self.matched_pattern = iter_count
+                return match
+            iter_count += 1
