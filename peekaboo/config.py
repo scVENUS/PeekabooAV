@@ -131,7 +131,7 @@ class PeekabooConfig(object):
                                           '%(module)s - %(threadName)s - '
                                           '%(process)s - %(message)s')
         # create console handler and set level to debug
-        to_console_log_handler = logging.StreamHandler()
+        to_console_log_handler = logging.StreamHandler(sys.stdout)
         to_console_log_handler.setLevel(logging.DEBUG)
         to_console_log_handler.setFormatter(log_formatter)
         logger.addHandler(to_console_log_handler)
