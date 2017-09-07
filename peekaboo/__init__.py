@@ -79,21 +79,24 @@ class MultiRegexMatcher(object):
 
     @author: Sebastian Deiss
     """
-    def __init__(self, patterns):
-        self.__patterns = [(re.compile(pattern)) for pattern in patterns]
-        self.matched_pattern = 0    # No pattern matched (default value)
+    def __init__(self, patterns, flags=0):
+        self.__patterns = [(re.compile(pattern, flags)) for pattern in patterns]
+        self.matched_pattern = -1    # No pattern matched (default value)
 
     def match(self, str):
         """
         Try to apply the patterns at the start of the string.
+        When the first pattern that matches, processing is stopped
+        and a match object is returned.
 
         :param str: The string to apply the pattern to.
         :return: a match object, or None if no match was found.
         """
-        iter_count = 1
+        iter_count = 0
         for pattern in self.__patterns:
-            match = re.match(pattern, str)
-            if match:
+            _match = re.match(pattern, str)
+            if _match:
                 self.matched_pattern = iter_count
-                return match
+                return _match
             iter_count += 1
+        return None
