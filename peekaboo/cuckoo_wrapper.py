@@ -55,19 +55,14 @@ class CuckooManager(protocol.ProcessProtocol):
         """ on receiving output on STDERR from Cuckoo """
         logger.debug('STDERR %s' % str(data.replace('\n', '')))
 
-        patterns = []
         #
         # FILE SUBMITTED
         # printed out but has no further effect
         #
         # 2016-04-12 09:14:06,984 [lib.cuckoo.core.scheduler] INFO: Starting
         # analysis of FILE "cuckoo.png" (task #201, options "")
-        patterns.append(".*INFO: Starting analysis of FILE \"(.*)\" \(task #([0-9]*), options .*")
         # INFO: Starting analysis of FILE ".bashrc" (task #4, options "")
-        patterns.append(".*Starting analysis of FILE .* task #([0-9]*), options.*")
-
-        matcher = MultiRegexMatcher(patterns)
-        m = matcher.match(data)
+        m = re.match('.*INFO: Starting analysis of FILE \"(.*)\" \(task #([0-9]*), options .*', data)
 
         if m:
             logger.info("file submitted: task #%s filename %s" % (m.group(2),
