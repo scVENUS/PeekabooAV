@@ -456,7 +456,7 @@ class Sample(object):
                 # process output to get jobID
                 patterns = []
                 # Example: Success: File "/var/lib/peekaboo/.bashrc" added as task with ID #4
-                patterns.append(".*Success: File .* added as task with ID #([0-9]*).*")
+                patterns.append(".*Success.*: File .* added as task with ID #([0-9]*).*")
                 patterns.append(".*added as task with ID ([0-9]*).*")
                 matcher = MultiRegexMatcher(patterns)
                 m = matcher.match(out.replace("\n", ""))
