@@ -160,7 +160,16 @@ def dump_processing_info(sample):
     dump_dir = os.path.join(os.environ['HOME'], 'malware_reports', job_hash)
     os.makedirs(dump_dir, 0770)
     sample_hash = sample.sha256sum
-    logger.debug('Dumping processing info to %s for sample %s' %(dump_dir, sample))
+
+    if not sample.has_attr('cuckoo_json_report_file') or \
+       not sample.has_attr('meta_info_file'):
+        # Nothing to do, since at least one of the files we need is not there.
+        # This is always the case if the result comes from the DB, because
+        # a sample has been analysed before.
+        return
+
+    logger.debug('Dumping processing info to %s for sample %s' % (dump_dir, sample))
+
     # Cuckoo report
     try:
         # HTML
