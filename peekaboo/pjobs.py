@@ -202,7 +202,7 @@ class Workers(object):
                     logger.debug('Processing queued sample %s' % s)
                     Workers.submit_job(s, Workers.__class__)
             except CuckooReportPendingException as e:
-                logger.exception(e)
+                pass
             except Exception as e:
                 # catch 'cuckooReport not yet available. Sample submitted for
                 # analysis' exception
