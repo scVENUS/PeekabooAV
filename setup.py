@@ -61,7 +61,7 @@ setup(
     download_url='https://github.com/scVENUS/PeekabooAV/archive/master.zip',
     license=__license__,
     classifiers=[
-      'Development Status :: 4 - Alpha',
+      'Development Status :: 4 - Beta',
       'Operating System :: POSIX',
       'Programming Language :: Python',
       'Programming Language :: Python :: 2',
