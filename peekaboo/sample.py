@@ -414,7 +414,7 @@ class Sample(object):
     @property
     def analyses_time(self):
         if not self.has_attr('analyses_time'):
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+            timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
             self.set_attr('analyses_time', timestamp)
             return timestamp
         return self.get_attr('analyses_time')
@@ -610,11 +610,12 @@ class Sample(object):
                 self.__result = rule_result.result
                 self.set_attr('reason', rule_result.reason)
 
-    def __gen_job_hash(self, size=20):
+    def __gen_job_hash(self, size=8):
         """
-        Generates a job hash (default: 20 characters).
+        Generates a job hash (default: 8 characters).
         """
-        job_hash = 'peekaboo_job_'
+        job_hash = 'peekaboo-analyses-'
+        job_hash += '%s-' % self.analyses_time
         job_hash += ''.join(choice(string.digits +
                                    string.ascii_lowercase +
                                    string.ascii_uppercase)

@@ -56,7 +56,7 @@ class SampleInfo(Base):
         return ("<SampleInfo(sample_sha256_hash='%s', result='%s', reason='%s', "
                 "analyses_time='%s')>"
                 % (self.sample_sha256_hash, self.result, self.reason,
-                   self.analyses_time.strftime("%Y-%m-%d %H:%M")))
+                   self.analyses_time.strftime("%Y%m%dT%H%M%S")))
 
 
 class PeekabooDBHandler(object):
@@ -94,7 +94,7 @@ class PeekabooDBHandler(object):
         with self.lock:
             session = self.Session()
             sample_info = SampleInfo(sample_sha256_hash=sample.sha256sum,
-                                     analyses_time=datetime.strptime(sample.analyses_time, "%Y-%m-%d %H:%M"),
+                                     analyses_time=datetime.strptime(sample.analyses_time, "%Y%m%dT%H%M%S"),
                                      result=sample.get_result().name,
                                      reason=sample.reason)
             session.add(sample_info)
