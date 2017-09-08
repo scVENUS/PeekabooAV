@@ -180,9 +180,17 @@ def dump_processing_info(sample):
                  os.path.join(dump_dir, sample_hash + '.json'))
     except Exception as e:
         logger.exception(e)
+
+    # meta info file
     try:
-        # meta info file
         copyfile(sample.get_attr('meta_info_file'),
                  os.path.join(dump_dir, sample_hash + '.info'))
+    except Exception as e:
+        logger.exception(e)
+
+    # Peekaboo's report
+    try:
+        with open(os.path.join(dump_dir, sample_hash + '_report.txt'), 'w+') as f:
+            f.write(sample.get_peekaboo_report())
     except Exception as e:
         logger.exception(e)

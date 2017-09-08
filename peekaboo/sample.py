@@ -106,6 +106,7 @@ class Sample(object):
         # <sha256sum>.suffix
         self.__symlink = None
         self.__result = ruleset.Result.unchecked
+        self.__report = []  # Peekaboo's own report
         # Additional attributes for a sample object (e. g. dump info)
         self.__attributes = {}
         self.initalized = False
@@ -146,6 +147,7 @@ class Sample(object):
 
         message = "Datei \"%s\" %s wird analysiert\n" % (self.__filename,
                                                          self.sha256sum)
+        self.__report.append(message)
         try:
             self.__socket.send(message)
         except Exception as e:
@@ -466,6 +468,7 @@ class Sample(object):
                     self.set_attr('job_id', int(m.group(1)))
                     message = 'Erfolgreich an Cuckoo gegeben %s als Job %d\n' \
                               % (self.__filename, self.get_attr('job_id'))
+                    self.__report.append(message)
                     logger.debug('Connection send: %s ' % message)
                     if self.__socket:
                         try:
@@ -543,6 +546,7 @@ class Sample(object):
 
         for rule_result in self.get_attr('rule_results'):
             message = "Datei \"%s\": %s\n" % (self.__filename, str(rule_result))
+            self.__report.append(message)
             logger.info('Connection send: %s ' % message)
             try:
                 self.__socket.send(message)
@@ -559,6 +563,7 @@ class Sample(object):
 
         message = "Die Datei \"%s\" wurde als \"%s\" eingestuft\n\n" \
                   % (self.__filename, self.__result.name)
+        self.__report.append(message)
         logger.debug('Connection send: %s ' % message)
         if self.__socket:
             try:
@@ -568,6 +573,9 @@ class Sample(object):
                     logger.warning('Unable send message "%s". Broken pipe.' % message)
                 else:
                     logger.exception(e)
+
+    def get_peekaboo_report(self):
+        return ''.join(self.__report)
 
     def _cleanup(self):
         if pjobs.Jobs.remove_job(self.__socket, self) <= 0:
