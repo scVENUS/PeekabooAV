@@ -27,7 +27,7 @@ import logging
 import re
 
 
-VERSION = (1, 0, 'b')
+VERSION = (1, 2)
 AUTHORS = ['Felix Bauer', 'Sebastian Deiss']
 
 __version__ = '.'.join(map(str, VERSION))
@@ -38,31 +38,31 @@ __license__ = 'GPLv3'
 
 
 _owl = """
-   PEEKABOO {0}
+PEEKABOO {0}
 
- Peekaboo Extended Email Attachment Behavior Observation Owl
+Peekaboo Extended Email Attachment Behavior Observation Owl
 
-                    _a_aa                    a_aa,
-                     '*U4UUUULa_aa_aa_aajUUU4XU7'
-                       aX''''''UUXU4XUU'''''!Ua
-                     _U'        -U4UU'   _    'U,
-                     ?i   jLd1   ?#Wi   4L01   Ui
-                     -U,        4#000P        _U'
-                      -*Xa_a_a_WUW##KUL_a_a_aX7'
-                     _aXUXUUU4UUX4XX444UUUUUUXLa,
-                    _UXXUXUXU47'!'!'!'!*X444U4UXX,
-                    ?XU4U4''              -'UUXUUi
-                    ?4U4'                    'UUXi
-                     *Xi                      ?X7
-                      *L                      j7
-                       *a                    jY
-                        -L,                _/'
-                          'l,            _/'
-                            j7_a_;  aaa/4
-                _aaaaaa#0000#00000##0##00000000aaaaaa,
-         aaad0P!!!!!!                             '!!!!!!Laaa
-   _aa!!!!                                                    !! _,
- (never mind the K)
+                   _a_aa                    a_aa,
+                    '*U4UUUULa_aa_aa_aajUUU4XU7'
+                      aX''''''UUXU4XUU'''''!Ua
+                    _U'        -U4UU'   _    'U,
+                    ?i   jLd1   ?#Wi   4L01   Ui
+                    -U,        4#000P        _U'
+                     -*Xa_a_a_WUW##KUL_a_a_aX7'
+                    _aXUXUUU4UUX4XX444UUUUUUXLa,
+                   _UXXUXUXU47'!'!'!'!*X444U4UXX,
+                   ?XU4U4''   _   ____   -'UUXUUi
+                   ?4U4'     /1| |2222\    'UUXi
+                    *Xi      |1|   __)2|     ?X7
+                     *L      |1|_ /222/      j7
+                      *a     |1(_)22222|    jY
+                       -L,                _/'
+                         'l,            _/'
+                           j7_a_;  aaa/4
+               _aaaaaa#0000#00000##0##00000000aaaaaa,
+        aaad0P!!!!!!                             '!!!!!!Laaa
+  _aa!!!!                                                    !! _,
+(never mind the K)
 """.format(__version__)
 
 logger = logging.getLogger('Peekaboo')
