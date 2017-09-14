@@ -27,37 +27,6 @@ import traceback
 import re
 from peekaboo import logger
 from peekaboo.ruleset import Result, RuleResult
-import peekaboo.pjobs
-
-
-def queue_identical_samples(s):
-    for sample in peekaboo.pjobs.Jobs.get_samples_by_sha256(s.sha256):
-        peekaboo.pjobs.Workers.submit_job(sample, 'Ruleset')
-
-
-def already_in_progress(s):
-    tb = traceback.extract_stack()
-    tb = tb[-1]
-    position = "%s:%s" % (tb[2], tb[1])
-
-    if len(peekaboo.pjobs.Jobs.get_samples_by_sha256(s.sha256sum)) == 1:
-        s.set_attr("pending", False)
-        return RuleResult(position,
-                          result=s.get_result(),
-                          reason='Datei wird jetzt Analysiert',
-                          further_analysis=True)
-    else:
-        try:
-            # get_attr raises a ValueError if an attribute is not set
-            s.get_attr("pending")
-            s.set_attr("pending", False)
-            return RuleResult(position,
-                          result=s.get_result(),
-                          reason='Datei wird jetzt Analysiert',
-                          further_analysis=True)
-        except ValueError:
-            s.set_attr("pending", True)
-            raise Exception('Kill ruleset for now')
 
 
 def known(s):
