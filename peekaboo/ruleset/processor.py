@@ -29,7 +29,7 @@ from peekaboo import logger
 from peekaboo.ruleset import Result, RuleResult
 from peekaboo.ruleset.rules import *
 from peekaboo.exceptions import CuckooReportPendingException
-
+from peekaboo.toolbox.plugins.oneanalysis import OneAnalysis
 
 '''
 # this module contains methods and data structures which allow to
@@ -47,6 +47,8 @@ def evaluate(sample):
     process_rules(sample)
     logger.debug("Rules evaluated")
     report(sample)
+    one_analysis_tool = OneAnalysis()
+    one_analysis_tool.queue_identical_samples(sample)  # depends on already_in_progress
 
 
 def rule(sample, rule_function, args={}):
@@ -91,9 +93,10 @@ def process_rules(sample):
 
 # TODO (cuckooWrapper needs to check if there is other samples in pjobs with
 # the same hash)
-    #p = rule(s, already_in_progress)
-    #if not p.further_analysis:
-    #    return
+    one_analysis_tool = OneAnalysis()
+    p = rule(s, one_analysis_tool.already_in_progress)
+    if not p.further_analysis:
+        return
 
     p = rule(s, known)
     if not p.further_analysis:
@@ -133,7 +136,6 @@ def process_rules(sample):
 
     # active rules, non reporting
 #    report(sample)
-#    queue_identical_samples(sample) # depends on already_in_progress
 
 #                   __ ____   _   _  _      _____  ____
 #                  / /|  _ \ | | | || |    | ____|/ ___|
