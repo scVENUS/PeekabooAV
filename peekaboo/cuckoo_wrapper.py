@@ -25,9 +25,13 @@
 
 import re
 import os
+import logging
 from twisted.internet import protocol
-from peekaboo import logger, MultiRegexMatcher
+from peekaboo import MultiRegexMatcher
 import peekaboo.pjobs as pjobs
+
+
+logger = logging.getLogger(__name__)
 
 
 class CuckooManager(protocol.ProcessProtocol):

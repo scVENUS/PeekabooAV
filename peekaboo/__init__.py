@@ -65,8 +65,6 @@ Peekaboo Extended Email Attachment Behavior Observation Owl
 (never mind the K)
 """.format(__version__)
 
-logger = logging.getLogger('Peekaboo')
-
 
 #
 # Helpers

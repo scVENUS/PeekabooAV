@@ -44,7 +44,10 @@ import os
 import fileinput
 import sys
 import threading
-from peekaboo import logger
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 def debug():

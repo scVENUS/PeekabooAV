@@ -30,11 +30,12 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.engine import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm import scoped_session
-from peekaboo import logger
 from peekaboo.ruleset import Result, RuleResult
 import threading
+import logging
 
 
+logger = logging.getLogger(__name__)
 Base = declarative_base()
 
 

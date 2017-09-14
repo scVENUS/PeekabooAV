@@ -26,7 +26,9 @@
 import sys
 import logging
 from ConfigParser import SafeConfigParser, NoSectionError, NoOptionError
-from peekaboo import logger
+
+
+logger = logging.getLogger(__name__)
 
 
 class PeekabooConfig(object):
@@ -42,6 +44,8 @@ class PeekabooConfig(object):
         self.pid_file = None
         self.sock_file = None
         self.log_level = logging.INFO
+        self.log_format = '%(asctime)s - %(name)s - (%(threadName)s) - ' \
+                          '%(levelname)s - %(message)s'
         self.interpreter = None
         self.chown2me_exec = None
         self.worker_count = 3
@@ -64,8 +68,9 @@ class PeekabooConfig(object):
         config.read(config_file)
         self.__config = config
         try:
-            log_level = config.get('global', 'log_level')
+            log_level = config.get('logging', 'log_level')
             self.log_level = self.__parse_log_level(log_level)
+            self.log_format = config.get('logging', 'log_format')
             self.user = config.get('global', 'user')
             self.group = config.get('global', 'group')
             self.pid_file = config.get('global', 'pid_file')
@@ -81,7 +86,8 @@ class PeekabooConfig(object):
             self.cuckoo_storage = config.get('cuckoo', 'storage_path')
             self.cuckoo_exec = config.get('cuckoo', 'exec')
             self.cuckoo_submit = config.get('cuckoo', 'submit').split(' ')
-            logger.setLevel(self.log_level)
+            # Update logging with what we just parsed from the config
+            self.__setup_logging()
         except NoSectionError as e:
             logger.critical('configuration section not found')
             logger.exception(e)
@@ -125,17 +131,20 @@ class PeekabooConfig(object):
         """
         Setup logging to console.
         """
-        logger.setLevel(self.log_level)
+        _logger = logging.getLogger()
+
+        # Check if we already have a log handler
+        if len(_logger.handlers) > 0:
+        # Remove all handlers
+            for handler in _logger.handlers:
+                _logger.removeHandler(handler)
         # log format
-        log_formatter = logging.Formatter('%(asctime)s - %(levelname)s - '
-                                          '%(module)s - %(threadName)s - '
-                                          '%(process)s - %(message)s')
+        log_formatter = logging.Formatter(self.log_format)
         # create console handler and set level to debug
         to_console_log_handler = logging.StreamHandler(sys.stdout)
-        to_console_log_handler.setLevel(logging.DEBUG)
         to_console_log_handler.setFormatter(log_formatter)
-        logger.addHandler(to_console_log_handler)
-        logger.setLevel(self.log_level)
+        _logger.addHandler(to_console_log_handler)
+        _logger.setLevel(self.log_level)
 
     def __str__(self):
         sections = {}

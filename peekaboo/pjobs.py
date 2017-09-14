@@ -24,11 +24,14 @@
 
 
 import threading
+import logging
 from Queue import Queue
-from peekaboo import logger
 from peekaboo.ruleset import Result
 from peekaboo.ruleset.processor import evaluate
 from peekaboo.exceptions import CuckooReportPendingException
+
+
+logger = logging.getLogger(__name__)
 
 
 class Jobs(object):

@@ -25,8 +25,11 @@
 
 import traceback
 import re
-from peekaboo import logger
+import logging
 from peekaboo.ruleset import Result, RuleResult
+
+
+logger = logging.getLogger(__name__)
 
 
 def known(s):

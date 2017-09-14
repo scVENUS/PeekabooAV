@@ -11,15 +11,26 @@ socket_file      :    /opt/peekaboo/peekaboo.sock
 pid_file         :    /opt/peekaboo/peekaboo.pid
 interpreter      :    /usr/bin/python
 chown2me_exec    :    /opt/peekaboo/bin/chown2me
-# log_level
-# possible values: CRITICAL | ERROR | WARNING | INFO | DEBUG
-log_level        :    INFO
 worker_count     :    3
 sample_base_dir  :    /tmp
 job_hash_regex   :    /var/lib/amavis/tmp/([^/]+)/parts.*
 # 'yes' or 'no'  to use Peekaboo's debug module, which allows
 # additional code execution at runtime.
 use_debug_module :    no
+
+
+#
+# Logging configuration
+#
+[logging]
+# log_level
+# possible values: CRITICAL | ERROR | WARNING | INFO | DEBUG
+log_level        :    DEBUG
+# note that any % must be escaped with another %.
+log_format       :    %%(asctime)s - %%(name)s - (%%(threadName)s) - %%(levelname)s - %%(message)s
+# if you use systemd you don't want the timestamp
+# log_format       :    %%(name)s - (%%(threadName)s) - %%(levelname)s - %%(message)s
+
 
 #
 # Database configuration
@@ -31,6 +42,7 @@ url              :    sqlite:////path/to/database.db
 # url             :    mysql+mysqldb://user:password@host/database
 # PostgreSQL
 # url             :    postgresql://user:password@host:port/database
+
 
 #
 # Cuckoo specific settings

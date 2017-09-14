@@ -34,14 +34,18 @@ import json
 import errno
 import string
 import shutil
+import logging
 from ConfigParser import SafeConfigParser
 from random import choice
 from datetime import datetime
 from oletools.olevba import VBA_Parser
-from peekaboo import logger, MultiRegexMatcher
+from peekaboo import MultiRegexMatcher
 from peekaboo.exceptions import CuckooReportPendingException
 import peekaboo.pjobs as pjobs
 import peekaboo.ruleset as ruleset
+
+
+logger = logging.getLogger(__name__)
 
 
 class SampleMetaInfo(object):

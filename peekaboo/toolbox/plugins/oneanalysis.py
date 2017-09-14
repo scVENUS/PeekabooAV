@@ -26,10 +26,13 @@
 import threading
 import traceback
 import sys
+import logging
 import peekaboo.pjobs
-from peekaboo import logger
 from peekaboo.ruleset import RuleResult
 from peekaboo.exceptions import CuckooReportPendingException
+
+
+logger = logging.getLogger(__name__)
 
 
 def singleton(class_):

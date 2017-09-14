@@ -34,12 +34,15 @@ import logging
 from argparse import ArgumentParser
 from sdnotify import SystemdNotifier
 from twisted.internet import reactor
-from peekaboo import _owl, __version__, logger
+from peekaboo import _owl, __version__
 from peekaboo.config import PeekabooConfig
 from peekaboo.db import PeekabooDBHandler
 from peekaboo.cuckoo_wrapper import CuckooManager
 import peekaboo.pjobs as pjobs
 import peekaboo.sample as sample
+
+
+logger = logging.getLogger(__name__)
 
 
 class PeekabooStreamServer(SocketServer.ThreadingUnixStreamServer):

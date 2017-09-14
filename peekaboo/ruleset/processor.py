@@ -24,8 +24,8 @@
 
 
 import os
+import logging
 from shutil import copyfile
-from peekaboo import logger
 from peekaboo.ruleset import Result, RuleResult
 from peekaboo.ruleset.rules import *
 from peekaboo.exceptions import CuckooReportPendingException
@@ -38,6 +38,9 @@ from peekaboo.toolbox.plugins.oneanalysis import OneAnalysis
 # works together with peekaboo
 # and uses cuckoo
 '''
+
+
+logger = logging.getLogger(__name__)
 
 
 def evaluate(sample):
