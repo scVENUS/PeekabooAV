@@ -163,39 +163,35 @@ def dump_processing_info(sample):
     """
     job_hash = sample.get_job_hash()
     dump_dir = os.path.join(os.environ['HOME'], 'malware_reports', job_hash)
-    os.makedirs(dump_dir, 0770)
-    sample_hash = sample.sha256sum
-
-    if not sample.has_attr('cuckoo_json_report_file') or \
-       not sample.has_attr('meta_info_file'):
-        # Nothing to do, since at least one of the files we need is not there.
-        # This is always the case if the result comes from the DB, because
-        # a sample has been analysed before.
-        return
+    if not os.path.isdir(dump_dir):
+        os.makedirs(dump_dir, 0770)
+    filename = sample.get_filename() + '-' + sample.sha256sum
 
     logger.debug('Dumping processing info to %s for sample %s' % (dump_dir, sample))
 
-    # Cuckoo report
-    try:
-        # HTML
-        copyfile(sample.get_attr('cuckoo_json_report_file').replace('json', 'html'),
-                 os.path.join(dump_dir, sample_hash + '.html'))
-        # JSON
-        copyfile(sample.get_attr('cuckoo_json_report_file'),
-                 os.path.join(dump_dir, sample_hash + '.json'))
-    except Exception as e:
-        logger.exception(e)
-
     # meta info file
-    try:
-        copyfile(sample.get_attr('meta_info_file'),
-                 os.path.join(dump_dir, sample_hash + '.info'))
-    except Exception as e:
-        logger.exception(e)
+    if sample.has_attr('meta_info_file'):
+        try:
+            copyfile(sample.get_attr('meta_info_file'),
+                     os.path.join(dump_dir, filename + '.info'))
+        except Exception as e:
+            logger.exception(e)
 
     # Peekaboo's report
     try:
-        with open(os.path.join(dump_dir, sample_hash + '_report.txt'), 'w+') as f:
+        with open(os.path.join(dump_dir, filename + '_report.txt'), 'w+') as f:
             f.write(sample.get_peekaboo_report())
     except Exception as e:
         logger.exception(e)
+
+    if sample.has_attr('cuckoo_json_report_file'):
+        # Cuckoo report
+        try:
+            # HTML
+            copyfile(sample.get_attr('cuckoo_json_report_file').replace('json', 'html'),
+                     os.path.join(dump_dir, filename + '.html'))
+            # JSON
+            copyfile(sample.get_attr('cuckoo_json_report_file'),
+                     os.path.join(dump_dir, filename + '.json'))
+        except Exception as e:
+            logger.exception(e)

@@ -58,35 +58,41 @@ class OneAnalysis(object):
             tb = traceback.extract_stack()
             tb = tb[-1]
             position = "%s:%s" % (tb[2], tb[1])
-        
-            if len(peekaboo.pjobs.Jobs.get_samples_by_sha256(s.sha256sum)) == 1:
+
+            if s.has_attr('pending'):
+                s.set_attr('pending', False)
+                return RuleResult(position,
+                                  result=s.get_result(),
+                                  reason='Datei wird jetzt Analysiert',
+                                  further_analysis=True)
+
+            l = []
+            for sample in peekaboo.pjobs.Jobs.get_samples_by_sha256(s.sha256sum):
+                if sample != s:
+                    if not sample.has_attr('pending') or not sample.get_attr('pending') is True:
+                        l.append(sample)
+
+            if len(l) == 0:
                 s.set_attr("pending", False)
                 logger.debug("no second analysis present")
                 return RuleResult(position,
                                   result=s.get_result(),
                                   reason='Datei wird jetzt Analysiert',
                                   further_analysis=True)
-            else:
-                logger.debug("there is another same sample")
-                try:
-                    # get_attr raises a ValueError if an attribute is not set
-                    s.get_attr("pending")
-                    s.set_attr("pending", False)
-                    logger.debug("but now is my turn")
-                    logger.debug("leave already_in_progress")
-                    return RuleResult(position,
-                                      result=s.get_result(),
-                                      reason='Datei wird jetzt Analysiert',
-                                      further_analysis=True)
-                except KeyError:
-                    logger.debug("I'll be off until needed")
-                    s.set_attr("pending", True)
-                    # stop worker
-                    sys.stdout.flush()
-                    logger.debug("leave already_in_progress")
-                    raise CuckooReportPendingException()
+
+            logger.debug("there is another same sample")
+            logger.debug("I'll be off until needed")
+            s.set_attr("pending", True)
+            # stop worker
+            sys.stdout.flush()
+            logger.debug("leave already_in_progress")
+            raise CuckooReportPendingException()
 
     def queue_identical_samples(self, s):
-        logger.debug("queueing identical samples")
-        for sample in peekaboo.pjobs.Jobs.get_samples_by_sha256(s.sha256sum):
-            peekaboo.pjobs.Workers.submit_job(sample, 'OneAnalysis')
+        with self.__in_use:
+            logger.debug("queueing identical samples")
+            for sample in peekaboo.pjobs.Jobs.get_samples_by_sha256(s.sha256sum):
+                pending = sample.get_attr('pending')
+                if pending:
+                    sample.set_attr('pending', False)
+                    peekaboo.pjobs.Workers.submit_job(sample, 'OneAnalysis')

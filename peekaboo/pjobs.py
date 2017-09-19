@@ -200,10 +200,6 @@ class Workers(object):
 
             try:
                 evaluate(s)
-
-                for s in Jobs.get_samples_by_sha256(s.sha256sum):
-                    logger.debug('Processing queued sample %s' % s)
-                    Workers.submit_job(s, Workers.__class__)
             except CuckooReportPendingException as e:
                 pass
             except Exception as e:

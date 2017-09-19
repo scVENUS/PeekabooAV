@@ -146,7 +146,10 @@ class Sample(object):
         self.set_attr('meta_info_file', meta_info_file)
         self.load_meta_info(meta_info_file)
 
-        self.create_symlink()
+        try:
+            self.create_symlink()
+        except OSError:
+            pass
         self.initalized = True
 
         message = "Datei \"%s\" %s wird analysiert\n" % (self.__filename,
