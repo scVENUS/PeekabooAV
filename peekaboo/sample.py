@@ -179,7 +179,7 @@ class Sample(object):
 
         :param key: The identifier of the attribute.
         :param val: The attribute to add.
-        :param override: Wehter the existing attribute shall be overwritten or not.
+        :param override: Whether the existing attribute shall be overwritten or not.
         """
         if self.has_attr(key) and override is False:
             raise KeyError("Key '%s' already exists." % key)
