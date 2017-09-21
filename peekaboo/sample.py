@@ -195,6 +195,18 @@ class Sample(object):
             return True
         return False
 
+    def remove_attr(self, key):
+        """
+        Delete an attribute for this sample.
+
+        :param key: The identifier of the attribute
+        :raises ValueError if the given key was not found in
+                the attributes dictionary.
+        """
+        if key in self.__attributes.keys():
+            del self.__attributes[key]
+        raise ValueError('No attribute named "%s" found.' % key)
+
     def get_job_hash(self):
         job_hash = re.sub(self.__config.job_hash_regex, r'\1',
                           self.__file_path)
