@@ -134,12 +134,6 @@ class Sample(object):
         job_hash = self.get_job_hash()
         self.__wd = os.path.join(self.__config.sample_base_dir, job_hash)
 
-        # update database with state inProgress if sample unknown
-        # to avoid multiple concurrent analysis
-        #self.__result = Result.inProgress
-        #if not self.__db_con.known(self.sha256sum):
-        #    self.__db_con.sample_info2db(self)
-
         self.chown2me()
 
         meta_info_file = os.path.join(self.__wd, self.__filename + '.info')
@@ -151,6 +145,11 @@ class Sample(object):
         except OSError:
             pass
         self.initalized = True
+
+        # add sample to database with state inProgress if sample unknown
+        # to avoid multiple concurrent analysis
+        self.__result = ruleset.Result.inProgress
+        self.__db_con.analysis2db(self)
 
         message = "Datei \"%s\" %s wird analysiert\n" % (self.__filename,
                                                          self.sha256sum)
@@ -288,7 +287,7 @@ class Sample(object):
 
     def __ask_db(self):
         if not self.has_attr('known'):
-            rr = self.__db_con.get_rule_result(self.sha256sum)
+            rr = self.__db_con.fetch_rule_result(self)
             self.__result = rr.result
             self.set_attr('known', True)
             self.set_attr('reason',
@@ -310,7 +309,7 @@ class Sample(object):
 
     @property
     def known(self):
-        return self.__db_con.known(self.sha256sum)
+        return self.__db_con.known(self)
 
     @property
     def file_extension(self):
@@ -543,11 +542,11 @@ class Sample(object):
         self.set_attr('rule_results', rule_results)
 
     def save_result(self):
-        if self.__db_con.known(self.sha256sum):
+        if self.__db_con.known(self):
             logger.debug('Known sample info not logged to database')
         else:
             logger.debug('Saving results to database')
-            self.__db_con.sample_info2db(self)
+            self.__db_con.sample_info_update(self)
         self._cleanup()
 
     def set_job_id(self, job_id):

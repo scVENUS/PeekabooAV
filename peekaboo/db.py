@@ -23,14 +23,15 @@
 ###############################################################################
 
 
-from __future__ import print_function
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.engine import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.orm import scoped_session
+from sqlalchemy.orm import sessionmaker, scoped_session, relationship
+from sqlalchemy.exc import SQLAlchemyError
+from peekaboo import __version__
 from peekaboo.ruleset import Result, RuleResult
+from peekaboo.exceptions import PeekabooDatabaseError
 import threading
 import logging
 
@@ -39,30 +40,115 @@ logger = logging.getLogger(__name__)
 Base = declarative_base()
 
 
+#
+# Database schema definition.
+##############################################################################
+
+
+class PeekabooMetadata(Base):
+    """
+    Definition of the _meta table for Peekaboo.
+
+    @author: Sebastian Deiss
+    """
+    __tablename__ = '_meta'
+    peekaboo_version = Column(String(10), nullable=False,
+                              primary_key=True)
+    db_schema_version = Column(Integer, nullable=False,
+                               primary_key=True)
+    cuckoo_version = Column(String(10), nullable=False,
+                            primary_key=True)
+
+    def __str__(self):
+        return (
+            '<PeekabooMetadata(peekaboo_version="%s", db_schema_version="%s", '
+            'cuckoo_version="%s")>'
+            % (self.peekaboo_version,
+               self.db_schema_version,
+               self.cuckoo_version)
+        )
+
+    __repr__ = __str__
+
+
+class AnalysisResult(Base):
+    """
+    Definition of the analysis_result table.
+
+    @author: Sebastian Deiss
+    """
+    __tablename__ = 'analysis_result_v2'
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(255), nullable=False)
+
+    def __str__(self):
+        return '<AnalysisResult(name="%s")>' % self.name
+
+    __repr__ = __str__
+
+
 class SampleInfo(Base):
     """
     Definition of the sample_info table.
 
     @author: Sebastian Deiss
     """
-    __tablename__ = 'sample_info'
+    __tablename__ = 'sample_info_v2'
 
     id = Column(Integer, primary_key=True)
-    sample_sha256_hash = Column(String(64), nullable=True)
-    analyses_time = Column(DateTime, nullable=False)
-    result = Column(String(255), nullable=True)
-    reason = Column(String(1024), nullable=True)
+    sha256sum = Column(String(64), nullable=False)
+    file_extension = Column(String(16), nullable=True)
+    result_id = Column(Integer, ForeignKey('analysis_result_v2.id'),
+                       nullable=False)
+    result = relationship("AnalysisResult")
+    reason = Column(Text, nullable=True)
 
-    def __repr__(self):
-        return ("<SampleInfo(sample_sha256_hash='%s', result='%s', reason='%s', "
-                "analyses_time='%s')>"
-                % (self.sample_sha256_hash, self.result, self.reason,
-                   self.analyses_time.strftime("%Y%m%dT%H%M%S")))
+    def __str__(self):
+        return ('<SampleInfo(sample_sha256_hash="%s", file_extension="%s", '
+                'reason="%s")>'
+                % (self.sha256sum,
+                   self.file_extension,
+                   self.reason))
+
+    __repr__ = __str__
 
 
-class PeekabooDBHandler(object):
+class AnalysisJournal(Base):
     """
-    The database handler of Peekaboo.
+    Definition of the analysis_jobs table.
+
+    @author: Sebastian Deiss
+    """
+    __tablename__ = 'analysis_jobs_v2'
+
+    id = Column(Integer, primary_key=True)
+    job_hash = Column(String(255), nullable=False)
+    filename = Column(String(255), nullable=False)
+    analyses_time = Column(DateTime, nullable=False)
+    sample_id = Column(Integer, ForeignKey('sample_info_v2.id'),
+                       nullable=False)
+    sample = relationship('SampleInfo')
+
+    def __str__(self):
+        return (
+            '<AnalysisJournal(job_hash="%s", filename="%s", analysis_time="%s")>'
+            % (self.job_hash,
+               self.filename,
+               self.analyses_time.strftime("%Y%m%dT%H%M%S"))
+        )
+
+    __repr__ = __str__
+
+
+#
+# End of database schema definition.
+##############################################################################
+
+
+class PeekabooDatabase(object):
+    """
+    Peekaboo's database.
 
     @author: Sebastian Deiss
     """
@@ -72,156 +158,303 @@ class PeekabooDBHandler(object):
 
         :param db_url: An RFC 1738 URL that points to the database.
         """
-        self.engine = create_engine(db_url)
-        self.db_con = None
-        session_factory = sessionmaker(bind=self.engine)
-        self.Session = scoped_session(session_factory)
-        self.lock = threading.RLock()
+        self.__engine = create_engine(db_url)
+        self.__db_con = None
+        session_factory = sessionmaker(bind=self.__engine)
+        self.__Session = scoped_session(session_factory)
+        self.__lock = threading.RLock()
         try:
-            self.db_con = self.engine.connect()
-            if not self.db_con.dialect.has_table(self.engine, 'sample_info'):
-                Base.metadata.create_all(self.engine)
-                logger.debug('Created database schema')
-        except Exception as e:
-            logger.exception(e)
-            raise e
+            self.__db_con = self.__engine.connect()
+        except SQLAlchemyError as e:
+            raise PeekabooDatabaseError(
+                'Unable to connect to the database: %s' % e
+            )
+        if not self.__db_con.dialect.has_table(self.__engine, '_meta'):
+            self._init_db()
+            logger.debug('Database schema created.')
+        else:
+            self.clear_in_progress()
 
-    def sample_info2db(self, sample):
+    def analysis2db(self, sample):
         """
-        Add sample information to the database.
+        Save an analysis task to the analysis journal in the database.
 
-        :param sample: The sample object to get the info from.
+        :param sample: The sample object for this analysis task.
         """
-        with self.lock:
-            session = self.Session()
-            sample_info = SampleInfo(sample_sha256_hash=sample.sha256sum,
-                                     analyses_time=datetime.strptime(sample.analyses_time, "%Y%m%dT%H%M%S"),
-                                     result=sample.get_result().name,
-                                     reason=sample.reason)
-            session.add(sample_info)
-            session.commit()
-            session.close_all()
-            logger.debug('Added sample %s to the database.' % sample)
+        print sample
+        with self.__lock:
+            session = self.__Session()
+            analysis = AnalysisJournal()
+            analysis.job_hash = sample.get_job_hash()
+            analysis.filename = sample.get_filename()
+            analysis.analyses_time = datetime.strptime(sample.analyses_time,
+                                                       "%Y%m%dT%H%M%S")
+            analysis_result = PeekabooDatabase.__get_or_create(
+                session,
+                AnalysisResult,
+                name=sample.get_result().name
+            )
+            analysis.sample = PeekabooDatabase.__get_or_create(
+                session,
+                SampleInfo,
+                sha256sum=sample.sha256sum,
+                file_extension=sample.file_extension,
+                result=analysis_result
+            )
+            session.add(analysis)
+            try:
+                session.commit()
+            except SQLAlchemyError as e:
+                session.rollback()
+                raise PeekabooDatabaseError(
+                    'Failed to add analysis task to the database: %s' % e
+                )
+            finally:
+                session.close()
 
-    def get_rule_result(self, sha256):
-        """
-        Gets the sample information from the database as a RuleResult object.
-
-        :param sha256: The SHA-256 checksum of the sample.
-        :return: Returns a RuleResult object containing the sample information.
-        """
-        with self.lock:
-            session = self.Session()
-            sample = session.query(SampleInfo).filter_by(sample_sha256_hash=sha256).first()
-            if sample:
-                result = RuleResult('db',
-                                    result=Result.from_string(sample.result),
-                                    reason=sample.reason,
-                                    further_analysis=True)
-            else:
-                result = RuleResult('db',
-                                    result=Result.unknown,
-                                    reason="Datei ist dem System noch nicht bekannt",
-                                    further_analysis=True)
-            session.close_all()
-        return result
-
-    def get_sample_info(self, sha256):
-        with self.lock:
-            session = self.Session()
-            sample_infos = session.query(SampleInfo).filter_by(sample_sha256_hash=sha256).all()
-            if len(sample_infos) > 1:
-                raise ValueError('Multiple entries found for the same sample.')
-            session.close_all()
-        return sample_infos[0]
-
-    def update_sample_info(self, sample):
+    def sample_info_update(self, sample):
         """
         Update sample information.
 
         :param sample: The sample object containing the info to update
         """
-        with self.lock:
-            session = self.Session()
-            query = session.query(SampleInfo).filter(SampleInfo.sample_sha256_hash == sample.sha256sum)
-            query.update({'result': sample.get_result().name,
-                          'reason': sample.reason})
-            session.commit()
-            session.close_all()
-            logger.debug('Updated sample info in the database for sample %s.'
-                         % sample)
+        with self.__lock:
+            session = self.__Session()
+            sample_info = PeekabooDatabase.__get(
+                session,
+                SampleInfo,
+                sha256sum=sample.sha256sum,
+                file_extension=sample.file_extension
+            )
+            if sample_info is not None:
+                sample_info.result = PeekabooDatabase.__get_or_create(
+                    session,
+                    AnalysisResult,
+                    name=sample.get_result().name
+                )
+                sample_info.reason = sample.reason
+                try:
+                    session.commit()
+                    logger.debug(
+                        'Updated sample info in the database for sample %s.' % sample
+                    )
+                except SQLAlchemyError as e:
+                    session.rollback()
+                    raise PeekabooDatabaseError(
+                        'Failed to update info for sample %s in the database: %s'
+                        % (sample, e)
+                    )
+                finally:
+                    session.close()
+            else:
+                raise PeekabooDatabaseError(
+                    'No info found in the database for sample %s' % sample
+                )
 
-    def known(self, sha256):
+    def sample_info_exists(self, sample):
+        """
+        Check if a log for a given sample exists.
+
+        :param sample: The Sample object to check.
+        """
+        with self.__lock:
+            return self.__exists(
+                SampleInfo,
+                sha256sum=sample.sha256sum,
+                file_extension=sample.file_extension
+            )
+
+    def sample_info_fetch(self, sample):
+        with self.__lock:
+            session = self.__Session()
+            sample_info = PeekabooDatabase.__get(
+                session,
+                SampleInfo,
+                sha256sum=sample.sha256sum,
+                file_extension=sample.file_extension
+            )
+            session.close()
+        return sample_info
+
+    def fetch_rule_result(self, sample):
+        """
+        Gets the sample information from the database as a RuleResult object.
+
+        :param sample: The Sample object to get the rule result from.
+        :return: Returns a RuleResult object containing the sample information.
+        """
+        with self.__lock:
+            session = self.__Session()
+            sample_info = PeekabooDatabase.__get(
+                session,
+                SampleInfo,
+                sha256sum=sample.sha256sum,
+                file_extension=sample.file_extension
+            )
+            if sample_info:
+                result = RuleResult(
+                    'db',
+                    result=Result.from_string(sample_info.result.name),
+                    reason=sample_info.reason,
+                    further_analysis=True
+                )
+            else:
+                result = RuleResult(
+                    'db',
+                    result=Result.unknown,
+                    reason="Datei ist dem System noch nicht bekannt",
+                    further_analysis=True
+                )
+            session.close()
+        return result
+
+    def known(self, sample):
         """
         Check if we already know a sample with its SHA-256 hash.
 
-        :param sha256: The SHA-256 hash to check for.
+        :param sample: The Sample object to check.
         """
-        with self.lock:
-            session = self.Session()
-            sample = session.query(SampleInfo).filter(SampleInfo.sample_sha256_hash == sha256,
-                                                      SampleInfo.result != 'inProgress').scalar()
-            session.close_all()
-        if sample is not None:
-            return True
-        return False
+        with self.__lock:
+            is_known = False
+            session = self.__Session()
+            sample_info = PeekabooDatabase.__get(
+                session,
+                SampleInfo,
+                sha256sum=sample.sha256sum,
+                file_extension=sample.file_extension
+            )
+            if sample_info is not None:
+                if sample_info.result.name != 'inProgress':
+                    is_known = True
+            session.close()
+            return is_known
 
-    def in_progress(self, sha256):
+    def in_progress(self, sample):
         """
         Check if a sample is in progress using it's SHA-256 hash.
 
-        :param sha256: The SHA-256 hash to check for.
+        :param sample: The Sample object to check.
         """
-        self.lock.acquire()
-        session = self.Session()
-        sample = session.query(SampleInfo).filter(SampleInfo.sample_sha256_hash == sha256,
-                                                  SampleInfo.result == 'inProgress').scalar()
-        self.lock.release()
-        if sample is not None:
+        with self.__lock:
+            is_in_progress = False
+            session = self.__Session()
+            sample_info = PeekabooDatabase.__get(
+                session,
+                SampleInfo,
+                sha256sum=sample.sha256sum,
+                file_extension=sample.file_extension
+            )
+            if sample_info is not None:
+                if sample_info.result.name == 'inProgress':
+                    is_in_progress = True
+            session.close()
+            return is_in_progress
+
+    def clear_in_progress(self):
+        """ Remove all samples with the result 'inProgress'. """
+        session = self.__Session()
+        session.query(SampleInfo).filter_by(result='inProgress').delete()
+        try:
+            session.commit()
+            logger.debug('Cleared the database from "inProgress" entries.')
+        except SQLAlchemyError as e:
+            session.rollback()
+            raise PeekabooDatabaseError(
+                'Unable to clear the database from "inProgress" entries: %s' % e
+            )
+        finally:
+            session.close()
+
+    def drop(self):
+        """ Drop all tables of the database. """
+        try:
+            Base.metadata.drop_all(self.__engine)
+        except SQLAlchemyError as e:
+            raise PeekabooDatabaseError(
+                'Unable to drop all tables of the database: %s' % e
+            )
+
+    def close(self):
+        """ Close the database connection. """
+        self.__db_con.close()
+
+    def _init_db(self):
+        """
+        Initializes the Peekaboo database by creating tables and
+        writing meta information to the '_meta' table.
+        """
+        Base.metadata.create_all(self.__engine)
+        meta = PeekabooMetadata()
+        meta.peekaboo_version = __version__
+        meta.db_schema_version = 2
+        # TODO: Get Cuckoo version.
+        meta.cuckoo_version = '2.0'
+        session = self.__Session()
+        session.add(meta)
+        '''
+        session.add_all([
+            AnalysisResult(name='inProgress'),
+            AnalysisResult(name='unchecked'),
+            AnalysisResult(name='unknown'),
+            AnalysisResult(name='ignored'),
+            AnalysisResult(name='checked'),
+            AnalysisResult(name='good'),
+            AnalysisResult(name='bad'),
+        ])
+        '''
+        try:
+            session.commit()
+        except SQLAlchemyError as e:
+            session.rollback()
+            raise PeekabooDatabaseError(
+                'Cannot initialize the database: %s' % e
+            )
+        finally:
+            session.close()
+
+    def __exists(self, model, **kwargs):
+        """
+        Check whether an ORM instance exists.
+
+        :param session: An SQLAlchemy session object.
+        :param model: The model to query.
+        :return: True if the ORM instance exists otherwise False.
+        """
+        session = self.__Session()
+        instance = PeekabooDatabase.__get(session, model, **kwargs)
+        session.close()
+        if instance is not None:
             return True
         return False
 
-    def close(self):
+    @staticmethod
+    def __get_or_create(session, model, **kwargs):
         """
-        Close the database connection.
-        """
-        self.db_con.close()
+        Get an ORM instance or create it if not exist.
 
-    def _clear_in_progress(self):
+        :param session: An SQLAlchemy session object.
+        :param model: The model to query.
+        :return: A row instance.
         """
-        Remove all samples with the result 'inProgress'.
-        """
-        logger.debug("Clearing 'inProgress' samples")
-        session = self.Session()
-        session.query(SampleInfo).filter_by(result='inProgress').delete()
-        session.commit()
-        session.close_all()
+        instance = PeekabooDatabase.__get(session, model, **kwargs)
+        return instance or model(**kwargs)
 
-    def _dump_samples(self):
+    @staticmethod
+    def __get(session, model, **kwargs):
         """
-        Dumps all entries of the sample_info table to the console.
+        Get an ORM instance.
 
-        @note: This method is for debugging purposes only.
+        :param session: An SQLAlchemy session object.
+        :param model: The model to query.
+        :return: An ORM instance or None.
         """
-        session = self.Session()
-        for sample_info in session.query(SampleInfo).order_by(SampleInfo.id):
-            print('%s: %s, %s, %s' % (sample_info.sample_sha256_hash,
-                                      sample_info.analyses_time.strftime("%Y-%m-%d %H:%M"),
-                                      sample_info.result,
-                                      sample_info.reason))
-        session.close_all()
+        return session.query(model).filter_by(**kwargs).first()
 
-    def _clear_sample_info_table(self):
-        """
-        Deletes all entries of the sample_info_table.
-        """
-        session = self.Session()
-        session.query(SampleInfo).delete()
-        session.commit()
-        session.close_all()
+    def __del__(self):
+        self.__engine.dispose()
 
-    def _drop_sample_info_table(self):
-        """
-        Drops the sample_info table.
-        """
-        SampleInfo.__table__.drop(bind=self.engine)
+    def __str__(self):
+        return '<PeekabooDatabase(connected="%s")>' % \
+               'yes' if self.__db_con is not None else 'no'
+
+    __repr__ = __str__

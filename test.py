@@ -35,7 +35,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from peekaboo.sample import Sample
 from peekaboo.ruleset import RuleResult, Result
-from peekaboo.db import PeekabooDBHandler
+from peekaboo.db import PeekabooDatabase
 
 
 class PeekabooDummyConfig(object):
@@ -45,7 +45,7 @@ class PeekabooDummyConfig(object):
         self.sample_base_dir = '/tmp'
         self.chown2me_exec = 'bin/chown2me'
 
-    def add_db_con(self, db_con):
+    def set_db_con(self, db_con):
         self.db_con = db_con
 
     def get_db_con(self):
@@ -56,16 +56,16 @@ class PeekabooDummyDB(object):
     def sample_info2db(self, sample):
         pass
 
-    def get_sample_info(self, sha256):
+    def sample_info_fetch(self, sha256):
         pass
 
-    def get_rule_result(self, sha256):
+    def fetch_rule_result(self, sha256):
         return  RuleResult('fake_db',
                             result=Result.checked,
                             reason='Test Case',
                             further_analysis=True)
 
-    def update_sample_info(self, sample):
+    def sample_info_update(self, sample):
         pass
 
     def known(self, sha256):
@@ -80,15 +80,6 @@ class PeekabooDummyDB(object):
     def _clear_in_progress(self):
         pass
 
-    def _dump_samples(self):
-        pass
-
-    def _clear_sample_info_table(self):
-        pass
-
-    def _drop_sample_info_table(self):
-        pass
-
 
 class TestDatabase(unittest.TestCase):
     """
@@ -100,45 +91,47 @@ class TestDatabase(unittest.TestCase):
     def setUpClass(cls):
         cls.test_db = os.path.abspath('./test.db')
         cls.conf = PeekabooDummyConfig()
-        db_con = PeekabooDBHandler('sqlite:///' + cls.test_db)
-        cls.conf.add_db_con(db_con)
+        db_con = PeekabooDatabase('sqlite:///' + cls.test_db)
+        cls.conf.set_db_con(db_con)
         cls.sample = Sample(cls.conf, None, os.path.realpath(__file__))
         result = RuleResult('Unittest',
-                            Result.ignored,
-                            'This is just a testcase',
-                            further_analysis=False)
+                            Result.unknown,
+                            'This is just a test case.',
+                            further_analysis=True)
         cls.sample.add_rule_result(result)
         cls.sample.determine_result()
-        cls.conf.db_con.sample_info2db(cls.sample)
 
-    def test_get_sample_info(self):
-        sample_info = self.conf.db_con.get_sample_info(self.sample.sha256sum)
-        self.assertEqual(self.sample.sha256sum, sample_info.sample_sha256_hash)
+    def test_1_analysis2db(self):
+        self.conf.db_con.analysis2db(self.sample)
 
-    def test_get_rule_result(self):
-        sha256sum = self.sample.sha256sum
-        rule_result = self.conf.db_con.get_rule_result(sha256sum)
-        # RuleResults from the DB have 'db' as rule name
-        self.assertEqual(rule_result.rule, 'db')
-        self.assertEqual(rule_result.result, Result.ignored)
-        self.assertEqual(rule_result.reason, 'This is just a testcase')
-        # We assert True since the DB rule result always sets further_analysis to True
-        self.assertTrue(rule_result.further_analysis)
+    def test_2_sample_info_fetch(self):
+        sample_info = self.conf.db_con.sample_info_fetch(self.sample)
+        self.assertEqual(self.sample.sha256sum, sample_info.sha256sum)
 
-    def test_update_sample_info(self):
+    def test_3_sample_info_update(self):
         result = RuleResult('Unittest',
                             Result.checked,
-                            'This is another testcase.',
+                            'This is another test case.',
                             further_analysis=False)
         self.sample.add_rule_result(result)
         self.sample.determine_result()
-        self.conf.db_con.update_sample_info(self.sample)
-        rule_result = self.conf.db_con.get_rule_result(self.sample.sha256sum)
+        self.conf.db_con.sample_info_update(self.sample)
+        rule_result = self.conf.db_con.fetch_rule_result(self.sample)
         self.assertEqual(rule_result.result, Result.checked)
-        self.assertEqual(rule_result.reason, 'This is another testcase.')
+        self.assertEqual(rule_result.reason, 'This is another test case.')
 
-    def test_known(self):
-        self.assertTrue(self.conf.db_con.known(self.sample.sha256sum))
+    def test_4_fetch_rule_result(self):
+        rule_result = self.conf.db_con.fetch_rule_result(self.sample)
+        # RuleResults from the DB have 'db' as rule name
+        self.assertEqual(rule_result.rule, 'db')
+        self.assertEqual(rule_result.result, Result.checked)
+        self.assertEqual(rule_result.reason, 'This is another test case.')
+        # We assert True since the DB rule result always sets further_analysis to True
+        self.assertTrue(rule_result.further_analysis)
+
+    def test_5_known(self):
+        self.assertTrue(self.conf.db_con.known(self.sample))
+        self.assertFalse(self.conf.db_con.in_progress(self.sample))
 
     @classmethod
     def tearDownClass(cls):
@@ -156,7 +149,7 @@ class TestSample(unittest.TestCase):
     def setUpClass(cls):
         cls.conf = PeekabooDummyConfig()
         db_con = PeekabooDummyDB()
-        cls.conf.add_db_con(db_con)
+        cls.conf.set_db_con(db_con)
         cls.sample = Sample(cls.conf, None, os.path.realpath(__file__))
 
     def test_attribute_dict(self):
