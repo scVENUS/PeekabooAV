@@ -499,6 +499,7 @@ class Sample(object):
             raise CuckooReportPendingException()
         return self.get_attr('cuckoo_report')
 
+    @property
     def cuckoo_analysis_failed(self):
         if not self.has_attr('cuckoo_failed'):
             if self.has_attr('cuckoo_report'):
