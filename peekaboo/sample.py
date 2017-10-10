@@ -242,7 +242,6 @@ class Sample(object):
             self.meta_info_loaded = True
         except Exception as e:
             logger.info('No metadata available for file %s' % self.__file_path)
-            logger.debug(e, exc_info=True)
 
     def create_symlink(self):
         """ 
@@ -499,6 +498,7 @@ class Sample(object):
             raise CuckooReportPendingException()
         return self.get_attr('cuckoo_report')
 
+    @property
     def cuckoo_analysis_failed(self):
         if not self.has_attr('cuckoo_failed'):
             if self.has_attr('cuckoo_report'):

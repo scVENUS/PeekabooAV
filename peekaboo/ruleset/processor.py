@@ -30,6 +30,7 @@ from peekaboo.ruleset import Result, RuleResult
 from peekaboo.ruleset.rules import *
 from peekaboo.exceptions import CuckooReportPendingException
 from peekaboo.toolbox.plugins.oneanalysis import OneAnalysis
+from peekaboo.toolbox.peekabooyar import contains_peekabooyar
 
 '''
 # this module contains methods and data structures which allow to
@@ -114,6 +115,10 @@ def process_rules(sample):
         return
 
     p = rule(s, file_type_on_greylist)
+    if not p.further_analysis:
+        return
+
+    p = rule(s, contains_peekabooyar)
     if not p.further_analysis:
         return
 
