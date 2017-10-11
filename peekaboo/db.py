@@ -55,7 +55,8 @@ class PeekabooMetadata(Base):
     peekaboo_version = Column(String(10), nullable=False,
                               primary_key=True)
     db_schema_version = Column(Integer, nullable=False,
-                               primary_key=True)
+                               primary_key=True,
+                               autoincrement=False)
     cuckoo_version = Column(String(10), nullable=False,
                             primary_key=True)
 
