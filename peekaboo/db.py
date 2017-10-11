@@ -353,7 +353,18 @@ class PeekabooDatabase(object):
     def clear_in_progress(self):
         """ Remove all samples with the result 'inProgress'. """
         session = self.__Session()
-        session.query(SampleInfo).filter_by(result='inProgress').delete()
+        in_progress = PeekabooDatabase.__get(
+            session,
+            AnalysisResult,
+            name='inProgress'
+        )
+        in_progress_samples = session.query(SampleInfo).filter_by(
+            result=in_progress
+        ).all()
+        for in_progress_sample in in_progress_samples:
+            session.query(AnalysisJournal).filter_by(
+                sample=in_progress_sample
+            ).delete()
         try:
             session.commit()
             logger.debug('Cleared the database from "inProgress" entries.')
