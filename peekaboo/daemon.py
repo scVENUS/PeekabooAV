@@ -35,7 +35,7 @@ from argparse import ArgumentParser
 from sdnotify import SystemdNotifier
 from twisted.internet import reactor
 from peekaboo import _owl, __version__
-from peekaboo.config import PeekabooConfig
+from peekaboo.config import parse_config, get_config
 from peekaboo.db import PeekabooDatabase
 from peekaboo.cuckoo_wrapper import CuckooManager
 import peekaboo.pjobs as pjobs
@@ -51,12 +51,11 @@ class PeekabooStreamServer(SocketServer.ThreadingUnixStreamServer):
 
     @author: Sebastian Deiss
     """
-    def __init__(self, server_address, request_handler_cls, bind_and_activate=True,
-                 config=None):
-        self.config = config
-        self.workers = pjobs.Workers(config.worker_count)
+    def __init__(self, server_address, request_handler_cls, bind_and_activate=True):
+        self.config = get_config()
+        self.workers = pjobs.Workers(self.config.worker_count)
         # We can only accept 2 * worker_count connections.
-        self.request_queue_size = config.worker_count * 2
+        self.request_queue_size = self.config.worker_count * 2
         self.allow_reuse_address = True
         SocketServer.ThreadingUnixStreamServer.__init__(self, server_address,
                                                         request_handler_cls,
@@ -78,7 +77,6 @@ class PeekabooStreamServer(SocketServer.ThreadingUnixStreamServer):
 
 class PeekabooStreamRequestHandler(SocketServer.StreamRequestHandler):
     def __init__(self, request, client_address, server):
-        self.config = server.config
         self.workers = server.workers
         SocketServer.StreamRequestHandler.__init__(self, request, client_address, server)
 
@@ -123,7 +121,7 @@ class PeekabooStreamRequestHandler(SocketServer.StreamRequestHandler):
         if not os.path.isfile(p):
             logger.debug('%s is not a file' % p)
             return None
-        s = sample.Sample(self.config, conn, p)
+        s = sample.Sample(conn, p)
         logger.debug('Created sample %s' % s)
 
         return s
@@ -150,7 +148,7 @@ def run():
         print('Starting Peekaboo %s.' % __version__)
 
     # read configuration
-    config = PeekabooConfig(args.config)
+    config = parse_config(args.config)
 
     # Check if CLI arguments override the configuration
     if args.debug:
@@ -192,7 +190,7 @@ def run():
         pidfile.write("%s\n" % pid)
 
     systemd = SystemdNotifier()
-    server = PeekabooStreamServer(config.sock_file, PeekabooStreamRequestHandler, config=config)
+    server = PeekabooStreamServer(config.sock_file, PeekabooStreamRequestHandler)
     runner = Thread(target=server.serve_forever)
     runner.daemon = True
 

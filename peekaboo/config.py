@@ -29,6 +29,26 @@ from ConfigParser import SafeConfigParser, NoSectionError, NoOptionError
 
 
 logger = logging.getLogger(__name__)
+_config = None
+
+
+def parse_config(config_file):
+    """
+    Parse the Peekaboo configuration file.
+
+    :param config_file: Path to the configuration file.
+    :return: A PeekabooConfig object containing the configuration options.
+    """
+    global _config
+    if _config is None:
+        _config = PeekabooConfig(config_file)
+    return _config
+
+
+def get_config():
+    """ Get the Peekaboo configuration object. """
+    assert _config is not None
+    return _config
 
 
 class PeekabooConfig(object):

@@ -40,6 +40,7 @@ from random import choice
 from datetime import datetime
 from oletools.olevba import VBA_Parser
 from peekaboo import MultiRegexMatcher
+from peekaboo.config import get_config
 from peekaboo.exceptions import CuckooReportPendingException
 import peekaboo.pjobs as pjobs
 import peekaboo.ruleset as ruleset
@@ -98,11 +99,11 @@ class Sample(object):
     @author: Felix Bauer
     @author: Sebastian Deiss
     """
-    def __init__(self, conf, sock, file_path):
+    def __init__(self, sock, file_path):
         self.__socket = sock
         self.__file_path = file_path
-        self.__config = conf
-        self.__db_con = conf.get_db_con()
+        self.__config = get_config()
+        self.__db_con = self.__config.get_db_con()
         self.__meta_info = None
         self.__wd = None
         self.__filename = os.path.basename(self.__file_path)
