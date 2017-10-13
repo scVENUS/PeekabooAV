@@ -2,7 +2,8 @@
 #                                                                             #
 # Peekaboo Extended Email Attachment Behavior Observation Owl                 #
 #                                                                             #
-# processor.py                                                                  #
+# ruleset/                                                                    #
+#         engine.py                                                           #
 ###############################################################################
 #                                                                             #
 # Copyright (C) 2016-2017  science + computing ag                             #

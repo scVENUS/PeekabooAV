@@ -45,6 +45,20 @@ def parse_config(config_file):
     return _config
 
 
+def _set_config(config):
+    """
+    Set the configuration object manually. This is required e. g. for unit tests
+    with a mocked configuration object.
+
+    :param config: The mocked configuration object.
+    :return: The given configuration object.
+    """
+    global _config
+    if _config is None:
+        _config = config
+    return _config
+
+
 def get_config():
     """ Get the Peekaboo configuration object. """
     assert _config is not None
@@ -100,8 +114,9 @@ class PeekabooConfig(object):
             self.worker_count = int(config.get('global', 'worker_count'))
             self.sample_base_dir = config.get('global', 'sample_base_dir')
             self.job_hash_regex = config.get('global', 'job_hash_regex')
-            self.use_debug_module = True if config.get('global', 'use_debug_module') == \
-                                            'yes' else False
+            self.use_debug_module = True if config.get(
+                'global', 'use_debug_module'
+            ) == 'yes' else False
             self.db_url = config.get('db', 'url')
             self.cuckoo_storage = config.get('cuckoo', 'storage_path')
             self.cuckoo_exec = config.get('cuckoo', 'exec')
@@ -155,7 +170,7 @@ class PeekabooConfig(object):
 
         # Check if we already have a log handler
         if len(_logger.handlers) > 0:
-        # Remove all handlers
+            # Remove all handlers
             for handler in _logger.handlers:
                 _logger.removeHandler(handler)
         # log format

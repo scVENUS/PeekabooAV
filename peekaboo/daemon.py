@@ -37,7 +37,7 @@ from twisted.internet import reactor
 from peekaboo import _owl, __version__
 from peekaboo.config import parse_config, get_config
 from peekaboo.db import PeekabooDatabase
-from peekaboo.cuckoo_wrapper import CuckooManager
+from peekaboo.toolbox.cuckoo import CuckooManager
 import peekaboo.pjobs as pjobs
 import peekaboo.sample as sample
 

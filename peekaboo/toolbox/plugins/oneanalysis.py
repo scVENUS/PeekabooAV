@@ -2,7 +2,9 @@
 #                                                                             #
 # Peekaboo Extended Email Attachment Behavior Observation Owl                 #
 #                                                                             #
-# toolbox/plugins/oneanalysis.py                                              #
+# toolbox/                                                                    #
+#         plugins/                                                            #
+#                 oneanalysis.py                                              #
 ###############################################################################
 #                                                                             #
 # Copyright (C) 2016-2017  science + computing ag                             #

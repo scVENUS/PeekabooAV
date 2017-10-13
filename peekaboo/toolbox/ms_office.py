@@ -2,8 +2,8 @@
 #                                                                             #
 # Peekaboo Extended Email Attachment Behavior Observation Owl                 #
 #                                                                             #
-# ruleset/                                                                    #
-#         __init__.py                                                         #
+# toolbox/                                                                    #
+#         ms_office.py                                                        #
 ###############################################################################
 #                                                                             #
 # Copyright (C) 2016-2017  science + computing ag                             #
@@ -24,56 +24,36 @@
 ###############################################################################
 
 
-from enum import Enum, unique
+import logging
+from oletools.olevba import VBA_Parser
 
 
-@unique
-class Result(Enum):
+logger = logging.getLogger(__name__)
+ms_office_extensions = [
+    ".doc", ".docm", ".dotm", ".docx",
+    ".ppt", ".pptm", ".pptx", ".potm", ".ppam", ".ppsm",
+    ".xls", ".xlsm", ".xlsx",
+]
+
+
+def has_office_macros(office_file):
     """
-    @author: Felix Bauer
+    Detects macros in Microsoft Office documents.
+
+    :param office_file: The MS Office document to check for macros.
+    :return: True if macros where found, otherwise False.
+             If VBA_Parser crashes it returns False too.
     """
-    inProgress = 0
-    unchecked = 1
-    unknown = 2
-    ignored = 3
-    checked = 4
-    good = 5
-    bad = 6
-
-    @staticmethod
-    def from_string(result_str):
-        for i in Result:
-            if i.name == result_str:
-                return i
-        raise ValueError('%s: Element not found' % result_str)
-
-    def __gt__(self, other):
-        return self.value >= other.value
-
-    def __lt__(self, other):
-        return other.value >= self.value
-
-
-class RuleResult:
-    """
-    @author: Felix Bauer
-    """
-    def __init__(self, rule,
-                 result=Result.unknown,
-                 reason='regel ohne Ergebnis',
-                 further_analysis=True):
-        self.rule = None
-        self.result = Result.unchecked
-        self.rule = rule
-        self.result = result
-        self.reason = reason
-        self.further_analysis = further_analysis
-
-    def __str__(self):
-        return ("Ergebnis \"%s\" der Regel %s - %s, Analyse wird fortgesetzt: %s."\
-                                                        % (self.result.name,
-                                                           self.rule,
-                                                           self.reason,
-                                                           'Ja' if self.further_analysis else 'Nein'))
-
-    __repr__ = __str__
+    file_extension = office_file.split('.')[-1]
+    if file_extension not in ms_office_extensions:
+        return False
+    try:
+        # VBA_Parser reports macros for office documents
+        vbaparser = VBA_Parser(office_file)
+        return vbaparser.detect_vba_macros()
+    except TypeError:
+        # The given file is not an office document.
+        return False
+    except Exception as e:
+        logger.exception(e)
+        return False

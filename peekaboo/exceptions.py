@@ -42,3 +42,7 @@ class PeekabooRulesetException(PeekabooException):
 
 class CuckooReportPendingException(PeekabooRulesetException):
     pass
+
+
+class CuckooAnalysisFailedException(PeekabooException):
+    pass

@@ -27,7 +27,7 @@ import threading
 import logging
 from Queue import Queue
 from peekaboo.ruleset import Result
-from peekaboo.ruleset.processor import evaluate
+from peekaboo.ruleset.engine import evaluate
 from peekaboo.exceptions import CuckooReportPendingException
 
 
@@ -200,7 +200,7 @@ class Workers(object):
 
             try:
                 evaluate(s)
-            except CuckooReportPendingException as e:
+            except CuckooReportPendingException:
                 pass
             except Exception as e:
                 # catch 'cuckooReport not yet available. Sample submitted for

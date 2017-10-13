@@ -36,6 +36,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from peekaboo.sample import Sample
 from peekaboo.ruleset import RuleResult, Result
 from peekaboo.db import PeekabooDatabase
+from peekaboo.config import _set_config
 
 
 class PeekabooDummyConfig(object):
@@ -60,16 +61,16 @@ class PeekabooDummyDB(object):
         pass
 
     def fetch_rule_result(self, sha256):
-        return  RuleResult('fake_db',
-                            result=Result.checked,
-                            reason='Test Case',
-                            further_analysis=True)
+        return RuleResult('fake_db',
+                          result=Result.checked,
+                          reason='Test Case',
+                          further_analysis=True)
 
     def sample_info_update(self, sample):
         pass
 
     def known(self, sha256):
-        return  False
+        return False
 
     def in_progress(self, sha256):
         return True
@@ -93,7 +94,8 @@ class TestDatabase(unittest.TestCase):
         cls.conf = PeekabooDummyConfig()
         db_con = PeekabooDatabase('sqlite:///' + cls.test_db)
         cls.conf.set_db_con(db_con)
-        cls.sample = Sample(cls.conf, None, os.path.realpath(__file__))
+        _set_config(cls.conf)
+        cls.sample = Sample(None, os.path.realpath(__file__))
         result = RuleResult('Unittest',
                             Result.unknown,
                             'This is just a test case.',
@@ -147,10 +149,12 @@ class TestSample(unittest.TestCase):
     """
     @classmethod
     def setUpClass(cls):
+        cls.test_db = os.path.abspath('./test.db')
         cls.conf = PeekabooDummyConfig()
-        db_con = PeekabooDummyDB()
+        db_con = PeekabooDatabase('sqlite:///' + cls.test_db)
         cls.conf.set_db_con(db_con)
-        cls.sample = Sample(cls.conf, None, os.path.realpath(__file__))
+        _set_config(cls.conf)
+        cls.sample = Sample(None, os.path.realpath(__file__))
 
     def test_attribute_dict(self):
         self.sample.set_attr('Unittest', 'Hello World!')
@@ -161,7 +165,7 @@ class TestSample(unittest.TestCase):
 
     def test_job_hash_regex(self):
         path_with_job_hash = '/var/lib/amavis/tmp/amavis-20170831T132736-07759-iSI0rJ4b/parts'
-        sample = Sample(self.conf, None, path_with_job_hash)
+        sample = Sample(None, path_with_job_hash)
         job_hash = sample.get_job_hash()
         self.assertEqual(job_hash, 'amavis-20170831T132736-07759-iSI0rJ4b',
                          'Job hash regex is not working')
@@ -176,7 +180,7 @@ class TestSample(unittest.TestCase):
         self.assertEqual(self.sample.job_id, -1)
         self.assertEqual(self.sample.get_result(), Result.unchecked)
         self.assertEqual(self.sample.reason,
-                         'Ausschlaggebendes Ergebnis laut Datenbank: Test Case')
+                         'Ausschlaggebendes Ergebnis laut Datenbank: Datei ist dem System noch nicht bekannt')
         self.assertFalse(self.sample.office_macros)
         self.assertFalse(self.sample.known)
 
@@ -209,7 +213,7 @@ class TestSample(unittest.TestCase):
         test_meta_info += 'queue_id      :\n'
         with open('./junk.info', 'w+') as f:
             f.write(test_meta_info)
-        sample = Sample(self.conf, None, 'junk')
+        sample = Sample(None, 'junk')
         self.assertEqual(sample.file_extension, '')
         sample.load_meta_info('./junk.info')
         self.assertEqual(sample.file_extension, 'docx')
@@ -217,6 +221,7 @@ class TestSample(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.conf.db_con.close()
+        os.unlink(cls.test_db)
         os.unlink('./test_meta_info.info')
         os.unlink('./junk.info')
 
