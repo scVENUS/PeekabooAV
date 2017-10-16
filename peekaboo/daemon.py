@@ -38,9 +38,9 @@ from peekaboo import _owl, __version__
 from peekaboo.config import parse_config, get_config
 from peekaboo.db import PeekabooDatabase
 from peekaboo.toolbox.cuckoo import CuckooManager
-import peekaboo.pjobs as pjobs
-import peekaboo.sample as sample
-
+from peekaboo.toolbox.sampletools import ConnectionMap
+from peekaboo.queuing import JobQueue, create_workers
+from peekaboo.sample import make_sample
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ class PeekabooStreamServer(SocketServer.ThreadingUnixStreamServer):
     """
     def __init__(self, server_address, request_handler_cls, bind_and_activate=True):
         self.config = get_config()
-        self.workers = pjobs.Workers(self.config.worker_count)
+        create_workers(self.config.worker_count)
         # We can only accept 2 * worker_count connections.
         self.request_queue_size = self.config.worker_count * 2
         self.allow_reuse_address = True
@@ -76,70 +76,70 @@ class PeekabooStreamServer(SocketServer.ThreadingUnixStreamServer):
 
 
 class PeekabooStreamRequestHandler(SocketServer.StreamRequestHandler):
-    def __init__(self, request, client_address, server):
-        self.workers = server.workers
-        SocketServer.StreamRequestHandler.__init__(self, request, client_address, server)
-
     def handle(self):
+        """
+        Handles an analyses request. The path of the directory / file to analyse must
+        be written to the corresponding socket.
+        The maximum buffer size is 1024 bytes.
+        """
         self.request.sendall('Hallo das ist Peekaboo\n\n')
-        # receive directory path
         path = self.request.recv(1024).rstrip()
-        logger.info("Received %s" % path)
+        logger.info("Got analyses request for %s" % path)
 
         if not os.path.exists(path):
-            self.request.sendall("ERROR: path from amavis doesn't exist or no "
-                                 "permission to access it")
-            logger.error('Path from amavis doesn\'t exist or no '
-                         'permission to access it')
+            self.request.sendall(
+                'FEHLER: Pfad existiert nicht oder Zugriff verweigert.'
+            )
+            logger.error("ERROR: Path does not exist or no permission to access it.")
         else:
-            # close connection if there is nothing to analyze
             for_analysis = []
             if os.path.isfile(path):
-                sample = self._make_sample(path, self.request)
+                sample = make_sample(path, self.request)
                 if sample:
                     for_analysis.append(sample)
             else:
-                # walk recursively through entries in directory
+                # walk recursively through entries in the given directory.
                 for dirname, __, filenames in os.walk(path):
                     for filename in filenames:
                         logger.debug("Found file %s" % filename)
-                        p = os.path.join(dirname, filename)
-                        sample = self._make_sample(p, self.request)
+                        f = os.path.join(dirname, filename)
+                        sample = make_sample(f, self.request)
                         if sample:
                             for_analysis.append(sample)
 
-            # introduced after issue where results were reported
-            # before all file could be added
-            for s in for_analysis:
-                pjobs.Jobs.add_job(self.request, s)
-                self.workers.submit_job(s, self.__class__)
+            # introduced after an issue where results were reported
+            # before all files could be added.
+            for sample in for_analysis:
+                ConnectionMap.add(self.request, sample)
+                JobQueue.submit(sample, self.__class__)
 
     # TODO: do cleanup work here in finish()
-
-    def _make_sample(self, p, conn):
-        logger.debug("Looking at file %s" % p)
-        if not os.path.isfile(p):
-            logger.debug('%s is not a file' % p)
-            return None
-        s = sample.Sample(conn, p)
-        logger.debug('Created sample %s' % s)
-
-        return s
 
 
 def run():
     """ Runs the daemon. """
     arg_parser = ArgumentParser()
-    arg_parser.add_argument('-c', '--config', action='store', required=False,
-                            default=os.path.join('./peekaboo.conf'),
-                            help='The configuration file for Peekaboo.')
-    arg_parser.add_argument('-d', '--debug', action='store_true', required=False,
-                            help="Run Peekaboo in debug mode regardless of what's "
-                                 "specified in the configuration.",
-                            default=False)
-    arg_parser.add_argument('-D', '--daemon', action='store_true', required=False,
-                            help='Run Peekaboo in daemon mode (suppresses the logo to be written to STDOUT).',
-                            default=False)
+    arg_parser.add_argument(
+        '-c', '--config',
+        action='store',
+        required=False,
+        default=os.path.join('./peekaboo.conf'),
+        help='The configuration file for Peekaboo.'
+    )
+    arg_parser.add_argument(
+        '-d', '--debug',
+        action='store_true',
+        required=False,
+        default=False,
+        help="Run Peekaboo in debug mode regardless of what's specified in the configuration."
+    )
+    arg_parser.add_argument(
+        '-D', '--daemon',
+        action='store_true',
+        required=False,
+        default=False,
+        help='Run Peekaboo in daemon mode (suppresses the logo to be written to STDOUT).'
+    )
     args = arg_parser.parse_args()
 
     if not args.daemon:
@@ -173,7 +173,7 @@ def run():
         peekaboo_debugger()
 
     if os.getuid() == 0:
-        logger.warning('Peekaboo should not run as root')
+        logger.warning('Peekaboo should not run as root.')
         # drop privileges to user
         os.setgid(grp.getgrnam(config.group)[2])
         os.setuid(pwd.getpwnam(config.user)[2])

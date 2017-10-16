@@ -31,19 +31,35 @@ import shutil
 import logging
 from datetime import datetime
 from peekaboo.config import get_config
-from peekaboo.exceptions import CuckooReportPendingException, CuckooAnalysisFailedException
-from peekaboo.toolbox.sampletools import SampleMetaInfo, \
-                                         next_job_hash, \
-                                         chown2me, \
-                                         guess_mime_type_from_file_contents, \
-                                         guess_mime_type_from_filename
+from peekaboo.exceptions import CuckooReportPendingException, \
+                                CuckooAnalysisFailedException
+from peekaboo.toolbox.sampletools import SampleMetaInfo, next_job_hash
+from peekaboo.toolbox.files import chown2me, guess_mime_type_from_filename, \
+                                   guess_mime_type_from_file_contents
 from peekaboo.toolbox.ms_office import has_office_macros
 from peekaboo.toolbox.cuckoo import submit_to_cuckoo
-import peekaboo.pjobs as pjobs
+from peekaboo.toolbox.sampletools import ConnectionMap
 import peekaboo.ruleset as ruleset
 
 
 logger = logging.getLogger(__name__)
+
+
+def make_sample(file, socket):
+    """
+    Create a Sample object from a given file.
+
+    :param file: Path to the file to create a Sample object from.
+    :param socket: An optional socket to write the report to.
+    :return: A sample object representing the given file or None if the file does not exist.
+    """
+    logger.debug("Looking at file %s" % file)
+    if not os.path.isfile(file):
+        logger.debug('%s is not a file' % file)
+        return None
+    s = Sample(file, socket)
+    logger.debug('Created sample %s' % s)
+    return s
 
 
 class Sample(object):
@@ -60,8 +76,7 @@ class Sample(object):
     @author: Felix Bauer
     @author: Sebastian Deiss
     """
-    def __init__(self, sock, file_path):
-        self.__socket = sock
+    def __init__(self, file_path, sock=None):
         self.__path = file_path
         self.__config = get_config()
         self.__db_con = self.__config.get_db_con()
@@ -73,6 +88,7 @@ class Sample(object):
         self.__symlink = None
         self.__result = ruleset.Result.unchecked
         self.__report = []  # Peekaboo's own report
+        self.__socket = sock
         # Additional attributes for a sample object (e. g. dump info)
         self.__attributes = {}
         self.initalized = False
@@ -116,13 +132,7 @@ class Sample(object):
         message = "Datei \"%s\" %s wird analysiert\n" % (self.__filename,
                                                          self.sha256sum)
         self.__report.append(message)
-        try:
-            self.__socket.send(message)
-        except IOError as e:
-            if e.errno == errno.EPIPE:
-                logger.warning('Unable send message "%s". Broken pipe.' % message)
-            else:
-                logger.exception(e)
+        self.__send_message(message)
 
     def get_attr(self, key):
         """
@@ -186,7 +196,11 @@ class Sample(object):
         else:
             logger.debug('Saving results to database')
             self.__db_con.sample_info_update(self)
-        self._cleanup()
+        if self.__socket is not None:
+            ConnectionMap.remove(self.__socket, self)
+        if not ConnectionMap.has_connection(self.__socket):
+            self.__cleanup_temp_files()
+            self.__close_socket()
 
     def add_rule_result(self, res):
         logger.debug('Adding rule result %s' % str(res))
@@ -338,7 +352,7 @@ class Sample(object):
                 message = 'Erfolgreich an Cuckoo gegeben %s als Job %d\n' \
                           % (self, job_id)
                 self.__report.append(message)
-                logger.info('Sample %s submitted to Cuckoo. Job ID: %s' % (self, job_id))
+                logger.info('Sample submitted to Cuckoo. Job ID: %s. Sample: %s' % (job_id, self))
                 raise CuckooReportPendingException()
             except CuckooAnalysisFailedException as e:
                 logger.exception(e)
@@ -366,7 +380,7 @@ class Sample(object):
             os.mkdir(os.path.join(self.__config.sample_base_dir,
                                   job_hash))
 
-        logger.debug("job_hash: %s" % job_hash)
+        logger.debug("Job hash for this sample: %s" % job_hash)
         return job_hash
 
     def load_meta_info(self, meta_info_file):
@@ -378,7 +392,7 @@ class Sample(object):
                 logger.debug('meta_info_%s = %s' % (info[0], info[1]))
                 self.set_attr('meta_info_' + info[0], info[1])
             self.meta_info_loaded = True
-        except Exception as e:
+        except Exception:
             logger.info('No metadata available for file %s' % self.__path)
 
     def __create_symlink(self):
@@ -394,26 +408,20 @@ class Sample(object):
 
         os.symlink(orig, self.__symlink)
 
-
-###################################################################
     def report(self):
+        """
+        Create the report for this sample. The report is saved as a list of
+        strings and is available via get_report(). Also, if a socket connection was
+        supplied to the sample the report messages are also written to the socket.
+        """
         # TODO: move to rule processing engine.
-        """ report result to socket connection """
         self.determine_result()
 
         for rule_result in self.get_attr('rule_results'):
             message = "Datei \"%s\": %s\n" % (self.__filename, str(rule_result))
             self.__report.append(message)
-            logger.info('Connection send: %s ' % message)
-            try:
-                self.__socket.send(message)
-            except IOError as e:
-                if e.errno == errno.EPIPE:
-                    logger.warning('Unable send message "%s". Broken pipe.' % message)
-                else:
-                    logger.exception(e)
+            self.__send_message(message)
 
-        # check if result still init value inProgress
         if self.__result == ruleset.Result.inProgress:
             logger.warning('Ruleset result forces to unchecked.')
             self.__result = ruleset.Result.unchecked
@@ -421,44 +429,44 @@ class Sample(object):
         message = "Die Datei \"%s\" wurde als \"%s\" eingestuft\n\n" \
                   % (self.__filename, self.__result.name)
         self.__report.append(message)
-        logger.debug('Connection send: %s ' % message)
-        if self.__socket:
-            try:
-                self.__socket.send(message)
-            except IOError as e:
-                if e.errno == errno.EPIPE:
-                    logger.warning('Unable send message "%s". Broken pipe.' % message)
-                else:
-                    logger.exception(e)
+        self.__send_message(message)
 
-    def _cleanup(self):
-        # TODO: move elsewhere.
-        if pjobs.Jobs.remove_job(self.__socket, self) <= 0:
-            # returns count of remaining samples for this connection
-            logger.debug('Closing connection.')
-            # delete all files created by dump_info
-            try:
-                logger.debug("Deleting tempdir %s" % self.__wd)
-                shutil.rmtree(self.__wd)
-            except OSError as e:
-                logger.error("OSError while clean up %s: %s"
-                             % (self.__wd, str(e)))
-            if not os.path.isdir(self.__wd):
-                logger.debug('Clean up of %s complete' % self.__wd)
-            else:
-                logger.info('Clean up of %s failed' % self.__wd)
-
-            try:
+    def __close_socket(self):
+        logger.debug('Closing socket connection.')
+        try:
+            if self.__socket is not None:
                 self.__socket.close()
-            except EnvironmentError as e:
-                # base class for exceptions that can occur outside the Python system.
-                # e. g. IOError, OSError
-                if e.errno == errno.EPIPE:
-                    logger.warning('Unable to close the socket. Broken pipe.')
-                else:
-                    logger.exception(e)
+        except EnvironmentError as e:
+            # base class for exceptions that can occur outside the Python system.
+            # e. g. IOError, OSError
+            if e.errno == errno.EPIPE:
+                logger.warning('Unable to close the socket. Broken pipe.')
+            else:
+                logger.exception(e)
 
-###################################################################
+    def __cleanup_temp_files(self):
+        try:
+            logger.debug("Deleting tempdir %s" % self.__wd)
+            shutil.rmtree(self.__wd)
+        except OSError as e:
+            logger.exception(e)
+
+    def __send_message(self, msg):
+        """
+        Write a message to the socket.
+
+        :param msg: The message to send (max. 1024 bytes).
+        """
+        if self.__socket is None:
+            return
+        try:
+            self.__socket.send(msg)
+            logger.debug('Message send: %s ' % msg)
+        except IOError as e:
+            if e.errno == errno.EPIPE:
+                logger.warning('Unable send message "%s". Broken pipe.' % msg)
+            else:
+                logger.exception(e)
 
     def __str__(self):
         meta_info_loaded = 'no'

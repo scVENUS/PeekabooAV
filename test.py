@@ -95,7 +95,7 @@ class TestDatabase(unittest.TestCase):
         db_con = PeekabooDatabase('sqlite:///' + cls.test_db)
         cls.conf.set_db_con(db_con)
         _set_config(cls.conf)
-        cls.sample = Sample(None, os.path.realpath(__file__))
+        cls.sample = Sample(os.path.realpath(__file__))
         result = RuleResult('Unittest',
                             Result.unknown,
                             'This is just a test case.',
@@ -154,7 +154,7 @@ class TestSample(unittest.TestCase):
         db_con = PeekabooDatabase('sqlite:///' + cls.test_db)
         cls.conf.set_db_con(db_con)
         _set_config(cls.conf)
-        cls.sample = Sample(None, os.path.realpath(__file__))
+        cls.sample = Sample(os.path.realpath(__file__))
 
     def test_attribute_dict(self):
         self.sample.set_attr('Unittest', 'Hello World!')
@@ -165,7 +165,7 @@ class TestSample(unittest.TestCase):
 
     def test_job_hash_regex(self):
         path_with_job_hash = '/var/lib/amavis/tmp/amavis-20170831T132736-07759-iSI0rJ4b/parts'
-        sample = Sample(None, path_with_job_hash)
+        sample = Sample(path_with_job_hash)
         job_hash = sample.get_job_hash()
         self.assertEqual(job_hash, 'amavis-20170831T132736-07759-iSI0rJ4b',
                          'Job hash regex is not working')
@@ -213,7 +213,7 @@ class TestSample(unittest.TestCase):
         test_meta_info += 'queue_id      :\n'
         with open('./junk.info', 'w+') as f:
             f.write(test_meta_info)
-        sample = Sample(None, 'junk')
+        sample = Sample('junk')
         self.assertEqual(sample.file_extension, '')
         sample.load_meta_info('./junk.info')
         self.assertEqual(sample.file_extension, 'docx')

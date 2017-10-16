@@ -33,7 +33,8 @@ from twisted.internet import protocol
 from peekaboo import MultiRegexMatcher
 from peekaboo.config import get_config
 from peekaboo.exceptions import CuckooAnalysisFailedException
-import peekaboo.pjobs as pjobs
+from peekaboo.toolbox.sampletools import ConnectionMap
+from peekaboo.queuing import JobQueue
 
 
 logger = logging.getLogger(__name__)
@@ -64,7 +65,7 @@ def submit_to_cuckoo(sample):
         out, err = p.communicate()
         logger.debug("cuckoo submit STDOUT: %s" % out)
         logger.debug("cuckoo submit STDERR: %s" % err)
-        # process output to get jobID
+        # process output to get job ID
         patterns = list()
         # Example: Success: File "/var/lib/peekaboo/.bashrc" added as task with ID #4
         patterns.append(".*Success.*: File .* added as task with ID #([0-9]*).*")
@@ -133,19 +134,17 @@ class CuckooManager(protocol.ProcessProtocol):
         if m:
             job_id = int(m.group(1))
             logger.info("Analysis done for task #%d" % job_id)
-
-            logger.debug("Queued jobs %d" % pjobs.Jobs.length())
-            sample = pjobs.Jobs.get_sample_by_job_id(job_id)
+            logger.debug("Remaining connections: %d" % ConnectionMap.size())
+            sample = ConnectionMap.get_sample_by_job_id(job_id)
             if sample:
                 logger.debug('Requesting Cuckoo report for sample %s' % sample)
                 self.__report = CuckooReport(job_id)
                 sample.set_attr('cuckoo_report', self.__report)
                 sample.set_attr('cuckoo_json_report_file', self.__report.file_path)
-
-                pjobs.Workers.submit_job(sample, self.__class__)
-                logger.debug("Queued jobs %d" % pjobs.Jobs.length())
+                JobQueue.submit(sample, self.__class__)
+                logger.debug("Remaining connections: %d" % ConnectionMap.size())
             else:
-                logger.info('No job found for ID %d' % job_id)
+                logger.info('No connection found for ID %d' % job_id)
 
     def inConnectionLost(self):
         logger.debug("Cuckoo closed STDIN")
@@ -160,11 +159,11 @@ class CuckooManager(protocol.ProcessProtocol):
         os._exit(1)
 
     def processExited(self, reason):
-        logger.info("Cuckoo exited status %d" % reason.value.exitCode)
+        logger.info("Cuckoo exited with status %d" % reason.value.exitCode)
         os._exit(0)
 
     def processEnded(self, reason):
-        logger.info("Cuckoo ended status %d" % reason.value.exitCode)
+        logger.info("Cuckoo ended with status %d" % reason.value.exitCode)
         os._exit(0)
 
 

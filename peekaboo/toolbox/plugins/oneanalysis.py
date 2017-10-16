@@ -29,9 +29,10 @@ import threading
 import traceback
 import sys
 import logging
-import peekaboo.pjobs
+import peekaboo.queuing
 from peekaboo.ruleset import RuleResult
 from peekaboo.exceptions import CuckooReportPendingException
+from peekaboo.toolbox.sampletools import ConnectionMap
 
 
 logger = logging.getLogger(__name__)
@@ -69,7 +70,7 @@ class OneAnalysis(object):
                                   further_analysis=True)
 
             l = []
-            for sample in peekaboo.pjobs.Jobs.get_samples_by_sha256(s.sha256sum):
+            for sample in ConnectionMap.get_samples_by_sha256(s.sha256sum):
                 if sample != s:
                     if not sample.has_attr('pending') or not sample.get_attr('pending') is True:
                         l.append(sample)
@@ -93,8 +94,8 @@ class OneAnalysis(object):
     def queue_identical_samples(self, s):
         with self.__in_use:
             logger.debug("queueing identical samples")
-            for sample in peekaboo.pjobs.Jobs.get_samples_by_sha256(s.sha256sum):
+            for sample in ConnectionMap.get_samples_by_sha256(s.sha256sum):
                 pending = sample.get_attr('pending')
                 if pending:
                     sample.set_attr('pending', False)
-                    peekaboo.pjobs.Workers.submit_job(sample, 'OneAnalysis')
+                    peekaboo.queuing.JobQueue.submit(sample, self.__class__)
