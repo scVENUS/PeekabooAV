@@ -83,14 +83,14 @@ def submit_to_cuckoo(sample):
         )
 
 
-class CuckooManager(protocol.ProcessProtocol):
+class CuckooServer(protocol.ProcessProtocol):
     """
     Class that is used by twisted.internet.reactor to process Cuckoo
     output and process its behavior.
 
     Usage:
-    mgr = CuckooManager()
-    reactor.spawnProcess(mgr, 'python2', ['python2', '/path/to/cukoo.py'])
+    srv = CuckooServer()
+    reactor.spawnProcess(srv, 'python2', ['python2', '/path/to/cukoo.py'])
     reactor.run()
 
     @author: Felix Bauer
@@ -100,7 +100,7 @@ class CuckooManager(protocol.ProcessProtocol):
         self.__report = None
 
     def connectionMade(self):
-        logger.info('Connected. Cuckoo PID %s' % self.transport.pid)
+        logger.info('Connected. Cuckoo PID: %s' % self.transport.pid)
         return None
 
     def outReceived(self, data):
@@ -121,8 +121,8 @@ class CuckooManager(protocol.ProcessProtocol):
         m = re.match('.*INFO: Starting analysis of FILE \"(.*)\" \(task #([0-9]*), options .*', data)
 
         if m:
-            logger.info("file submitted: task #%s filename %s" % (m.group(2),
-                                                                  m.group(1)))
+            logger.info("File submitted: task #%s, filename %s" % (m.group(2),
+                                                                   m.group(1)))
 
         #
         # ANALYSIS DONE
@@ -133,7 +133,7 @@ class CuckooManager(protocol.ProcessProtocol):
                      data)
         if m:
             job_id = int(m.group(1))
-            logger.info("Analysis done for task #%d" % job_id)
+            logger.debug("Analysis done for task #%d" % job_id)
             logger.debug("Remaining connections: %d" % ConnectionMap.size())
             sample = ConnectionMap.get_sample_by_job_id(job_id)
             if sample:
@@ -144,7 +144,7 @@ class CuckooManager(protocol.ProcessProtocol):
                 JobQueue.submit(sample, self.__class__)
                 logger.debug("Remaining connections: %d" % ConnectionMap.size())
             else:
-                logger.info('No connection found for ID %d' % job_id)
+                logger.debug('No connection found for ID %d' % job_id)
 
     def inConnectionLost(self):
         logger.debug("Cuckoo closed STDIN")
@@ -186,7 +186,7 @@ class CuckooReport(object):
         """
         config = get_config()
         cuckoo_report = os.path.join(
-            config.cuckoo_storage, 'analyses/%d/reports/report.json'
+            config.cuckoo_storage, 'run_analysis/%d/reports/report.json'
                                    % self.job_id
         )
 
@@ -194,8 +194,8 @@ class CuckooReport(object):
             raise OSError('Cuckoo report not found at %s.' % cuckoo_report)
         else:
             logger.debug(
-                'Accessing Cuckoo report at %s for task %d'
-                % (cuckoo_report, self.job_id)
+                'Accessing Cuckoo report for task %d at %s '
+                % (self.job_id, cuckoo_report)
             )
             self.file_path = cuckoo_report
             with open(cuckoo_report) as data:
@@ -216,6 +216,6 @@ class CuckooReport(object):
     @property
     def analysis_failed(self):
         if self.errors:
-            logger.warning('Cuckoo analyses failed. Reason: %s' % str(self.errors))
+            logger.warning('Cuckoo run_analysis failed. Reason: %s' % str(self.errors))
             return True
         return False

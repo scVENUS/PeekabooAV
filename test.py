@@ -170,7 +170,7 @@ class TestSample(unittest.TestCase):
         self.assertEqual(job_hash, 'amavis-20170831T132736-07759-iSI0rJ4b',
                          'Job hash regex is not working')
         job_hash = self.sample.get_job_hash()
-        self.assertIn('peekaboo-analyses', job_hash)
+        self.assertIn('peekaboo-run_analysis', job_hash)
 
     def test_sample_attributes(self):
         self.assertEqual(self.sample.get_filename(), 'test.py')

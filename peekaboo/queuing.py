@@ -26,7 +26,8 @@
 import logging
 from threading import Thread
 from Queue import Queue
-from peekaboo.ruleset.engine import evaluate
+from peekaboo import Singleton
+from peekaboo.ruleset.engine import run_analysis
 from peekaboo.exceptions import CuckooReportPendingException
 
 
@@ -36,12 +37,13 @@ logger = logging.getLogger(__name__)
 def create_workers(worker_count=4):
     for i in range(0, worker_count):
         logger.debug("Create Worker %d" % i)
-        w = Worker()
+        w = Worker(i)
         JobQueue.workers.append(w)
         w.start()
+    logger.info('Created %d Workers.' % worker_count)
 
 
-class JobQueue(object):
+class JobQueue(Singleton):
     """
     Peekaboo's queuing system.
 
@@ -73,20 +75,21 @@ class Worker(Thread):
 
     @author: Sebastian Deiss
     """
-    def __init__(self):
+    def __init__(self, wid):
         self.active = True
+        self.worker_id = wid
         Thread.__init__(self)
 
     def run(self):
         while self.active:
             logger.debug('Worker is ready')
-            s = JobQueue.jobs.get(True)  # wait blocking for next job (thread safe)
-            logger.debug('Processing sample %s' % str(s))
+            sample = JobQueue.jobs.get(True)  # wait blocking for next job (thread safe)
+            logger.info('Worker %d: Processing sample %s' % (self.worker_id, sample))
 
-            s.init()
+            sample.init()
 
             try:
-                evaluate(s)
+                run_analysis(sample)
             except CuckooReportPendingException:
                 pass
             except Exception as e:

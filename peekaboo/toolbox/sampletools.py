@@ -30,6 +30,7 @@ import threading
 from random import choice
 from datetime import datetime
 from ConfigParser import SafeConfigParser
+from peekaboo import Singleton
 from peekaboo.ruleset import Result
 
 
@@ -68,7 +69,7 @@ class SampleMetaInfo(object):
         return '<SampleMetaInfo(%s)>' % str(self.meta_info)
 
 
-class ConnectionMap(object):
+class ConnectionMap(Singleton):
     """
     Maps socket objects with one or more samples.
     This is required for the reporting so we know which
@@ -81,6 +82,14 @@ class ConnectionMap(object):
 
     @staticmethod
     def add(socket, sample):
+        """
+        Add an entry to the connection map. An entry consists of a
+        socket object and a list of Sample objects.
+
+        :param socket: The socket object to add.
+        :param sample: The corresponding Samples objects for a connection.
+        :return:The length of the connection map.
+        """
         with ConnectionMap.__lock:
             logger.debug('Registered sample for connection %s' % socket)
             if ConnectionMap.has_connection(socket):
@@ -91,6 +100,16 @@ class ConnectionMap(object):
 
     @staticmethod
     def remove(socket, sample):
+        """
+        Remove a Sample or an entry from the connection map. First, we
+        remove the given Sample object from the list of Sample objects of
+        the given connection. If the sample list is empty, we remove the
+        entire entry from the map.
+
+        :param socket: A socket object, which is related to the sample.
+        :param sample: The sample to remove.
+        :return: The length of the connection map.
+        """
         with ConnectionMap.__lock:
             if ConnectionMap.has_connection(socket):
                 logger.debug(
@@ -104,29 +123,42 @@ class ConnectionMap(object):
                 logger.debug(
                     'Connection does not exist.'
                     'Connection: %s, Sample: %s, Map: %s'
-                     % (socket, sample, ConnectionMap.__map)
+                    % (socket, sample, ConnectionMap.__map)
                 )
             return ConnectionMap.size()
 
     @staticmethod
     def size():
+        """ Gets the length of the connection map. """
         return len(ConnectionMap.__map)
 
     @staticmethod
     def _dump():
+        """ Get the connection map. This method might be usefule for debugging. """
         return ConnectionMap.__map
 
     @staticmethod
     def has_connection(socket):
+        """
+        Check if the given socket object exists in the map.
+
+        :param socket: A socket object to search for in the map.
+        :return: True if the map contains the given socket object, otherwise False.
+        """
         if socket in ConnectionMap.__map.keys():
             return True
         return False
 
     @staticmethod
     def get_sample_by_job_id(job_id):
+        """
+        Get a Sample object from the map by its job ID.
+
+        :param job_id: The job ID of the Sample object to fetch.
+        :return:The Sample object with the given job ID or None.
+        """
         with ConnectionMap.__lock:
             logger.debug("Searching for a sample with job ID %d" % job_id)
-            matching_sample = None
             for __, samples in ConnectionMap.__map.iteritems():
                 logger.debug('Samples for this connection: %s' % samples)
                 for sample in samples:
@@ -136,11 +168,16 @@ class ConnectionMap(object):
 
     @staticmethod
     def get_sample_by_sha256(sha256sum):
+        """
+        Get a Sample object from the map by its SHA-256 checksum.
+
+        :param sha256sum: The SHA-256 checksum of the file represented by a Sample object.
+        :return: The Sample object with the given SHA-256 checksum or None.
+        """
         with ConnectionMap.__lock:
             logger.debug(
                 'Searching for a sample with SHA-256 checksum %s' % sha256sum
             )
-            matching_sample = None
             for __, samples in ConnectionMap.__map.iteritems():
                 logger.debug('Samples for this connection: %s' % samples)
                 for sample in samples:
@@ -152,6 +189,12 @@ class ConnectionMap(object):
 
     @staticmethod
     def get_samples_by_sha256(sha256sum):
+        """
+        Get all Sample objects from the map by their SHA-256 checksums.
+
+        :param sha256sum: The SHA-256 checksum of the files represented by Sample objects.
+        :return: The Sample objects with the given SHA-256 checksum or None.
+        """
         with ConnectionMap.__lock:
             logger.debug('Searching for all samples with SHA-256 checksum %s' % sha256sum)
             matching_samples = []
@@ -165,6 +208,12 @@ class ConnectionMap(object):
 
     @staticmethod
     def get_samples_by_connection(socket):
+        """
+        Get all Sample objects for a specific socket connection.
+
+        :param socket: The socket object to get all Samples objects for.
+        :return: A list of all Sample objects for the given socket.
+        """
         with ConnectionMap.__lock:
             matching_samples = []
             for sock in ConnectionMap.__map.iteritems():
@@ -174,6 +223,13 @@ class ConnectionMap(object):
 
     @staticmethod
     def in_progress(sha256sum):
+        """
+        Check if a Sample object in the map has the state 'inProgress'.
+
+        :param sha256sum: The SHA-256 checksum of the file represented by a Sample object.
+        :return: True if the Sample object with the given SHA-256 checksum is
+                 'inProgress' otherwise False.
+        """
         sample = ConnectionMap.get_sample_by_sha256(sha256sum)
         if sample is not None and sample.get_result() == Result.inProgress:
             return True
@@ -189,7 +245,7 @@ def next_job_hash(size=8):
     :return Returns a job hash consisting of a static prefix, a timestamp
             representing the time when the method was invoked, and random characters.
     """
-    job_hash = 'peekaboo-analyses-'
+    job_hash = 'peekaboo-run_analysis-'
     job_hash += '%s-' % datetime.now().strftime('%Y%m%dT%H%M%S')
     job_hash += ''.join(
         choice(string.digits + string.ascii_lowercase + string.ascii_uppercase)

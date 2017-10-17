@@ -37,10 +37,11 @@ from twisted.internet import reactor
 from peekaboo import _owl, __version__
 from peekaboo.config import parse_config, get_config
 from peekaboo.db import PeekabooDatabase
-from peekaboo.toolbox.cuckoo import CuckooManager
+from peekaboo.toolbox.cuckoo import CuckooServer
 from peekaboo.toolbox.sampletools import ConnectionMap
 from peekaboo.queuing import JobQueue, create_workers
 from peekaboo.sample import make_sample
+
 
 logger = logging.getLogger(__name__)
 
@@ -61,10 +62,6 @@ class PeekabooStreamServer(SocketServer.ThreadingUnixStreamServer):
                                                         request_handler_cls,
                                                         bind_and_activate=bind_and_activate)
 
-    def finish_request(self, request, client_address):
-        # TODO: Put client connection in Jobs here?
-        return SocketServer.ThreadingUnixStreamServer.finish_request(self, request, client_address)
-
     def shutdown_request(self, request):
         """ Keep the connection alive until Cuckoo reports back, so the results can be send to the client. """
         # TODO: Find a better solution.
@@ -78,13 +75,13 @@ class PeekabooStreamServer(SocketServer.ThreadingUnixStreamServer):
 class PeekabooStreamRequestHandler(SocketServer.StreamRequestHandler):
     def handle(self):
         """
-        Handles an analyses request. The path of the directory / file to analyse must
+        Handles an run_analysis request. The path of the directory / file to analyse must
         be written to the corresponding socket.
         The maximum buffer size is 1024 bytes.
         """
         self.request.sendall('Hallo das ist Peekaboo\n\n')
         path = self.request.recv(1024).rstrip()
-        logger.info("Got analyses request for %s" % path)
+        logger.info("Got run_analysis request for %s" % path)
 
         if not os.path.exists(path):
             self.request.sendall(
@@ -197,7 +194,7 @@ def run():
     try:
         runner.start()
         systemd.notify("READY=1")
-        logger.debug('Peekaboo server is listening on %s' % server.server_address)
+        logger.info('Peekaboo server is listening on %s' % server.server_address)
 
         os.chmod(config.sock_file, stat.S_IWOTH | stat.S_IREAD |
                                    stat.S_IWRITE | stat.S_IRGRP |
@@ -205,10 +202,12 @@ def run():
 
         # Run Cuckoo sandbox, parse log output, and report back of Peekaboo.
         # If this dies Peekaboo dies, since this is the main thread.
-        mgr = CuckooManager()
-        reactor.spawnProcess(mgr, config.interpreter, [config.interpreter, '-u',
+        srv = CuckooServer()
+        reactor.spawnProcess(srv, config.interpreter, [config.interpreter, '-u',
                                                        config.cuckoo_exec])
         reactor.run()
+    except Exception as e:
+        logger.exception(e)
     finally:
         server.shutdown()
 

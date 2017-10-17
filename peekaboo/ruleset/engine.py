@@ -45,12 +45,12 @@ from peekaboo.toolbox.peekabooyar import contains_peekabooyar
 logger = logging.getLogger(__name__)
 
 
-def evaluate(sample):
+def run_analysis(sample):
     """
     function that is run by a worker for every Sample object.
     """
     process_rules(sample)
-    logger.debug("Rules evaluated")
+    logger.info("Rules evaluated")
     report(sample)
     one_analysis_tool = OneAnalysis()
     one_analysis_tool.queue_identical_samples(sample)  # depends on already_in_progress
@@ -84,7 +84,7 @@ def rule(sample, rule_function, args={}):
                          further_analysis=True)
         sample.add_rule_result(res)
 
-    logger.debug("Rule '%s' processed for %s" % (function_name, sample))
+    logger.info("Rule '%s' processed for %s" % (function_name, sample))
     return res
 
 

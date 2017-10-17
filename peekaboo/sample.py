@@ -33,12 +33,11 @@ from datetime import datetime
 from peekaboo.config import get_config
 from peekaboo.exceptions import CuckooReportPendingException, \
                                 CuckooAnalysisFailedException
-from peekaboo.toolbox.sampletools import SampleMetaInfo, next_job_hash
+from peekaboo.toolbox.sampletools import SampleMetaInfo, ConnectionMap, next_job_hash
 from peekaboo.toolbox.files import chown2me, guess_mime_type_from_filename, \
                                    guess_mime_type_from_file_contents
 from peekaboo.toolbox.ms_office import has_office_macros
 from peekaboo.toolbox.cuckoo import submit_to_cuckoo
-from peekaboo.toolbox.sampletools import ConnectionMap
 import peekaboo.ruleset as ruleset
 
 
@@ -190,6 +189,32 @@ class Sample(object):
     def get_peekaboo_report(self):
         return ''.join(self.__report)
 
+    def get_job_hash(self):
+        job_hash = re.sub(self.__config.job_hash_regex, r'\1',
+                          self.__path)
+        if job_hash == self.__path:
+            # regex did not match.
+            # so we generate our own job hash and create the
+            # working directory.
+            job_hash = next_job_hash()
+            os.mkdir(os.path.join(self.__config.sample_base_dir,
+                                  job_hash))
+
+        logger.debug("Job hash for this sample: %s" % job_hash)
+        return job_hash
+
+    def load_meta_info(self, meta_info_file):
+        try:
+            self.__meta_info = SampleMetaInfo(meta_info_file)
+            logger.debug('Parsing meta info file %s for file %s' % (meta_info_file, self.__path))
+            # Add the information from the dump info file as attributes to the sample object.
+            for info in self.__meta_info.get_all().items('attachment'):
+                logger.debug('meta_info_%s = %s' % (info[0], info[1]))
+                self.set_attr('meta_info_' + info[0], info[1])
+            self.meta_info_loaded = True
+        except Exception:
+            logger.info('No metadata available for file %s' % self.__path)
+
     def save_result(self):
         if self.__db_con.known(self):
             logger.debug('Known sample info not logged to database')
@@ -218,6 +243,29 @@ class Sample(object):
             if rule_result.result > self.__result:
                 self.__result = rule_result.result
                 self.set_attr('reason', rule_result.reason)
+
+    def report(self):
+        """
+        Create the report for this sample. The report is saved as a list of
+        strings and is available via get_report(). Also, if a socket connection was
+        supplied to the sample the report messages are also written to the socket.
+        """
+        # TODO: move to rule processing engine.
+        self.determine_result()
+
+        for rule_result in self.get_attr('rule_results'):
+            message = "Datei \"%s\": %s\n" % (self.__filename, str(rule_result))
+            self.__report.append(message)
+            self.__send_message(message)
+
+        if self.__result == ruleset.Result.inProgress:
+            logger.warning('Ruleset result forces to unchecked.')
+            self.__result = ruleset.Result.unchecked
+
+        message = "Die Datei \"%s\" wurde als \"%s\" eingestuft\n\n" \
+                  % (self.__filename, self.__result.name)
+        self.__report.append(message)
+        self.__send_message(message)
 
     @property
     def sha256sum(self):
@@ -369,32 +417,6 @@ class Sample(object):
                     self.set_attr('cuckoo_failed', False)
         return self.get_attr('cuckoo_failed')
 
-    def get_job_hash(self):
-        job_hash = re.sub(self.__config.job_hash_regex, r'\1',
-                          self.__path)
-        if job_hash == self.__path:
-            # regex did not match.
-            # so we generate our own job hash and create the
-            # working directory.
-            job_hash = next_job_hash()
-            os.mkdir(os.path.join(self.__config.sample_base_dir,
-                                  job_hash))
-
-        logger.debug("Job hash for this sample: %s" % job_hash)
-        return job_hash
-
-    def load_meta_info(self, meta_info_file):
-        try:
-            self.__meta_info = SampleMetaInfo(meta_info_file)
-            logger.debug('Parsing meta info file %s for file %s' % (meta_info_file, self.__path))
-            # Add the information from the dump info file as attributes to the sample object.
-            for info in self.__meta_info.get_all().items('attachment'):
-                logger.debug('meta_info_%s = %s' % (info[0], info[1]))
-                self.set_attr('meta_info_' + info[0], info[1])
-            self.meta_info_loaded = True
-        except Exception:
-            logger.info('No metadata available for file %s' % self.__path)
-
     def __create_symlink(self):
         """
         creates a symlink to submit the file with correct
@@ -407,29 +429,6 @@ class Sample(object):
         logger.debug('ln -s %s %s' % (orig, self.__symlink))
 
         os.symlink(orig, self.__symlink)
-
-    def report(self):
-        """
-        Create the report for this sample. The report is saved as a list of
-        strings and is available via get_report(). Also, if a socket connection was
-        supplied to the sample the report messages are also written to the socket.
-        """
-        # TODO: move to rule processing engine.
-        self.determine_result()
-
-        for rule_result in self.get_attr('rule_results'):
-            message = "Datei \"%s\": %s\n" % (self.__filename, str(rule_result))
-            self.__report.append(message)
-            self.__send_message(message)
-
-        if self.__result == ruleset.Result.inProgress:
-            logger.warning('Ruleset result forces to unchecked.')
-            self.__result = ruleset.Result.unchecked
-
-        message = "Die Datei \"%s\" wurde als \"%s\" eingestuft\n\n" \
-                  % (self.__filename, self.__result.name)
-        self.__report.append(message)
-        self.__send_message(message)
 
     def __close_socket(self):
         logger.debug('Closing socket connection.')
