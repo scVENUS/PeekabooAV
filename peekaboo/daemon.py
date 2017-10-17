@@ -36,7 +36,7 @@ from sdnotify import SystemdNotifier
 from twisted.internet import reactor
 from peekaboo import _owl, __version__
 from peekaboo.config import PeekabooConfig
-from peekaboo.db import PeekabooDBHandler
+from peekaboo.db import PeekabooDatabase
 from peekaboo.cuckoo_wrapper import CuckooManager
 import peekaboo.pjobs as pjobs
 import peekaboo.sample as sample
@@ -162,10 +162,11 @@ def run():
 
     # establish a connection to the database
     try:
-        db_con = PeekabooDBHandler(config.db_url)
+        db_con = PeekabooDatabase(config.db_url)
         config.add_db_con(db_con)
     except Exception as e:
         logger.critical('Failed to establish a connection to the database.')
+        logger.exception(e)
         sys.exit(1)
 
     # Import debug module if we are in debug mode

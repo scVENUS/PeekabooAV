@@ -32,6 +32,10 @@ class PeekabooConfigException(PeekabooException):
     pass
 
 
+class PeekabooDatabaseError(PeekabooException):
+    pass
+
+
 class PeekabooRulesetException(PeekabooException):
     pass
 
