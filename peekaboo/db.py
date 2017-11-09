@@ -182,7 +182,6 @@ class PeekabooDatabase(object):
 
         :param sample: The sample object for this analysis task.
         """
-        print sample
         with self.__lock:
             session = self.__Session()
             analysis = AnalysisJournal()
@@ -195,13 +194,21 @@ class PeekabooDatabase(object):
                 AnalysisResult,
                 name=sample.get_result().name
             )
-            analysis.sample = PeekabooDatabase.__get_or_create(
+            # NOTE: We cannot determine if a known sample is inProgress again.
+            s = PeekabooDatabase.__get(
                 session,
                 SampleInfo,
                 sha256sum=sample.sha256sum,
                 file_extension=sample.file_extension,
-                result=analysis_result
             )
+            if s is None:
+                s = PeekabooDatabase.__create(
+                    SampleInfo,
+                    sha256sum=sample.sha256sum,
+                    file_extension=sample.file_extension,
+                    result=analysis_result
+                )
+            analysis.sample = s
             session.add(analysis)
             try:
                 session.commit()
@@ -461,6 +468,16 @@ class PeekabooDatabase(object):
         :return: An ORM instance or None.
         """
         return session.query(model).filter_by(**kwargs).first()
+
+    @staticmethod
+    def __create(model, **kwargs):
+        """
+        Create an ORM instance.
+
+        :param model: The model to create.
+        :return: An ORM instance of the given model.
+        """
+        return model(**kwargs)
 
     def __del__(self):
         self.__engine.dispose()
