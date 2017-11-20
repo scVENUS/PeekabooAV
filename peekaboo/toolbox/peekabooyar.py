@@ -2,7 +2,8 @@
 #                                                                             #
 # Peekaboo Extended Email Attachment Behavior Observation Owl                 #
 #                                                                             #
-# toolbox/peekabooyar.py                                                      #
+# toolbox/                                                                    #
+#         peekabooyar.py                                                      #
 ###############################################################################
 #                                                                             #
 # Copyright (C) 2016-2017  science + computing ag                             #
@@ -24,8 +25,6 @@
 
 
 import traceback
-import re
-import logging
 from peekaboo.ruleset import Result, RuleResult
 import yara
 
@@ -41,7 +40,8 @@ def contains_peekabooyar(s):
     tb = tb[-1]
     position = "%s:%s" % (tb[2], tb[1])
 
-    rules = yara.compile(source='''
+    rules = yara.compile(
+        source='''
         rule peekabooyar
         {
              strings:

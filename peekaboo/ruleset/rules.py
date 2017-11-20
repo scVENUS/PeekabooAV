@@ -2,7 +2,8 @@
 #                                                                             #
 # Peekaboo Extended Email Attachment Behavior Observation Owl                 #
 #                                                                             #
-# ruleset/rules.py                                                            #
+# ruleset/                                                                    #
+#         rules.py                                                            #
 ###############################################################################
 #                                                                             #
 # Copyright (C) 2016-2017  science + computing ag                             #
@@ -26,6 +27,7 @@
 import traceback
 import re
 import logging
+from peekaboo.config import get_config
 from peekaboo.ruleset import Result, RuleResult
 
 
@@ -37,10 +39,12 @@ def known(s):
     tb = tb[-1]
     position = "%s:%s" % (tb[2], tb[1])
 
-    if s.known:
+    db = get_config().get_db_con()
+    if db.known(s):
+        sample_info = db.sample_info_fetch(s)
         return RuleResult(position,
-                          result=s.get_result(),
-                          reason=s.reason,
+                          result=sample_info.get_result(),
+                          reason=sample_info.reason,
                           further_analysis=False)
 
     return RuleResult(position,
@@ -241,10 +245,9 @@ def cuckoo_evil_sig(s):
     ]
 
     sigs = []
-    data = s.cuckoo_report
 
     # look through matched signatures
-    for descr in data['signatures']:
+    for descr in s.cuckoo_report.signatures:
         logger.debug(descr['description'])
         sigs.append(descr['description'])
 

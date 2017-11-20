@@ -105,6 +105,12 @@ class SampleInfo(Base):
     result = relationship("AnalysisResult")
     reason = Column(Text, nullable=True)
 
+    def set_result(self, result):
+        self.__result = result
+
+    def get_result(self):
+        return self.__result
+
     def __str__(self):
         return ('<SampleInfo(sample_sha256_hash="%s", file_extension="%s", '
                 'reason="%s")>'
@@ -281,6 +287,8 @@ class PeekabooDatabase(object):
                 sha256sum=sample.sha256sum,
                 file_extension=sample.file_extension
             )
+            if sample_info:
+                sample_info.set_result(Result.from_string(sample_info.result.name))
             session.close()
         return sample_info
 

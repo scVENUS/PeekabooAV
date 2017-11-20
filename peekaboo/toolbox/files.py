@@ -2,8 +2,8 @@
 #                                                                             #
 # Peekaboo Extended Email Attachment Behavior Observation Owl                 #
 #                                                                             #
-# ruleset/                                                                    #
-#         __init__.py                                                         #
+# toolbox/                                                                    #
+#         files.py                                                            #
 ###############################################################################
 #                                                                             #
 # Copyright (C) 2016-2017  science + computing ag                             #
@@ -24,56 +24,42 @@
 ###############################################################################
 
 
-from enum import Enum, unique
+import logging
+import subprocess
+import mimetypes
+import magic
+from peekaboo.config import get_config
 
 
-@unique
-class Result(Enum):
-    """
-    @author: Felix Bauer
-    """
-    inProgress = 0
-    unchecked = 1
-    unknown = 2
-    ignored = 3
-    checked = 4
-    good = 5
-    bad = 6
-
-    @staticmethod
-    def from_string(result_str):
-        for i in Result:
-            if i.name == result_str:
-                return i
-        raise ValueError('%s: Element not found' % result_str)
-
-    def __gt__(self, other):
-        return self.value >= other.value
-
-    def __lt__(self, other):
-        return other.value >= self.value
+logger = logging.getLogger(__name__)
 
 
-class RuleResult:
-    """
-    @author: Felix Bauer
-    """
-    def __init__(self, rule,
-                 result=Result.unknown,
-                 reason='regel ohne Ergebnis',
-                 further_analysis=True):
-        self.rule = None
-        self.result = Result.unchecked
-        self.rule = rule
-        self.result = result
-        self.reason = reason
-        self.further_analysis = further_analysis
+def chown2me():
+    """ Acquire ownership of all directories under /tmp with the prefix "amavis-". """
+    # TODO: Find a better solution to acquire ownership and only for the directory currently in usse.
+    logger.debug('Invoking chown2me...')
+    config = get_config()
+    proc = subprocess.Popen(config.chown2me_exec,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE)
+    proc.wait()
+    if proc.returncode != 0:
+        logger.error('chown2me exited with code %d' % proc.returncode)
 
-    def __str__(self):
-        return ("Ergebnis \"%s\" der Regel %s - %s, Analyse wird fortgesetzt: %s."\
-                                                        % (self.result.name,
-                                                           self.rule,
-                                                           self.reason,
-                                                           'Ja' if self.further_analysis else 'Nein'))
 
-    __repr__ = __str__
+def guess_mime_type_from_filename(file_path):
+    """ Guess the type of a file based on its filename or URL. """
+    if not mimetypes.inited:
+        mimetypes.init()
+        mimetypes.add_type('application/javascript', '.jse')
+
+    mt = mimetypes.guess_type(file_path)[0]
+    if mt:
+        return mt
+
+
+def guess_mime_type_from_file_contents(file_path):
+    """  Get type from file magic bytes. """
+    mt = magic.from_file(file_path, mime=True)
+    if mt:
+        return mt
