@@ -104,7 +104,7 @@ def file_type_on_whitelist(s):
         logger.debug('Length of n: %s, Content of mtypes: %s' % (str(n),
                                                                  str(mtypes)))
 
-    if n > 0:
+    if n >= len(mtypes):
         return RuleResult(position,
                           result=Result.ignored,
                           reason="Dateityp ist auf Whitelist",
