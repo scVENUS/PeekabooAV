@@ -186,7 +186,7 @@ class CuckooReport(object):
         """
         config = get_config()
         cuckoo_report = os.path.join(
-            config.cuckoo_storage, 'run_analysis/%d/reports/report.json'
+            config.cuckoo_storage, 'analyses/%d/reports/report.json'
                                    % self.job_id
         )
 
