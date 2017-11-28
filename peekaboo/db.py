@@ -159,18 +159,11 @@ class PeekabooDatabase(object):
 
         :param db_url: An RFC 1738 URL that points to the database.
         """
-        self.__engine = create_engine(db_url)
-        self.__db_con = None
+        self.__engine = create_engine(db_url, pool_recycle=1)
         session_factory = sessionmaker(bind=self.__engine)
         self.__Session = scoped_session(session_factory)
         self.__lock = threading.RLock()
-        try:
-            self.__db_con = self.__engine.connect()
-        except SQLAlchemyError as e:
-            raise PeekabooDatabaseError(
-                'Unable to connect to the database: %s' % e
-            )
-        if not self.__db_con.dialect.has_table(self.__engine, '_meta'):
+        if not self.__engine.dialect.has_table(self.__engine, '_meta'):
             self._init_db()
             logger.debug('Database schema created.')
         else:
@@ -385,10 +378,6 @@ class PeekabooDatabase(object):
             raise PeekabooDatabaseError(
                 'Unable to drop all tables of the database: %s' % e
             )
-
-    def close(self):
-        """ Close the database connection. """
-        self.__db_con.close()
 
     def _init_db(self):
         """
