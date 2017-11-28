@@ -193,11 +193,14 @@ def dump_processing_info(sample):
     if sample.has_attr('cuckoo_json_report_file'):
         # Cuckoo report
         try:
-            # HTML
-            copyfile(sample.get_attr('cuckoo_json_report_file').replace('json', 'html'),
-                     os.path.join(dump_dir, filename + '.html'))
             # JSON
             copyfile(sample.get_attr('cuckoo_json_report_file'),
                      os.path.join(dump_dir, filename + '.json'))
+        except Exception as e:
+            logger.exception(e)
+        try:
+            # HTML
+            copyfile(sample.get_attr('cuckoo_json_report_file').replace('json', 'html'),
+                     os.path.join(dump_dir, filename + '.html'))
         except Exception as e:
             logger.exception(e)
