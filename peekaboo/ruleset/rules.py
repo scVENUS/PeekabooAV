@@ -271,6 +271,26 @@ def cuckoo_evil_sig(s):
                       further_analysis=False)
 
 
+def cuckoo_score(s, args):
+    tb = traceback.extract_stack()
+    tb = tb[-1]
+    position = "%s:%s" % (tb[2], tb[1])
+
+    threshold = args['higher']
+    if s.cuckoo_report.score >= threshold:
+        return RuleResult(position,
+                          result=Result.bad,
+                          reason="Cuckoo score >= %s: %s"
+                          % (threshold, s.cuckoo_report.score),
+                          further_analysis=False)
+
+    return RuleResult(position,
+                      result=Result.unknown,
+                      reason="Cuckoo score < %s: %s"
+                      % (threshold, s.cuckoo_report.score),
+                      further_analysis=True)
+
+
 def office_macro(s):
     tb = traceback.extract_stack()
     tb = tb[-1]

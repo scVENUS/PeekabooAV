@@ -135,6 +135,10 @@ def process_rules(sample):
     if not p.further_analysis:
         return
 
+    p = rule(s, cuckoo_score, {"higher": 4.0})
+    if not p.further_analysis:
+        return
+
     p = rule(s, cuckoo_analysis_failed)
     if not p.further_analysis:
         return
