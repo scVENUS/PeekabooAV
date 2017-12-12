@@ -394,8 +394,9 @@ class Sample(object):
     def cuckoo_report(self):
         if not self.has_attr('cuckoo_report'):
             try:
-                logger.debug("Submitting %s to Cuckoo" % self.__path)
-                job_id = submit_to_cuckoo(self.__path)
+                file_for_analysis = os.path.join(self.__wd, self.__symlink)
+                logger.debug("Submitting %s to Cuckoo" % file_for_analysis)
+                job_id = submit_to_cuckoo(file_for_analysis)
                 self.set_attr('job_id', job_id)
                 message = 'Erfolgreich an Cuckoo gegeben %s als Job %d\n' \
                           % (self, job_id)
