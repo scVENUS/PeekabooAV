@@ -384,7 +384,7 @@ class Sample(object):
             try:
                 self.set_attr(
                     'requested_domains',
-                    self.get_attr('cuckoo_report').requested_domains()
+                    self.get_attr('cuckoo_report').requested_domains
                 )
             except KeyError:
                 self.set_attr('requested_domains', [])

@@ -214,6 +214,10 @@ class CuckooReport(object):
         return self.report['signatures']
 
     @property
+    def score(self):
+        return self.report['info']['score']
+
+    @property
     def analysis_failed(self):
         if self.errors:
             logger.warning('Cuckoo run_analysis failed. Reason: %s' % str(self.errors))
