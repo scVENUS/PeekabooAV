@@ -193,7 +193,6 @@ def run():
 
     try:
         runner.start()
-        systemd.notify("READY=1")
         logger.info('Peekaboo server is listening on %s' % server.server_address)
 
         os.chmod(config.sock_file, stat.S_IWOTH | stat.S_IREAD |
@@ -205,6 +204,7 @@ def run():
         srv = CuckooServer()
         reactor.spawnProcess(srv, config.interpreter, [config.interpreter, '-u',
                                                        config.cuckoo_exec])
+        systemd.notify("READY=1")
         reactor.run()
     except Exception as e:
         logger.exception(e)
