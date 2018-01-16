@@ -26,7 +26,7 @@
 import re
 
 
-VERSION = (1, 4)
+VERSION = (1, 5)
 AUTHORS = ['Felix Bauer', 'Sebastian Deiss']
 
 __version__ = '.'.join(map(str, VERSION))
@@ -50,11 +50,11 @@ Peekaboo Extended Email Attachment Behavior Observation Owl
                      -*Xa_a_a_WUW##KUL_a_a_aX7'
                     _aXUXUUU4UUX4XX444UUUUUUXLa,
                    _UXXUXUXU47'!'!'!'!*X444U4UXX,
-                   ?XU4U4''   _  _  _    -'UUXUUi
-                   ?4U4'     / || || |      'UUXi
-                    *Xi      | || || |       ?X7
-                     *L      | ||__   _|     j7
-                      *a     |_(_) |_|      jY
+                   ?XU4U4''   _   ____   -'UUXUUi
+                   ?4U4'     / | | ___|     'UUXi
+                    *Xi      | | |___ \      ?X7
+                     *L      | |_ ___) |     j7
+                      *a     |_(_)____/     jY
                        -L,                _/'
                          'l,            _/'
                            j7_a_;  aaa/4
