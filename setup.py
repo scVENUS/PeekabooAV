@@ -53,7 +53,7 @@ system('cd bin/ && make chown2me')
 
 
 setup(
-    name='Peekaboo',
+    name='PeekabooAV',
     version=__version__,
     description=__description__,
     long_description=long_description,
