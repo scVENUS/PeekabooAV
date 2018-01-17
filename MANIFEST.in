@@ -1,6 +1,6 @@
-include LICENSE.txt
 include README.md
+include LICENSE.txt
+include bin/chown2me.c
 include requirements.txt
 include peekaboo.conf.sample
-include test.py
-recursive-include systemd/ *
+include systemd/peekaboo.service
