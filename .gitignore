@@ -20,7 +20,7 @@ bin/chown2me
 # Sphinx output
 docs/build
 # build files
-Peekaboo.egg-info/
+*.egg-info/
 build/
 dist/
 .eggs/
