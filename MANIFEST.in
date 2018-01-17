@@ -1,0 +1,6 @@
+include LICENSE.txt
+include README.md
+include requirements.txt
+include peekaboo.conf.sample
+include test.py
+recursive-include systemd/ *
