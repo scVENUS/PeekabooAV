@@ -402,6 +402,7 @@ class Sample(object):
                           % (self, job_id)
                 self.__report.append(message)
                 logger.info('Sample submitted to Cuckoo. Job ID: %s. Sample: %s' % (job_id, self))
+                self.__db_con.analysis_update(self)
                 raise CuckooReportPendingException()
             except CuckooAnalysisFailedException as e:
                 logger.exception(e)

@@ -78,7 +78,7 @@ class AnalysisResult(Base):
 
     @author: Sebastian Deiss
     """
-    __tablename__ = 'analysis_result_v2'
+    __tablename__ = 'analysis_result_v3'
 
     id = Column(Integer, primary_key=True)
     name = Column(String(255), nullable=False)
@@ -95,12 +95,12 @@ class SampleInfo(Base):
 
     @author: Sebastian Deiss
     """
-    __tablename__ = 'sample_info_v2'
+    __tablename__ = 'sample_info_v3'
 
     id = Column(Integer, primary_key=True)
     sha256sum = Column(String(64), nullable=False)
     file_extension = Column(String(16), nullable=True)
-    result_id = Column(Integer, ForeignKey('analysis_result_v2.id'),
+    result_id = Column(Integer, ForeignKey('analysis_result_v3.id'),
                        nullable=False)
     result = relationship("AnalysisResult")
     reason = Column(Text, nullable=True)
@@ -127,20 +127,22 @@ class AnalysisJournal(Base):
 
     @author: Sebastian Deiss
     """
-    __tablename__ = 'analysis_jobs_v2'
+    __tablename__ = 'analysis_jobs_v3'
 
     id = Column(Integer, primary_key=True)
     job_hash = Column(String(255), nullable=False)
+    cuckoo_job_id = Column(Integer, nullable=False)
     filename = Column(String(255), nullable=False)
     analyses_time = Column(DateTime, nullable=False)
-    sample_id = Column(Integer, ForeignKey('sample_info_v2.id'),
+    sample_id = Column(Integer, ForeignKey('sample_info_v3.id'),
                        nullable=False)
     sample = relationship('SampleInfo')
 
     def __str__(self):
         return (
-            '<AnalysisJournal(job_hash="%s", filename="%s", analysis_time="%s")>'
+            '<AnalysisJournal(job_hash="%s", cuckoo_job_id="%s", filename="%s", analysis_time="%s")>'
             % (self.job_hash,
+               self.cuckoo_job_id,
                self.filename,
                self.analyses_time.strftime("%Y%m%dT%H%M%S"))
         )
@@ -185,6 +187,7 @@ class PeekabooDatabase(object):
             session = self.__Session()
             analysis = AnalysisJournal()
             analysis.job_hash = sample.get_job_hash()
+            analysis.cuckoo_job_id = sample.job_id
             analysis.filename = sample.get_filename()
             analysis.analyses_time = datetime.strptime(sample.analyses_time,
                                                        "%Y%m%dT%H%M%S")
@@ -218,6 +221,28 @@ class PeekabooDatabase(object):
                 )
             finally:
                 session.close()
+
+    def analysis_update(self, sample):
+        with self.__lock:
+            session = self.__Session()
+            analysis = self.__get(
+                session,
+                AnalysisJournal,
+                job_hash=sample.get_job_hash(),
+                filename=sample.get_filename()
+            )
+            if analysis:
+                analysis.cuckoo_job_id = sample.job_id
+                session.add(analysis)
+                try:
+                    session.commit()
+                except SQLAlchemyError as e:
+                    session.rollback()
+                    raise PeekabooDatabaseError(
+                        'Failed to update analysis task in the database: %s' % e
+                    )
+                finally:
+                    session.close()
 
     def sample_info_update(self, sample):
         """
@@ -402,7 +427,7 @@ class PeekabooDatabase(object):
         Base.metadata.create_all(self.__engine)
         meta = PeekabooMetadata()
         meta.peekaboo_version = __version__
-        meta.db_schema_version = 2
+        meta.db_schema_version = 3
         # TODO: Get Cuckoo version.
         meta.cuckoo_version = '2.0'
         session = self.__Session()
