@@ -115,7 +115,9 @@ class PeekabooStreamRequestHandler(SocketServer.StreamRequestHandler):
 
 def run():
     """ Runs the daemon. """
-    arg_parser = ArgumentParser()
+    arg_parser = ArgumentParser(
+        description='Peekaboo Extended Email Attachment Behavior Observation Owl'
+    )
     arg_parser.add_argument(
         '-c', '--config',
         action='store',
