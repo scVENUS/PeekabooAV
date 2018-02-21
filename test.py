@@ -75,9 +75,6 @@ class PeekabooDummyDB(object):
     def in_progress(self, sha256):
         return True
 
-    def close(self):
-        pass
-
     def _clear_in_progress(self):
         pass
 
@@ -137,7 +134,6 @@ class TestDatabase(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        cls.conf.db_con.close()
         os.unlink(cls.test_db)
 
 
@@ -220,7 +216,6 @@ class TestSample(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        cls.conf.db_con.close()
         os.unlink(cls.test_db)
         os.unlink('./test_meta_info.info')
         os.unlink('./junk.info')
