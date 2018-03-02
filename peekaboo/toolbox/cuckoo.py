@@ -199,8 +199,11 @@ class CuckooReport(object):
             )
             self.file_path = cuckoo_report
             with open(cuckoo_report) as data:
-                report = json.load(data)
-                self.report = report
+                try:
+                    report = json.load(data)
+                    self.report = report
+                except ValueError as e:
+                    logger.exception(e)
 
     @property
     def requested_domains(self):
