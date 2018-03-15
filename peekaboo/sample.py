@@ -90,7 +90,7 @@ class Sample(object):
         self.__socket = sock
         # Additional attributes for a sample object (e. g. meta info)
         self.__attributes = {}
-        self.initalized = False
+        self.initialized = False
         self.meta_info_loaded = False
 
     def init(self):
@@ -103,7 +103,7 @@ class Sample(object):
         Instead, it only adds the sample objects to the queue and the workers
         to the actual initialization.
         """
-        if self.initalized:
+        if self.initialized:
             return
 
         logger.debug("initializing sample")
@@ -121,7 +121,7 @@ class Sample(object):
             self.__create_symlink()
         except OSError:
             pass
-        self.initalized = True
+        self.initialized = True
 
         # Add sample to database with state 'inProgress' if the sample is unknown
         # to avoid multiple concurrent analysis.
