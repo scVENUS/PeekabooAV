@@ -516,9 +516,3 @@ class PeekabooDatabase(object):
 
     def __del__(self):
         self.__engine.dispose()
-
-    def __str__(self):
-        return '<PeekabooDatabase(connected="%s")>' % \
-               'yes' if self.__db_con is not None else 'no'
-
-    __repr__ = __str__
