@@ -83,12 +83,12 @@ class Sample(object):
         self.__wd = None
         self.__filename = os.path.basename(self.__path)
         # A symlink that points to the actual file named
-        # <sha256sum>.suffix
+        # sha256sum.suffix
         self.__symlink = None
         self.__result = ruleset.Result.unchecked
         self.__report = []  # Peekaboo's own report
         self.__socket = sock
-        # Additional attributes for a sample object (e. g. dump info)
+        # Additional attributes for a sample object (e. g. meta info)
         self.__attributes = {}
         self.initalized = False
         self.meta_info_loaded = False
@@ -98,7 +98,7 @@ class Sample(object):
         Initialize the Sample object.
 
         The actual initialization is done here, because the main thread should
-        not do the heavy lifting of e. g. parsing the dump_info file to be able
+        not do the heavy lifting of e. g. parsing the meta info file to be able
         to accept new connections as quickly as possible.
         Instead, it only adds the sample objects to the queue and the workers
         to the actual initialization.
@@ -123,8 +123,8 @@ class Sample(object):
             pass
         self.initalized = True
 
-        # add sample to database with state inProgress if sample unknown
-        # to avoid multiple concurrent analysis
+        # Add sample to database with state 'inProgress' if the sample is unknown
+        # to avoid multiple concurrent analysis.
         self.__result = ruleset.Result.inProgress
         self.__db_con.analysis2db(self)
 
@@ -247,7 +247,7 @@ class Sample(object):
     def report(self):
         """
         Create the report for this sample. The report is saved as a list of
-        strings and is available via get_report(). Also, if a socket connection was
+        strings and is available via get_peekaboo_report(). Also, if a socket connection was
         supplied to the sample the report messages are also written to the socket.
         """
         # TODO: move to rule processing engine.
@@ -301,16 +301,14 @@ class Sample(object):
     @property
     def mimetypes(self):
         """
-        Can not be cached (hard to determine if known/complete)
+        Can not be cached (hard to determine if known/complete).
 
         determine mime on original p[0-9]* file
         later result will be "inode/symlink"
-        maybe even get this information from dump_info
-        (compare in rule only)
         """
         mtypes = []
 
-        # get types from dump_info
+        # get types from meta info
         try:
             declared_mt = self.__meta_info.get_mime_type()
             mtypes.append(declared_mt)
@@ -421,7 +419,7 @@ class Sample(object):
 
     def __create_symlink(self):
         """
-        creates a symlink to submit the file with correct
+        creates a symlink to submit the file with the correct
         file extension to cuckoo via submit.py.
         """
         orig = os.path.join(self.__wd, self.__filename)

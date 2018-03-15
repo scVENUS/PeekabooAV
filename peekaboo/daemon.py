@@ -73,9 +73,14 @@ class PeekabooStreamServer(SocketServer.ThreadingUnixStreamServer):
 
 
 class PeekabooStreamRequestHandler(SocketServer.StreamRequestHandler):
+    """
+    Request handler used by PeekabooStreamServer to handle analysis requests.
+
+    @author: Sebastian Deiss
+    """
     def handle(self):
         """
-        Handles an run_analysis request. The path of the directory / file to analyse must
+        Handles a analysis request. The path of the directory / file to analyse must
         be written to the corresponding socket.
         The maximum buffer size is 1024 bytes.
         """
@@ -110,11 +115,9 @@ class PeekabooStreamRequestHandler(SocketServer.StreamRequestHandler):
                 ConnectionMap.add(self.request, sample)
                 JobQueue.submit(sample, self.__class__)
 
-    # TODO: do cleanup work here in finish()
-
 
 def run():
-    """ Runs the daemon. """
+    """ Runs the Peekaboo daemon. """
     arg_parser = ArgumentParser(
         description='Peekaboo Extended Email Attachment Behavior Observation Owl'
     )

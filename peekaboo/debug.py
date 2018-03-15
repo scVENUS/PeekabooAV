@@ -23,22 +23,6 @@
 ###############################################################################
 
 
-# DO NOT USE IN PRODUCTION!!
-#
-# import this to your project and connect to debug2.sock
-#  socket $(pwd)/debug2.sock
-# execute (by line) python code
-# redirects all input/output to socket connection
-#
-#
-# import threading; print threading.activeCount()
-#
-# import pjobs
-# for W in pjobs.Workers.w: print W.isAlive()
-# print pjobs.Workers.q.qsize()
-# print pjobs.Jobs.jobs
-
-
 import socket
 import os
 import fileinput
@@ -51,6 +35,14 @@ logger = logging.getLogger(__name__)
 
 
 def debug():
+    """
+    Create a file socket to execute (by line) python code.
+    All input / output is redirected to the socket connection.
+    DO NOT USE THIS MODULE IN PRODUCTION!
+
+    Usage:
+      socket /path/to/debug.sock
+    """
     sockfile = os.path.abspath('./debug.sock')
     s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     try:

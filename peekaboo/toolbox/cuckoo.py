@@ -169,7 +169,7 @@ class CuckooServer(protocol.ProcessProtocol):
 
 class CuckooReport(object):
     """
-    Wrapper around a Cuckoo analysis report (JSON file).
+    Represents a Cuckoo analysis JSON report.
 
     @author: Sebastian Deiss
     """
@@ -207,6 +207,11 @@ class CuckooReport(object):
 
     @property
     def requested_domains(self):
+        """
+        Gets the requested domains from the Cuckoo report.
+
+        :return: The requested domains from the Cuckoo report.
+        """
         try:
             return [d['request'] for d in self.report['network']['dns']]
         except KeyError:
@@ -214,14 +219,29 @@ class CuckooReport(object):
 
     @property
     def signatures(self):
+        """
+        Gets the triggered signatures from the Cuckoo report.
+
+        :return: The triggered signatures from the Cuckoo report.
+        """
         return self.report['signatures']
 
     @property
     def score(self):
+        """
+        Gets the score from the Cuckoo report.
+
+        :return: The score from the Cuckoo report.
+        """
         return self.report['info']['score']
 
     @property
     def analysis_failed(self):
+        """
+        Has the Cuckoo analysis failed?
+
+        :return: True if the Cuckoo analysis failed, otherwise False.
+        """
         if self.errors:
             logger.warning('Cuckoo run_analysis failed. Reason: %s' % str(self.errors))
             return True

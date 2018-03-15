@@ -35,6 +35,11 @@ logger = logging.getLogger(__name__)
 
 
 def create_workers(worker_count=4):
+    """
+    Create n Peekaboo worker threads to process samples.
+
+    :param worker_count: The amount of worker threads to create. Defaults to 4.
+    """
     for i in range(0, worker_count):
         logger.debug("Create Worker %d" % i)
         w = Worker(i)
@@ -71,7 +76,7 @@ class JobQueue(Singleton):
 
 class Worker(Thread):
     """
-    A Worker to process a sample.
+    A Worker thread to process a sample.
 
     @author: Sebastian Deiss
     """

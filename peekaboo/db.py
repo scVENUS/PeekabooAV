@@ -223,6 +223,13 @@ class PeekabooDatabase(object):
                 session.close()
 
     def analysis_update(self, sample):
+        """
+        Update an analysis task in the database.
+        This method is called if a sample object was processed by Cuckoo and therefore
+        has a Cuckoo job ID, which we want to store in the database.
+
+        :param sample: The sample object containing the info to update.
+        """
         with self.__lock:
             session = self.__Session()
             analysis = self.__get(
@@ -248,7 +255,7 @@ class PeekabooDatabase(object):
         """
         Update sample information.
 
-        :param sample: The sample object containing the info to update
+        :param sample: The sample object containing the info to update.
         """
         with self.__lock:
             session = self.__Session()
@@ -297,6 +304,12 @@ class PeekabooDatabase(object):
             )
 
     def sample_info_fetch(self, sample):
+        """
+        Fetch information stored in the database about a given sample object.
+
+        :param sample: The sample object of which the information shall be fetched from the database.
+        :return: A SampleInfo object containing the information stored in teh database about the sample.
+        """
         with self.__lock:
             session = self.__Session()
             sample_info = PeekabooDatabase.__get(
@@ -344,7 +357,7 @@ class PeekabooDatabase(object):
 
     def known(self, sample):
         """
-        Check if we already know a sample with its SHA-256 hash.
+        Check if we already have a sample in the database by its SHA-256 hash.
 
         :param sample: The Sample object to check.
         """
@@ -365,7 +378,7 @@ class PeekabooDatabase(object):
 
     def in_progress(self, sample):
         """
-        Check if a sample is in progress using it's SHA-256 hash.
+        Check if a sample is in progress using its SHA-256 hash.
 
         :param sample: The Sample object to check.
         """
@@ -471,7 +484,7 @@ class PeekabooDatabase(object):
     @staticmethod
     def __get_or_create(session, model, **kwargs):
         """
-        Get an ORM instance or create it if not exist.
+        Get an ORM instance or create it if does not exist.
 
         :param session: An SQLAlchemy session object.
         :param model: The model to query.
