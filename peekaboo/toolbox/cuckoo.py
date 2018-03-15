@@ -59,8 +59,8 @@ def submit_to_cuckoo(sample):
         raise CuckooAnalysisFailedException(e)
 
     if not p.returncode == 0:
-        # TODO: tell opponent on socket that file has not been checked
-        raise CuckooAnalysisFailedException('cuckoo sumbit returned a non-zero return code.')
+        # TODO: tell opponent on socket that file has not been checked.
+        raise CuckooAnalysisFailedException('cuckoo submit returned a non-zero return code.')
     else:
         out, err = p.communicate()
         logger.debug("cuckoo submit STDOUT: %s" % out)

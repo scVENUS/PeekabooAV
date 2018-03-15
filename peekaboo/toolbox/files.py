@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 def chown2me():
     """ Acquire ownership of all directories under /tmp with the prefix "amavis-". """
-    # TODO: Find a better solution to acquire ownership and only for the directory currently in usse.
+    # TODO: Find a better solution to acquire ownership and only for the directory currently in use.
     logger.debug('Invoking chown2me...')
     config = get_config()
     proc = subprocess.Popen(config.chown2me_exec,
