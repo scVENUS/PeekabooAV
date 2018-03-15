@@ -60,9 +60,19 @@ class SampleMetaInfo(object):
         self.meta_info.read(self.__meta_info_file)
 
     def get_all(self):
+        """
+        Gets the parsed meta info file.
+
+        :return: A ConfigParser instance for the parsed meta info file.
+        """
         return self.meta_info
 
     def get_mime_type(self):
+        """
+        Gets the MIME type parsed from the meta info file field 'type_declared'.
+
+        :return: The MIME type from the meta info file field 'type_declared'.
+        """
         return self.meta_info.get('attachment', 'type_declared')
 
     def __str__(self):
@@ -72,7 +82,7 @@ class SampleMetaInfo(object):
 class ConnectionMap(Singleton):
     """
     Maps socket objects with one or more samples.
-    This is required for the reporting so we know which
+    This is required for the reporting, so we know which
     Sample objects belong to which socket connection.
 
     @author: Sebastian Deiss
@@ -87,7 +97,7 @@ class ConnectionMap(Singleton):
         socket object and a list of Sample objects.
 
         :param socket: The socket object to add.
-        :param sample: The corresponding Samples objects for a connection.
+        :param sample: The corresponding Samples objects for the socket.
         :return:The length of the connection map.
         """
         with ConnectionMap.__lock:
@@ -103,7 +113,7 @@ class ConnectionMap(Singleton):
         """
         Remove a Sample or an entry from the connection map. First, we
         remove the given Sample object from the list of Sample objects of
-        the given connection. If the sample list is empty, we remove the
+        the given socket. If the sample list is empty, we remove the
         entire entry from the map.
 
         :param socket: A socket object, which is related to the sample.
@@ -134,7 +144,7 @@ class ConnectionMap(Singleton):
 
     @staticmethod
     def _dump():
-        """ Get the connection map. This method might be usefule for debugging. """
+        """ Get the connection map. This method might be useful for debugging. """
         return ConnectionMap.__map
 
     @staticmethod
@@ -190,9 +200,9 @@ class ConnectionMap(Singleton):
     @staticmethod
     def get_samples_by_sha256(sha256sum):
         """
-        Get all Sample objects from the map by their SHA-256 checksums.
+        Get all Sample objects from the map with the same SHA-256 checksum.
 
-        :param sha256sum: The SHA-256 checksum of the files represented by Sample objects.
+        :param sha256sum: A SHA-256 checksum to search for.
         :return: The Sample objects with the given SHA-256 checksum or None.
         """
         with ConnectionMap.__lock:
