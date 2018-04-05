@@ -445,8 +445,11 @@ class Sample(object):
 
     def __cleanup_temp_files(self):
         try:
-            logger.debug("Deleting tempdir %s" % self.__wd)
-            shutil.rmtree(self.__wd)
+            if self.__config.keep_mail_data:
+                logger.debug('Keeping mail data in %s' % self.__wd)
+            else:
+                logger.debug("Deleting tempdir %s" % self.__wd)
+                shutil.rmtree(self.__wd)
         except OSError as e:
             logger.exception(e)
 

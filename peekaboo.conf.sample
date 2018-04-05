@@ -17,6 +17,8 @@ job_hash_regex   :    /var/lib/amavis/tmp/([^/]+)/parts.*
 # 'yes' or 'no'  to use Peekaboo's debug module, which allows
 # additional code execution at runtime.
 use_debug_module :    no
+# Whether or not to cleanup temporary files under /tmp
+keep_mail_data   :    no
 
 
 #
