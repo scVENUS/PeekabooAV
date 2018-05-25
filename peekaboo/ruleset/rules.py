@@ -79,20 +79,8 @@ def file_type_on_whitelist(config, s):
     position = "%s:%s" % (tb[2], tb[1])
 
     whitelist = config['file_type_on_whitelist']['whitelist']
-    # analysis wanted for file type
-    mtypes = s.mimetypes
-    n = 0
-    logger.debug("Filetype is %s" % mtypes)
-    for mtype in mtypes:
-        if mtype in whitelist:
-            n = n + 1
 
-    # TODO: Check if one hit on the whitelist is sufficient!
-    if n != len(mtypes):
-        logger.debug('Length of n: %s, Content of mtypes: %s' % (str(n),
-                                                                 str(mtypes)))
-
-    if n >= len(mtypes):
+    if s.mimetype in whitelist:
         return RuleResult(position,
                           result=Result.ignored,
                           reason="Dateityp ist auf Whitelist",
@@ -111,15 +99,11 @@ def file_type_on_greylist(config, s):
 
     greylist = config['file_type_on_greylist']['greylist']
 
-    mtypes = s.mimetypes
-    logger.debug("filetype is %s" % mtypes)
-
-    for mtype in mtypes:
-        if mtype in greylist:
-            return RuleResult(position,
-                              result=Result.unknown,
-                              reason="Dateityp ist auf der Liste der zu analysiserenden Typen",
-                              further_analysis=True)
+    if s.mimetype in greylist:
+        return RuleResult(position,
+                          result=Result.unknown,
+                          reason="Dateityp ist auf der Liste der zu analysiserenden Typen",
+                          further_analysis=True)
 
     return RuleResult(position,
                       result=Result.unknown,

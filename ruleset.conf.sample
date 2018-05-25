@@ -21,6 +21,9 @@ whitelist.1 : text/plain
 whitelist.2 : message/rfc822
 whitelist.3 : inode/x-empty
 whitelist.4 : application/pkcs7-signature
+whitelist.5 : application/x-pkcs7-signature
+whitelist.6 : application/pkcs7-mime
+whitelist.7 : application/x-pkcs7-mime
 score       : -100
 
 [file_type_on_greylist]

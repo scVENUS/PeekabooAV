@@ -34,8 +34,7 @@ from peekaboo.config import get_config
 from peekaboo.exceptions import CuckooReportPendingException, \
                                 CuckooAnalysisFailedException
 from peekaboo.toolbox.sampletools import SampleMetaInfo, ConnectionMap, next_job_hash
-from peekaboo.toolbox.files import chown2me, guess_mime_type_from_filename, \
-                                   guess_mime_type_from_file_contents
+from peekaboo.toolbox.files import chown2me, guess_mime_type_from_file_contents
 from peekaboo.toolbox.ms_office import has_office_macros
 from peekaboo.toolbox.cuckoo import submit_to_cuckoo
 import peekaboo.ruleset as ruleset
@@ -299,40 +298,37 @@ class Sample(object):
         return self.get_attr('file_extension')
 
     @property
-    def mimetypes(self):
+    def mimetype(self):
         """
         Can not be cached (hard to determine if known/complete).
 
         determine mime on original p[0-9]* file
         later result will be "inode/symlink"
         """
-        mtypes = []
+        mime_type = None
 
-        # get types from meta info
+        # get MIME type from meta info
         try:
             declared_mt = self.__meta_info.get_mime_type()
-            mtypes.append(declared_mt)
+            if declared_mt is not None:
+                logger.debug('Sample declared as "%s"' % declared_mt)
+                mime_type = declared_mt
         except Exception as e:
             logger.exception(e)
             if self.meta_info_loaded:
                 logger.error('Cannot get mime type from meta info although meta info is loaded.')
 
-        if self.__symlink:
-            symlink_mt = guess_mime_type_from_filename(self.__symlink)
-            mtypes.append(symlink_mt)
-
-        file_mt = guess_mime_type_from_file_contents(self.__path)
-        mtypes.append(file_mt)
+        detected_mime_type = guess_mime_type_from_file_contents(self.__path)
+        if detected_mime_type != mime_type:
+            logger.debug(
+                'Detected MIME type does not match declared MIME Type. %s != %s.'
+                % (mime_type, detected_mime_type)
+            )
+            logger.debug('Overwriting declared MIME Type with "%s"' % detected_mime_type)
+            mime_type = detected_mime_type
 
         if not self.has_attr('mimetypes'):
-            self.set_attr('mimetypes', mtypes)
-        else:
-            # merge lists
-            current_mt = self.get_attr('mimetypes')
-            new_mt = list(set(mtypes + current_mt))
-            self.set_attr('mimetypes', new_mt)
-
-        logger.debug('Mime type: %s' % self.get_attr('mimetypes'))
+            self.set_attr('mimetypes', mime_type)
 
         return self.get_attr('mimetypes')
 

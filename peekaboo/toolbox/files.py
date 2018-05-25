@@ -26,7 +26,6 @@
 
 import logging
 import subprocess
-import mimetypes
 import magic
 from peekaboo.config import get_config
 
@@ -45,17 +44,6 @@ def chown2me():
     proc.wait()
     if proc.returncode != 0:
         logger.error('chown2me exited with code %d' % proc.returncode)
-
-
-def guess_mime_type_from_filename(file_path):
-    """ Guess the type of a file based on its filename or URL. """
-    if not mimetypes.inited:
-        mimetypes.init()
-        mimetypes.add_type('application/javascript', '.jse')
-
-    mt = mimetypes.guess_type(file_path)[0]
-    if mt:
-        return mt
 
 
 def guess_mime_type_from_file_contents(file_path):
