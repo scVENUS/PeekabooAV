@@ -88,6 +88,8 @@ class PeekabooConfig(object):
         self.use_debug_module = None
         self.keep_mail_data = None
         self.db_url = None
+        self.ruleset_config = None
+        self.score_threshold = None
         self.cuckoo_storage = None
         self.cuckoo_exec = None
         self.cuckoo_submit = None
@@ -122,6 +124,8 @@ class PeekabooConfig(object):
                 'global', 'keep_mail_data'
             ) == 'yes' else False
             self.db_url = config.get('db', 'url')
+            self.ruleset_config = config.get('ruleset', 'config')
+            self.score_threshold = config.get('ruleset', 'score_threshold')
             self.cuckoo_storage = config.get('cuckoo', 'storage_path')
             self.cuckoo_exec = config.get('cuckoo', 'exec')
             self.cuckoo_submit = config.get('cuckoo', 'submit').split(' ')
@@ -192,5 +196,48 @@ class PeekabooConfig(object):
             for key, value in self.__config.items(section):
                 sections[section][key] = value
         return '<PeekabooConfig(%s)>' % str(sections)
+
+    __repr__ = __str__
+
+
+class PeekabooRulesetConfiguration(object):
+    """
+    This class represents the ruleset configuration file "ruleset.conf".
+
+    The ruleset configuration is stored as a dictionary in the form of
+    ruleset_config[rule_name][config_option] = value | [value1, value2, ...]
+
+    @author: Sebastian Deiss
+    @since: 1.6
+    """
+    def __init__(self, config_file):
+        self.config_file = config_file
+        self.ruleset_config = {}
+
+    def parse(self):
+        config = SafeConfigParser()
+        try:
+            config.read(self.config_file)
+            for section in config.sections():
+                if section not in self.ruleset_config.keys():
+                    self.ruleset_config[section] = {}
+                for setting, value in config.items(section):
+                    if '.' in setting:
+                        key = setting.split('.')[0]
+                        if key not in self.ruleset_config[section]:
+                            self.ruleset_config[section][key] = []
+                        self.ruleset_config[section][key].append(value)
+                    else:
+                        self.ruleset_config[section][setting] = value
+        except NoSectionError as e:
+            logger.exception(e)
+        except NoOptionError as e:
+            logger.exception(e)
+
+    def get_config(self):
+        return self.ruleset_config
+
+    def __str__(self):
+        return '<PeekabooRulesetConfiguration(filepath="%s")>' % self.config_file
 
     __repr__ = __str__

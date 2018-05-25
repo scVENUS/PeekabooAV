@@ -21,6 +21,12 @@ use_debug_module :    no
 keep_mail_data   :    no
 
 
+[ruleset]
+config           :    /path/to/ruleset.conf
+# If the score of a sample is >= $threshold => Result.bad
+score_threshold  :    100
+
+
 #
 # Logging configuration
 #

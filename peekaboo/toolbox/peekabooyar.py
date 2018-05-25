@@ -29,7 +29,7 @@ from peekaboo.ruleset import Result, RuleResult
 import yara
 
 
-def contains_peekabooyar(s):
+def contains_peekabooyar(config, s):
     """
     Checks the given sample for the PeekabooYar (EICAR like) malicious string.
 

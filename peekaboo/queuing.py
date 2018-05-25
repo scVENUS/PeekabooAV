@@ -27,7 +27,7 @@ import logging
 from threading import Thread
 from Queue import Queue
 from peekaboo import Singleton
-from peekaboo.ruleset.engine import run_analysis
+from peekaboo.ruleset.engine import RulesetEngine
 from peekaboo.exceptions import CuckooReportPendingException
 
 
@@ -94,7 +94,9 @@ class Worker(Thread):
             sample.init()
 
             try:
-                run_analysis(sample)
+                engine = RulesetEngine(sample)
+                engine.run()
+                engine.report()
             except CuckooReportPendingException:
                 pass
             except Exception as e:

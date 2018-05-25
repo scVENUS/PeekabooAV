@@ -34,7 +34,7 @@ from peekaboo.ruleset import Result, RuleResult
 logger = logging.getLogger(__name__)
 
 
-def known(s):
+def known(config, s):
     tb = traceback.extract_stack()
     tb = tb[-1]
     position = "%s:%s" % (tb[2], tb[1])
@@ -53,12 +53,12 @@ def known(s):
                       further_analysis=True)
 
 
-def file_larger_than(s, args):
+def file_larger_than(config, s):
     tb = traceback.extract_stack()
     tb = tb[-1]
     position = "%s:%s" % (tb[2], tb[1])
 
-    size = args['byte']
+    size = int(config['file_larger_than']['bytes'])
     if s.file_size > size:
         return RuleResult(position,
                           result=Result.unknown,
@@ -73,24 +73,12 @@ def file_larger_than(s, args):
                       further_analysis=False)
 
 
-def file_type_on_whitelist(s):
+def file_type_on_whitelist(config, s):
     tb = traceback.extract_stack()
     tb = tb[-1]
     position = "%s:%s" % (tb[2], tb[1])
 
-    # MIME file types that should not be analyzed
-    whitelist = [
-        # MIME types
-        'text/plain',
-        'text/html',
-        'message/rfc822',
-        'None',
-        # magic
-        'inode/x-empty',
-        'text/plain',
-        'application/pkcs7-signature',
-    ]
-
+    whitelist = config['file_type_on_whitelist']['whitelist']
     # analysis wanted for file type
     mtypes = s.mimetypes
     n = 0
@@ -116,56 +104,12 @@ def file_type_on_whitelist(s):
                       further_analysis=True)
 
 
-def file_type_on_greylist(s):
+def file_type_on_greylist(config, s):
     tb = traceback.extract_stack()
     tb = tb[-1]
     position = "%s:%s" % (tb[2], tb[1])
 
-    # MIME file types that should be analyzed
-    greylist = [
-        # magic
-        'application/octet-stream',
-        'application/vnd.ms-excel',
-        'application/pdf',
-        'application/javascript',
-        'application/pdf',
-        'application/vnd.ms-excel',
-        'application/vnd.ms-excel.sheet.macroEnabled.12',
-        'application/vnd.ms-word.document.macroEnabled.12',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'application/x-7z-compressed',
-        'application/x-ms-dos-executable',
-        'application/x-dosexec',
-        'application/x-vbscript',
-        'application/zip',
-        'application/x-rar',
-        'application/msword',
-        # 'message/rfc822',
-        # 'text/html',
-        'text/x-msdos-batch',
-        # MIME types
-        'text/x-sh',
-        'text/x-python',
-        'image/png',
-        'image/jpeg',
-        'application/zip',
-        'application/x-silverlight',
-        'application/x-python-code',
-        'application/x-msdos-program',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-        'application/vnd.oasis.opendocument.text',
-        'application/vnd.oasis.opendocument.spreadsheet',
-        'application/vnd.oasis.opendocument.presentation',
-        'application/vnd.ms-word.template.macroEnabled.12',
-        'application/vnd.ms-powerpoint',
-        'application/vnd.ms-excel.template.macroEnabled.12',
-        'application/vnd.ms-excel',
-        'application/pdf',
-        'application/msword'
-    ]
+    greylist = config['file_type_on_greylist']['greylist']
 
     mtypes = s.mimetypes
     logger.debug("filetype is %s" % mtypes)
@@ -184,7 +128,7 @@ def file_type_on_greylist(s):
                       further_analysis=False)
 
 
-def cuckoo_evil_sig(s):
+def cuckoo_evil_sig(config, s):
     tb = traceback.extract_stack()
     tb = tb[-1]
     position = "%s:%s" % (tb[2], tb[1])
@@ -192,57 +136,7 @@ def cuckoo_evil_sig(s):
     # signatures that if matched mark a sample as bad
     # list all installed signatures
     # grep -o "description.*" -R . ~/cuckoo2.0/modules/signatures/
-    bad_sigs = [
-        "A potential heapspray has been detected. .*",
-        "A process attempted to delay the analysis task.",
-        "Attempts to detect Cuckoo Sandbox through the presence of a file",
-        "Attempts to modify desktop wallpaper",
-        "Checks amount of memory in system, this can be used to detect " +
-        "virtual machines that have a low amount of memory available",
-        "Checks the version of Bios, possibly for anti-virtualization",
-        "Collects information on the system (ipconfig, netstat, systeminfo)",
-        "Connects to an IRC server, possibly part of a botnet",
-        "Connects to Tor Hidden Services through Tor2Web",
-        "Creates a suspicious process",
-        "Creates a windows hook that monitors keyboard input (keylogger)",
-        "Creates executable files on the filesystem",
-        "Creates known Upatre files, registry keys and/or mutexes",
-        # "Creates (office) documents on the filesystem",
-        "Detects the presence of Wine emulator",
-        "Detects VirtualBox through the presence of a file",
-        "Detects VirtualBox through the presence of a registry key",
-        "Detects VirtualBox through the presence of a window",
-        "Detects VirtualBox using WNetGetProviderName trick",
-        "Detects VMWare through the in instruction feature",
-        "Detects VMWare through the presence of a registry key",
-        "Detects VMWare through the presence of various files",
-        "Executes javascript",
-        "Executes one or more WMI queries",
-        "File has been identified by .* AntiVirus engines on VirusTotal as " +
-        "malicious",
-        "Installs itself for autorun at Windows startup",
-        "Looks for known filepaths where sandboxes execute samples",
-        "Looks for the Windows Idle Time to determine the uptime",
-        "Makes SMTP requests, possibly sending spam",
-        "This sample modifies more than .* files through suspicious ways,",
-        "Network communications indicative of a potential document or script" +
-        " payload download was initiated by the process wscript.exe",
-        "One of the processes launched crashes",
-        "One or more of the buffers contains an embedded PE file",
-        "One or more potentially interesting buffers were extracted, these " +
-        "generally",
-        "Potentially malicious URL found in document",
-        "Queries for the computername",
-        "Queries the disk size.*",
-        "Raised Suricata alerts",
-        "Starts servers listening on {0}",
-        "Steals private information from local Internet browsers",
-        "Suspicious Javascript actions",
-        "Tries to detect analysis programs from within the browser",
-        "Tries to locate whether any sniffers are installed",
-        "Wscript.exe initiated network communications indicative of a script" +
-        " based payload download",
-    ]
+    bad_sigs = config['cuckoo_evil_sig']['signature']
 
     sigs = []
 
@@ -271,12 +165,12 @@ def cuckoo_evil_sig(s):
                       further_analysis=False)
 
 
-def cuckoo_score(s, args):
+def cuckoo_score(config, s):
     tb = traceback.extract_stack()
     tb = tb[-1]
     position = "%s:%s" % (tb[2], tb[1])
 
-    threshold = args['higher']
+    threshold = int(config['cuckoo_score']['higher_than'])
     if s.cuckoo_report.score >= threshold:
         return RuleResult(position,
                           result=Result.bad,
@@ -291,7 +185,7 @@ def cuckoo_score(s, args):
                       further_analysis=True)
 
 
-def office_macro(s):
+def office_macro(config, s):
     tb = traceback.extract_stack()
     tb = tb[-1]
     position = "%s:%s" % (tb[2], tb[1])
@@ -308,12 +202,12 @@ def office_macro(s):
                       further_analysis=True)
 
 
-def requests_evil_domain(s):
+def requests_evil_domain(config, s):
     tb = traceback.extract_stack()
     tb = tb[-1]
     position = "%s:%s" % (tb[2], tb[1])
 
-    evil_domains = ["canarytokens.com"]
+    evil_domains = config['requests_evil_domain']['domain']
 
     for d in s.requested_domains:
         if d in evil_domains:
@@ -328,7 +222,7 @@ def requests_evil_domain(s):
                       further_analysis=True)
 
 
-def cuckoo_analysis_failed(s):
+def cuckoo_analysis_failed(config, s):
     tb = traceback.extract_stack()
     tb = tb[-1]
     position = "%s:%s" % (tb[2], tb[1])
@@ -345,7 +239,7 @@ def cuckoo_analysis_failed(s):
                       further_analysis=True)
 
 
-def final_rule(s):
+def final_rule(config, s):
     tb = traceback.extract_stack()
     tb = tb[-1]
     position = "%s:%s" % (tb[2], tb[1])

@@ -27,143 +27,107 @@
 import os
 import logging
 from shutil import copyfile
+from peekaboo.config import PeekabooRulesetConfiguration, get_config
 from peekaboo.ruleset import Result, RuleResult
 from peekaboo.ruleset.rules import *
+from peekaboo.toolbox.peekabooyar import contains_peekabooyar
 from peekaboo.exceptions import CuckooReportPendingException
 from peekaboo.toolbox.plugins.oneanalysis import OneAnalysis
-from peekaboo.toolbox.peekabooyar import contains_peekabooyar
-
-'''
-# this module contains methods and data structures which allow to
-# create a ruleset to decide good or bad for any given file
-#
-# works together with peekaboo
-# and uses cuckoo
-'''
 
 
 logger = logging.getLogger(__name__)
 
 
-def run_analysis(sample):
+class RulesetEngine(object):
     """
-    function that is run by a worker for every Sample object.
+    Peekaboo's ruleset engine.
+
+    @author: Sebastian Deiss
+    @since: 1.6
     """
-    process_rules(sample)
-    logger.info("Rules evaluated")
-    report(sample)
-    one_analysis_tool = OneAnalysis()
-    one_analysis_tool.queue_identical_samples(sample)  # depends on already_in_progress
+    rules = [
+        known,
+        file_larger_than,
+        file_type_on_whitelist,
+        file_type_on_greylist,
+        cuckoo_evil_sig,
+        cuckoo_score,
+        office_macro,
+        requests_evil_domain,
+        cuckoo_analysis_failed,
+        contains_peekabooyar,
+        final_rule
+    ]
 
+    def __init__(self, sample):
+        peekaboo_config = get_config()
+        ruleset_config = PeekabooRulesetConfiguration(peekaboo_config.ruleset_config)
+        ruleset_config.parse()
+        self.sample = sample
+        self.config = ruleset_config.get_config()
+        self.one_analysis_tool = OneAnalysis()
 
-def rule(sample, rule_function, args={}):
-    """
-    rule wrapper for in/out logging and reporting
-    """
-    function_name = rule_function.func_name
-    logger.debug("Processing rule '%s' for %s" % (function_name, sample))
+    def run(self):
+        # TODO: Integrate this special rule in the base ruleset.
+        result = self.__exec_rule(
+            self.config,
+            self.sample,
+            self.one_analysis_tool.already_in_progress
+        )
+        if not result.further_analysis:
+            return
 
-    try:
-        if args:
-            res = rule_function(sample, args)
-        else:
-            res = rule_function(sample)
+        for rule in RulesetEngine.rules:
+            result = self.__exec_rule(self.config, self.sample, rule)
+            if not result.further_analysis:
+                return
 
-        sample.add_rule_result(res)
-    except CuckooReportPendingException as e:
-        # in case this our Sample is requesting the Cuckoo report
-        raise
-    # catch all exceptions in rule
-    except Exception as e:
-        logger.warning("Unexpected error in '%s' for %s" % (function_name,
-                                                            sample))
-        logger.exception(e)
-        # create "fake" RuleResult
-        res = RuleResult("rule_wrapper", result=Result.unknown,
-                         reason="Regel mit Fehler abgebrochen",
-                         further_analysis=True)
-        sample.add_rule_result(res)
+        logger.info("Rules evaluated")
 
-    logger.info("Rule '%s' processed for %s" % (function_name, sample))
-    return res
+    def report(self):
+        # TODO: might be better to do this for each rule individually
+        self.sample.report()
+        if self.sample.get_result() == Result.bad:
+            dump_processing_info(self.sample)
+        self.sample.save_result()
+        # TODO: might be better to move this call to a separate function, since it's not related to reporting.
+        self.one_analysis_tool.queue_identical_samples(self.sample)  # depends on already_in_progress
 
+    def __exec_rule(self, config, sample, rule_function):
+        """
+        rule wrapper for in/out logging and reporting
+        """
+        rule_name = rule_function.func_name
+        logger.debug("Processing rule '%s' for %s" % (rule_name, sample))
 
-def process_rules(sample):
-    s = sample
-#                      ____   _   _  _      _____  ____
-#                     |  _ \ | | | || |    | ____|/ ___|
-#                     | |_) || | | || |    |  _|  \___ \
-#                     |  _ < | |_| || |___ | |___  ___) |
-#                     |_| \_\ \___/ |_____||_____||____/
+        try:
+            # skip disabled rules.
+            if rule_name in config.keys() and \
+               'enabled' in config[rule_name].keys() and \
+               config[rule_name]['enabled'] == 'no':
+                logger.debug("Rule '%s' is disabled." % rule_name)
+                result = RuleResult(rule_name, result=Result.unchecked,
+                                    reason="Regel '%s' ist deaktiviert." % rule_name,
+                                    further_analysis=True)
+            else:
+                result = rule_function(config, sample)
+            sample.add_rule_result(result)
+        except CuckooReportPendingException as e:
+            # in case the Sample is requesting the Cuckoo report
+            raise
+        # catch all other exceptions for this rule
+        except Exception as e:
+            logger.warning("Unexpected error in '%s' for %s" % (rule_name,
+                                                                sample))
+            logger.exception(e)
+            # create "fake" RuleResult
+            result = RuleResult("RulesetEngine", result=Result.unknown,
+                                reason="Regel mit Fehler abgebrochen",
+                                further_analysis=True)
+            sample.add_rule_result(result)
 
-# TODO (cuckooWrapper needs to check if there is other samples in pjobs with
-# the same hash)
-    one_analysis_tool = OneAnalysis()
-    p = rule(s, one_analysis_tool.already_in_progress)
-    if not p.further_analysis:
-        return
-
-    p = rule(s, known)
-    if not p.further_analysis:
-        return
-
-    p = rule(s, file_larger_than, {"byte": 5})
-    if not p.further_analysis:
-        return
-
-    p = rule(s, file_type_on_whitelist)
-    if not p.further_analysis:
-        return
-
-    p = rule(s, file_type_on_greylist)
-    if not p.further_analysis:
-        return
-
-    p = rule(s, contains_peekabooyar)
-    if not p.further_analysis:
-        return
-
-    p = rule(s, office_macro)
-    if not p.further_analysis:
-        return
-
-    p = rule(s, requests_evil_domain)
-    if not p.further_analysis:
-        return
-
-    p = rule(s, cuckoo_evil_sig)
-    if not p.further_analysis:
-        return
-
-    p = rule(s, cuckoo_score, {"higher": 4.0})
-    if not p.further_analysis:
-        return
-
-    p = rule(s, cuckoo_analysis_failed)
-    if not p.further_analysis:
-        return
-
-    p = rule(s, final_rule)
-    if not p.further_analysis:
-        return
-
-    # active rules, non reporting
-#    report(sample)
-
-#                   __ ____   _   _  _      _____  ____
-#                  / /|  _ \ | | | || |    | ____|/ ___|
-#                 / / | |_) || | | || |    |  _|  \___ \
-#                / /  |  _ < | |_| || |___ | |___  ___) |
-#               /_/   |_| \_\ \___/ |_____||_____||____/
-    return None
-
-
-def report(s):
-    # TODO: might be better to do this for each rule individually
-    s.report()
-    if s.get_result() == Result.bad:
-        dump_processing_info(s)
-    s.save_result()
+        logger.info("Rule '%s' processed for %s" % (rule_name, sample))
+        return result
 
 
 def dump_processing_info(sample):

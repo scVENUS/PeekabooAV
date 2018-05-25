@@ -55,7 +55,7 @@ class OneAnalysis(object):
     """
     __in_use = threading.Lock()
     
-    def already_in_progress(self, s):
+    def already_in_progress(self, config, s):
         with self.__in_use:
             logger.debug("enter already_in_progress")
             tb = traceback.extract_stack()

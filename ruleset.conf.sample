@@ -1,0 +1,129 @@
+#
+# Peekaboo ruleset configuration file
+# Copyright (C) 2016-2018 science + computing ag
+#
+# rule specific configuration options
+# the section name equals the name of the rule
+#
+
+
+[known]
+# if not specified the default is enabled : yes
+enabled : yes
+score   : -100
+
+[file_larger_than]
+bytes : 5
+score : +10
+
+[file_type_on_whitelist]
+whitelist.1 : text/plain
+whitelist.2 : message/rfc822
+whitelist.3 : inode/x-empty
+whitelist.4 : application/pkcs7-signature
+score       : -100
+
+[file_type_on_greylist]
+greylist.1  : application/octet-stream
+greylist.2  : application/vnd.ms-excel
+greylist.3  : application/pdf
+greylist.4  : application/javascript
+greylist.5  : application/vnd.ms-excel
+greylist.6  : application/vnd.ms-excel.sheet.macroEnabled.12
+greylist.7  : application/vnd.ms-word.document.macroEnabled.12
+greylist.8  : application/vnd.openxmlformats-officedocument.wordprocessingml.document
+greylist.9  : application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+greylist.10 : application/x-7z-compressed
+greylist.11 : application/x-ms-dos-executable
+greylist.12 : application/x-dosexec
+greylist.13 : application/x-vbscript
+greylist.14 : application/zip
+greylist.15 : application/x-rar
+greylist.16 : application/msword
+greylist.17 : text/x-msdos-batch
+greylist.18 : text/x-sh
+greylist.19 : text/x-python
+greylist.20 : image/png
+greylist.21 : image/jpeg
+greylist.22 : application/zip
+greylist.23 : application/x-silverlight
+greylist.24 : application/x-python-code
+greylist.25 : application/x-msdos-program
+greylist.26 : application/vnd.openxmlformats-officedocument.wordprocessingml.document
+greylist.27 : application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+greylist.28 : application/vnd.openxmlformats-officedocument.presentationml.presentation
+greylist.29 : application/vnd.oasis.opendocument.text
+greylist.30 : application/vnd.oasis.opendocument.spreadsheet
+greylist.31 : application/vnd.oasis.opendocument.presentation
+greylist.32 : application/vnd.ms-word.template.macroEnabled.12
+greylist.33 : application/vnd.ms-powerpoint
+greylist.34 : application/vnd.ms-excel.template.macroEnabled.12
+greylist.35 : application/vnd.ms-excel
+greylist.36 : application/msword
+score       : +10
+
+[cuckoo_evil_sig]
+signature.1  : A potential heapspray has been detected. .*
+signature.2  : A process attempted to delay the analysis task.
+signature.3  : Attempts to detect Cuckoo Sandbox through the presence of a file
+signature.4  : Attempts to modify desktop wallpaper
+signature.5  : Checks amount of memory in system, this can be used to detect virtual machines that have a low amount of memory available
+signature.6  : Checks the version of Bios, possibly for anti-virtualization
+signature.7  : Collects information on the system (ipconfig, netstat, systeminfo)
+signature.8  : Connects to an IRC server, possibly part of a botnet
+signature.9  : Connects to Tor Hidden Services through Tor2Web
+signature.10 : Creates a suspicious process
+signature.11 : Creates a windows hook that monitors keyboard input (keylogger)
+signature.12 : Creates executable files on the filesystem
+signature.13 : Creates known Upatre files, registry keys and/or mutexes
+signature.14 : Detects the presence of Wine emulator
+signature.15 : Detects VirtualBox through the presence of a file
+signature.16 : Detects VirtualBox through the presence of a registry key
+signature.17 : Detects VirtualBox through the presence of a window
+signature.18 : Detects VirtualBox using WNetGetProviderName trick
+signature.19 : Detects VMWare through the in instruction feature
+signature.20 : Detects VMWare through the presence of a registry key
+signature.21 : Detects VMWare through the presence of various files
+signature.22 : Executes javascript
+signature.23 : Executes one or more WMI queries
+signature.24 : File has been identified by .* AntiVirus engines on VirusTotal as malicious
+signature.25 : Installs itself for autorun at Windows startup
+signature.26 : Looks for known filepaths where sandboxes execute samples
+signature.27 : Looks for the Windows Idle Time to determine the uptime
+signature.28 : Makes SMTP requests, possibly sending spam
+signature.29 : This sample modifies more than .* files through suspicious ways,
+signature.30 : Network communications indicative of a potential document or script payload download was initiated by the process wscript.exe
+signature.31 : One of the processes launched crashes
+signature.32 : One or more of the buffers contains an embedded PE file
+signature.33 : One or more potentially interesting buffers were extracted, these generally
+signature.34 : Potentially malicious URL found in document
+signature.35 : Queries for the computername
+signature.36 : Queries the disk size.*
+signature.37 : Raised Suricata alerts
+signature.38 : Starts servers listening on {0}
+signature.39 : Steals private information from local Internet browsers
+signature.40 : Suspicious Javascript actions
+signature.41 : Tries to detect analysis programs from within the browser
+signature.42 : Tries to locate whether any sniffers are installed
+signature.43 : Wscript.exe initiated network communications indicative of a script based payload download
+score        : +10
+
+[cuckoo_score]
+higher_than : 4.0
+score       : +10
+
+[requests_evil_domain]
+enabled  : no
+# define a list of bad domains here
+domain.1 : canarytokens.com
+score    : +10
+
+# this rule is for testing only, so it is disabled by default
+[contains_peekabooyar]
+enabled : no
+score   : +10
+
+# rules without configuration options:
+# - office_macro
+# - cuckoo_analysis_failed
+# - final_rule
