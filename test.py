@@ -171,7 +171,7 @@ class TestSample(unittest.TestCase):
     def test_sample_attributes(self):
         self.assertEqual(self.sample.get_filename(), 'test.py')
         self.assertEqual(self.sample.file_extension, 'py')
-        self.assertTrue(self.__contains_mime(self.sample.mimetypes, 'text/x-python'))
+        self.assertTrue(self.sample.mimetype, 'text/x-python')
         self.assertIsNotNone(self.sample.sha256sum)
         self.assertEqual(self.sample.job_id, -1)
         self.assertEqual(self.sample.get_result(), Result.unchecked)
@@ -219,11 +219,6 @@ class TestSample(unittest.TestCase):
         os.unlink(cls.test_db)
         os.unlink('./test_meta_info.info')
         os.unlink('./junk.info')
-
-    def __contains_mime(self, mimetypes, mime):
-        if mime in mimetypes:
-            return True
-        return False
 
 
 def main():
