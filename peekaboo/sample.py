@@ -307,6 +307,15 @@ class Sample(object):
         """
         mime_type = None
 
+        smime = {
+            'p7s': [
+                'application/pkcs7-signature',
+                'application/x-pkcs7-signature',
+                'application/pkcs7-mime',
+                'application/x-pkcs7-mime',
+            ]
+        }
+
         # get MIME type from meta info
         try:
             declared_mt = self.__meta_info.get_mime_type()
@@ -321,11 +330,17 @@ class Sample(object):
         detected_mime_type = guess_mime_type_from_file_contents(self.__path)
         if detected_mime_type != mime_type:
             logger.debug(
-                'Detected MIME type does not match declared MIME Type. %s != %s.'
+                'Detected MIME type does not match declared MIME Type: declared: %s, detected: %s.'
                 % (mime_type, detected_mime_type)
             )
-            logger.debug('Overwriting declared MIME Type with "%s"' % detected_mime_type)
-            mime_type = detected_mime_type
+            # check if the sample is an smime signature (smime.p7s)
+            # If so, don't overwrite the MIME type since we do not want to analyse S/MIME signatures.
+            declared_filename = self.get_attr('meta_info_name_declared')
+            if declared_filename == 'smime.p7s' and mime_type in smime['p7s']:
+                logger.info('Using declared MIME type over detected one for S/MIME signatures.')
+            else:
+                logger.debug('Overwriting declared MIME Type with "%s"' % detected_mime_type)
+                mime_type = detected_mime_type
 
         if not self.has_attr('mimetypes'):
             self.set_attr('mimetypes', mime_type)
