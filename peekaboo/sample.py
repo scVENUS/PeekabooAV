@@ -335,7 +335,10 @@ class Sample(object):
             )
             # check if the sample is an smime signature (smime.p7s)
             # If so, don't overwrite the MIME type since we do not want to analyse S/MIME signatures.
-            declared_filename = self.get_attr('meta_info_name_declared')
+            try:
+                declared_filename = self.get_attr('meta_info_name_declared')
+            except KeyError:
+                declared_filename = self.__filename
             if declared_filename == 'smime.p7s' and mime_type in smime['p7s']:
                 logger.info('Using declared MIME type over detected one for S/MIME signatures.')
             else:
