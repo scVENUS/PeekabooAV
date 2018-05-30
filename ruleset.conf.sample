@@ -22,6 +22,7 @@ whitelist.4 : application/pkcs7-signature
 whitelist.5 : application/x-pkcs7-signature
 whitelist.6 : application/pkcs7-mime
 whitelist.7 : application/x-pkcs7-mime
+whitelist.8 : text/html
 
 [file_type_on_greylist]
 greylist.1  : application/octet-stream
