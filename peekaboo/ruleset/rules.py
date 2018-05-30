@@ -154,7 +154,7 @@ def cuckoo_score(config, s):
     tb = tb[-1]
     position = "%s:%s" % (tb[2], tb[1])
 
-    threshold = int(config['cuckoo_score']['higher_than'])
+    threshold = float(config['cuckoo_score']['higher_than'])
     if s.cuckoo_report.score >= threshold:
         return RuleResult(position,
                           result=Result.bad,
