@@ -89,7 +89,6 @@ class PeekabooConfig(object):
         self.keep_mail_data = None
         self.db_url = None
         self.ruleset_config = None
-        self.score_threshold = None
         self.cuckoo_storage = None
         self.cuckoo_exec = None
         self.cuckoo_submit = None
@@ -125,7 +124,6 @@ class PeekabooConfig(object):
             ) == 'yes' else False
             self.db_url = config.get('db', 'url')
             self.ruleset_config = config.get('ruleset', 'config')
-            self.score_threshold = config.get('ruleset', 'score_threshold')
             self.cuckoo_storage = config.get('cuckoo', 'storage_path')
             self.cuckoo_exec = config.get('cuckoo', 'exec')
             self.cuckoo_submit = config.get('cuckoo', 'submit').split(' ')

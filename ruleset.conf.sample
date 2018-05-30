@@ -10,11 +10,9 @@
 [known]
 # if not specified the default is enabled : yes
 enabled : yes
-score   : -100
 
 [file_larger_than]
 bytes : 5
-score : +10
 
 [file_type_on_whitelist]
 whitelist.1 : text/plain
@@ -24,7 +22,6 @@ whitelist.4 : application/pkcs7-signature
 whitelist.5 : application/x-pkcs7-signature
 whitelist.6 : application/pkcs7-mime
 whitelist.7 : application/x-pkcs7-mime
-score       : -100
 
 [file_type_on_greylist]
 greylist.1  : application/octet-stream
@@ -63,7 +60,6 @@ greylist.33 : application/vnd.ms-powerpoint
 greylist.34 : application/vnd.ms-excel.template.macroEnabled.12
 greylist.35 : application/vnd.ms-excel
 greylist.36 : application/msword
-score       : +10
 
 [cuckoo_evil_sig]
 signature.1  : A potential heapspray has been detected. .*
@@ -109,22 +105,18 @@ signature.40 : Suspicious Javascript actions
 signature.41 : Tries to detect analysis programs from within the browser
 signature.42 : Tries to locate whether any sniffers are installed
 signature.43 : Wscript.exe initiated network communications indicative of a script based payload download
-score        : +10
 
 [cuckoo_score]
 higher_than : 4.0
-score       : +10
 
 [requests_evil_domain]
 enabled  : no
 # define a list of bad domains here
 domain.1 : canarytokens.com
-score    : +10
 
 # this rule is for testing only, so it is disabled by default
 [contains_peekabooyar]
 enabled : no
-score   : +10
 
 # rules without configuration options:
 # - office_macro
