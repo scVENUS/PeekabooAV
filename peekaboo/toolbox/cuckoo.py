@@ -178,7 +178,6 @@ class CuckooReport(object):
         self.file_path = None
         self.report = None
         self._parse()
-        self.errors = self.report['debug']['errors']
 
     def _parse(self):
         """
@@ -222,18 +221,39 @@ class CuckooReport(object):
         """
         Gets the triggered signatures from the Cuckoo report.
 
-        :return: The triggered signatures from the Cuckoo report.
+        :return: The triggered signatures from the Cuckoo report or
+                 None of there was an error parsing the Cuckoo report.
         """
-        return self.report['signatures']
+        try:
+            return self.report['signatures']
+        except KeyError:
+            return None
 
     @property
     def score(self):
         """
         Gets the score from the Cuckoo report.
 
-        :return: The score from the Cuckoo report.
+        :return: The score from the Cuckoo report or
+                 None of there was an error parsing the Cuckoo report.
         """
-        return self.report['info']['score']
+        try:
+            return self.report['info']['score']
+        except KeyError:
+            return None
+
+    @property
+    def errors(self):
+        """
+        Errors occurred during Cuckoo analysis.
+
+        :return: The errors occurred during Cuckoo analysis or
+                 None of there was an error parsing the Cuckoo report.
+        """
+        try:
+            return self.report['debug']['errors']
+        except KeyError:
+            return None
 
     @property
     def analysis_failed(self):
