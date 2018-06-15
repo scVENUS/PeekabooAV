@@ -159,11 +159,11 @@ class CuckooServer(protocol.ProcessProtocol):
         os._exit(1)
 
     def processExited(self, reason):
-        logger.info("Cuckoo exited with status %d" % reason.value.exitCode)
+        logger.info("Cuckoo exited with status %s" % str(reason.value.exitCode))
         os._exit(0)
 
     def processEnded(self, reason):
-        logger.info("Cuckoo ended with status %d" % reason.value.exitCode)
+        logger.info("Cuckoo ended with status %s" % str(reason.value.exitCode))
         os._exit(0)
 
 
