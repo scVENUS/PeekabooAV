@@ -83,7 +83,7 @@ class MultiRegexMatcher(object):
     def match(self, str):
         """
         Try to apply the patterns at the start of the string.
-        When the first pattern that matches, processing is stopped
+        As soon as a pattern that matches, processing is stopped
         and a match object is returned.
 
         :param str: The string to apply the pattern to.
