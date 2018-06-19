@@ -23,14 +23,14 @@
 ###############################################################################
 
 
-from threading import Thread
-import SocketServer
 import os
 import sys
 import grp
 import pwd
 import stat
 import logging
+import SocketServer
+from threading import Thread
 from argparse import ArgumentParser
 from sdnotify import SystemdNotifier
 from twisted.internet import reactor

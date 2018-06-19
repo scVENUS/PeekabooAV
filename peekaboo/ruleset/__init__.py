@@ -62,7 +62,6 @@ class RuleResult:
                  result=Result.unknown,
                  reason='regel ohne Ergebnis',
                  further_analysis=True):
-        self.rule = None
         self.result = Result.unchecked
         self.rule = rule
         self.result = result
