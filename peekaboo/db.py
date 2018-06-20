@@ -167,11 +167,12 @@ class PeekabooDatabase(object):
 
         :param db_url: An RFC 1738 URL that points to the database.
         """
+        self.db_schema_version = 3
         self.__engine = create_engine(db_url, pool_recycle=1)
         session_factory = sessionmaker(bind=self.__engine)
         self.__Session = scoped_session(session_factory)
         self.__lock = threading.RLock()
-        if not self.__engine.dialect.has_table(self.__engine, '_meta'):
+        if not self._db_schema_exists():
             self._init_db()
             logger.debug('Database schema created.')
         else:
@@ -432,6 +433,17 @@ class PeekabooDatabase(object):
                 'Unable to drop all tables of the database: %s' % e
             )
 
+    def _db_schema_exists(self):
+        if not self.__engine.dialect.has_table(self.__engine, '_meta'):
+            return False
+        else:
+            session = self.__Session()
+            meta = session.query(PeekabooMetadata)[-1]
+            if meta.db_schema_version < self.db_schema_version:
+                logger.info('Adding new database schema.')
+                return False
+            return True
+
     def _init_db(self):
         """
         Initializes the Peekaboo database by creating tables and
@@ -440,7 +452,7 @@ class PeekabooDatabase(object):
         Base.metadata.create_all(self.__engine)
         meta = PeekabooMetadata()
         meta.peekaboo_version = __version__
-        meta.db_schema_version = 3
+        meta.db_schema_version = self.db_schema_version
         # TODO: Get Cuckoo version.
         meta.cuckoo_version = '2.0'
         session = self.__Session()

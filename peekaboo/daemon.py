@@ -41,6 +41,7 @@ from peekaboo.toolbox.cuckoo import CuckooServer
 from peekaboo.toolbox.sampletools import ConnectionMap
 from peekaboo.queuing import JobQueue, create_workers
 from peekaboo.sample import make_sample
+from peekaboo.exceptions import PeekabooDatabaseError
 
 
 logger = logging.getLogger(__name__)
@@ -164,6 +165,9 @@ def run():
     try:
         db_con = PeekabooDatabase(config.db_url)
         config.add_db_con(db_con)
+    except PeekabooDatabaseError as e:
+        logging.exception(e)
+        sys.exit(1)
     except Exception as e:
         logger.critical('Failed to establish a connection to the database.')
         logger.exception(e)
