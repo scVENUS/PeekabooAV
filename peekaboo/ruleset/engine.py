@@ -158,6 +158,16 @@ def dump_processing_info(sample):
     except Exception as e:
         logger.exception(e)
 
+    # store malicious sample along with the reports
+    if sample.get_result() == Result.bad:
+        try:
+            copyfile(
+                sample.get_file_path(),
+                os.path.join(dump_dir, sample.get_filename())
+            )
+        except Exception as e:
+            logger.exception(e)
+
     if sample.has_attr('cuckoo_json_report_file'):
         # Cuckoo report
         try:
