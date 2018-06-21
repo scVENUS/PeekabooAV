@@ -429,6 +429,8 @@ class Sample(object):
                     self.set_attr('cuckoo_failed', True)
                 else:
                     self.set_attr('cuckoo_failed', False)
+            else:
+                self.set_attr('cuckoo_failed', True)
         return self.get_attr('cuckoo_failed')
 
     def __create_symlink(self):

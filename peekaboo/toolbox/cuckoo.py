@@ -214,7 +214,7 @@ class CuckooReport(object):
         try:
             return [d['request'] for d in self.report['network']['dns']]
         except KeyError:
-            return None
+            return []
 
     @property
     def signatures(self):
@@ -227,7 +227,7 @@ class CuckooReport(object):
         try:
             return self.report['signatures']
         except KeyError:
-            return None
+            return []
 
     @property
     def score(self):
@@ -240,7 +240,7 @@ class CuckooReport(object):
         try:
             return self.report['info']['score']
         except KeyError:
-            return None
+            return 0.0
 
     @property
     def errors(self):
@@ -253,7 +253,7 @@ class CuckooReport(object):
         try:
             return self.report['debug']['errors']
         except KeyError:
-            return None
+            return []
 
     @property
     def analysis_failed(self):
@@ -263,6 +263,12 @@ class CuckooReport(object):
         :return: True if the Cuckoo analysis failed, otherwise False.
         """
         if self.errors:
-            logger.warning('Cuckoo run_analysis failed. Reason: %s' % str(self.errors))
+            logger.warning('Cuckoo produced %d error(s) during processing.' % len(self.errors))
+        try:
+            log = self.report['debug']['cuckoo']
+            for entry in log:
+                if 'analysis completed successfully' in entry:
+                    return False
             return True
-        return False
+        except KeyError:
+            return True
