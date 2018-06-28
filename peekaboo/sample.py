@@ -34,7 +34,8 @@ from peekaboo.config import get_config
 from peekaboo.exceptions import CuckooReportPendingException, \
                                 CuckooAnalysisFailedException
 from peekaboo.toolbox.sampletools import SampleMetaInfo, ConnectionMap, next_job_hash
-from peekaboo.toolbox.files import chown2me, guess_mime_type_from_file_contents
+from peekaboo.toolbox.files import chown2me, guess_mime_type_from_file_contents, \
+                                   guess_mime_type_from_filename
 from peekaboo.toolbox.ms_office import has_office_macros
 from peekaboo.toolbox.cuckoo import submit_to_cuckoo
 import peekaboo.ruleset as ruleset
@@ -298,14 +299,14 @@ class Sample(object):
         return self.get_attr('file_extension')
 
     @property
-    def mimetype(self):
+    def mimetypes(self):
         """
         Can not be cached (hard to determine if known/complete).
 
         determine mime on original p[0-9]* file
         later result will be "inode/symlink"
         """
-        mime_type = None
+        mime_types = []
 
         smime = {
             'p7s': [
@@ -321,32 +322,35 @@ class Sample(object):
             declared_mt = self.__meta_info.get_mime_type()
             if declared_mt is not None:
                 logger.debug('Sample declared as "%s"' % declared_mt)
-                mime_type = declared_mt
+                mime_types.append(declared_mt)
         except Exception as e:
             logger.exception(e)
+            declared_mt = None
             if self.meta_info_loaded:
-                logger.error('Cannot get mime type from meta info although meta info is loaded.')
+                logger.error('Cannot get MIME type from meta info although meta info is loaded.')
 
-        detected_mime_type = guess_mime_type_from_file_contents(self.__path)
-        if detected_mime_type != mime_type:
-            logger.debug(
-                'Detected MIME type does not match declared MIME Type: declared: %s, detected: %s.'
-                % (mime_type, detected_mime_type)
-            )
-            # check if the sample is an smime signature (smime.p7s)
-            # If so, don't overwrite the MIME type since we do not want to analyse S/MIME signatures.
-            try:
-                declared_filename = self.get_attr('meta_info_name_declared')
-            except KeyError:
-                declared_filename = self.__filename
-            if declared_filename == 'smime.p7s' and mime_type in smime['p7s']:
-                logger.info('Using declared MIME type over detected one for S/MIME signatures.')
-            else:
-                logger.debug('Overwriting declared MIME Type with "%s"' % detected_mime_type)
-                mime_type = detected_mime_type
+        try:
+            declared_filename = self.get_attr('meta_info_name_declared')
+        except KeyError:
+            declared_filename = self.__filename
+
+        content_based_mime_type = guess_mime_type_from_file_contents(self.__path)
+        if content_based_mime_type is not None and content_based_mime_type not in mime_types:
+            mime_types.append(content_based_mime_type)
+
+        name_based_mime_type = guess_mime_type_from_filename(declared_filename)
+        if name_based_mime_type is not None and name_based_mime_type not in mime_types:
+            mime_types.append(name_based_mime_type)
+
+        logger.debug('Determined MIME Types: %s' % mime_types)
+        # check if the sample is an S/MIME signature (smime.p7s)
+        # If so, don't overwrite the MIME type since we do not want to analyse S/MIME signatures.
+        if declared_filename == 'smime.p7s' and declared_mt in smime['p7s']:
+            logger.info('S/MIME signature detected. Using declared MIME type over detected ones.')
+            mime_types = [declared_mt]
 
         if not self.has_attr('mimetypes'):
-            self.set_attr('mimetypes', mime_type)
+            self.set_attr('mimetypes', mime_types)
 
         return self.get_attr('mimetypes')
 
