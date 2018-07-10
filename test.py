@@ -171,7 +171,7 @@ class TestSample(unittest.TestCase):
     def test_sample_attributes(self):
         self.assertEqual(self.sample.get_filename(), 'test.py')
         self.assertEqual(self.sample.file_extension, 'py')
-        self.assertTrue(self.sample.mimetype, 'text/x-python')
+        self.assertTrue(set(['text/x-python']).issubset(set(self.sample.mimetypes)))
         self.assertIsNotNone(self.sample.sha256sum)
         self.assertEqual(self.sample.job_id, -1)
         self.assertEqual(self.sample.get_result(), Result.unchecked)

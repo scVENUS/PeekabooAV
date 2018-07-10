@@ -80,7 +80,7 @@ def file_type_on_whitelist(config, s):
 
     whitelist = config['file_type_on_whitelist']['whitelist']
 
-    if s.mimetype in whitelist:
+    if set(s.mimetypes).issubset(set(whitelist)):
         return RuleResult(position,
                           result=Result.ignored,
                           reason="Dateityp ist auf Whitelist",
@@ -99,7 +99,7 @@ def file_type_on_greylist(config, s):
 
     greylist = config['file_type_on_greylist']['greylist']
 
-    if s.mimetype in greylist:
+    if set(s.mimetypes).issubset(set(greylist)):
         return RuleResult(position,
                           result=Result.unknown,
                           reason="Dateityp ist auf der Liste der zu analysiserenden Typen",
