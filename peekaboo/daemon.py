@@ -151,6 +151,9 @@ def run():
         print('Starting Peekaboo %s.' % __version__)
 
     # read configuration
+    if not os.path.isfile(args.config):
+        print('Failed to read config, files does not exist.') # logger doesn't exist here
+        sys.exit(1)
     config = parse_config(args.config)
 
     # Check if CLI arguments override the configuration
