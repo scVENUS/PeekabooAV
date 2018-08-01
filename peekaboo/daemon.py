@@ -33,15 +33,14 @@ import SocketServer
 from threading import Thread
 from argparse import ArgumentParser
 from sdnotify import SystemdNotifier
-from twisted.internet import reactor
 from peekaboo import _owl, __version__
 from peekaboo.config import parse_config, get_config
 from peekaboo.db import PeekabooDatabase
-from peekaboo.toolbox.cuckoo import CuckooServer
 from peekaboo.toolbox.sampletools import ConnectionMap
 from peekaboo.queuing import JobQueue, create_workers
 from peekaboo.sample import make_sample
 from peekaboo.exceptions import PeekabooDatabaseError
+from peekaboo.cuckoo import Cuckoo, CuckooEmbed, CuckooApi
 
 
 logger = logging.getLogger(__name__)
@@ -211,13 +210,14 @@ def run():
                                    stat.S_IWRITE | stat.S_IRGRP |
                                    stat.S_IWGRP | stat.S_IWOTH)
 
-        # Run Cuckoo sandbox, parse log output, and report back of Peekaboo.
-        # If this dies Peekaboo dies, since this is the main thread.
-        srv = CuckooServer()
-        reactor.spawnProcess(srv, config.interpreter, [config.interpreter, '-u',
-                                                       config.cuckoo_exec])
+        # If this dies Peekaboo dies, since this is the main thread. (legacy)
+        if config.cuckoo_mode == "embed":
+            cuckoo = CuckooEmbed(config.interpreter, config.cuckoo_exec)
+        # otherwise it's the new API method
+        else:
+            cuckoo = CuckooApi(config.cuckoo_url)
         systemd.notify("READY=1")
-        reactor.run()
+        cuckoo.do()
     except Exception as e:
         logger.exception(e)
     finally:
