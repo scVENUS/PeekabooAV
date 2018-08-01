@@ -29,7 +29,7 @@ import os
 import logging
 import json
 import subprocess
-from twisted.internet import protocol
+from twisted.internet import protocol, reactor
 from peekaboo import MultiRegexMatcher
 from peekaboo.config import get_config
 from peekaboo.exceptions import CuckooAnalysisFailedException
@@ -38,6 +38,53 @@ from peekaboo.queuing import JobQueue
 
 
 logger = logging.getLogger(__name__)
+
+
+class Cuckoo:
+    def __init__(self):
+        pass
+    
+    def submit(self):
+        pass
+    
+    def do(self):
+        # wait for the cows to come home
+        while True:
+            sleep(600)
+
+
+class CuckooEmbed(Cuckoo):
+    def __init__(self, interpreter, cuckoo_exec):
+        self.interpreter = interpreter
+        self.cuckoo_exec = cuckoo_exec
+    
+    def submit(self):
+        # submit via call to submit
+        pass
+    
+    def do(self):
+        # reaktor and shit
+        # Run Cuckoo sandbox, parse log output, and report back of Peekaboo.
+        srv = CuckooServer()
+        reactor.spawnProcess(srv, self.interpreter, [self.interpreter, '-u',
+                                                     self.cuckoo_exec])
+        reactor.run()
+
+
+class CuckooApi(Cuckoo):
+    def __init__(self, url):
+        self.url = url
+    
+    def submit(self):
+        pass
+    
+    def do(self):
+        # do the polling for finished jobs
+        # record analysis count and call status over and over again
+        # then:
+        # sample = ConnectionMap.get_sample_by_job_id(job_id)
+        # logger ......
+        pass
 
 
 def submit_to_cuckoo(sample):
