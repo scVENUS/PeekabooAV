@@ -63,5 +63,6 @@ exec             :    /usr/local/bin/cuckoo
 submit           :    /usr/local/bin/cuckoo submit
 
 url              :    http://127.0.0.1:8090
+poll_interval    :    5
 
 storage_path     :    /home/peekaboo/.cuckoo/storage

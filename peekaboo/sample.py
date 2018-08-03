@@ -37,7 +37,6 @@ from peekaboo.toolbox.sampletools import SampleMetaInfo, ConnectionMap, next_job
 from peekaboo.toolbox.files import chown2me, guess_mime_type_from_file_contents, \
                                    guess_mime_type_from_filename
 from peekaboo.toolbox.ms_office import has_office_macros
-from peekaboo.toolbox.cuckoo import submit_to_cuckoo
 import peekaboo.ruleset as ruleset
 
 
@@ -412,7 +411,8 @@ class Sample(object):
             try:
                 file_for_analysis = os.path.join(self.__wd, self.__symlink)
                 logger.debug("Submitting %s to Cuckoo" % file_for_analysis)
-                job_id = submit_to_cuckoo(file_for_analysis)
+                cuckoo = config.get_cuckoo_obj()
+                job_id = cuckoo.submit(file_for_analysis)
                 self.set_attr('job_id', job_id)
                 message = 'Erfolgreich an Cuckoo gegeben %s als Job %d\n' \
                           % (self, job_id)

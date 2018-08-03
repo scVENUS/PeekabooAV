@@ -90,6 +90,8 @@ class PeekabooConfig(object):
         self.db_url = None
         self.ruleset_config = None
         self.cuckoo_mode = "api"
+        self.cuckoo_url = "http://127.0.0.1:8090"
+        self.cuckoo_poll_interval = 5
         self.cuckoo_storage = None
         self.cuckoo_exec = None
         self.cuckoo_submit = None
@@ -126,6 +128,8 @@ class PeekabooConfig(object):
             self.db_url = config.get('db', 'url')
             self.ruleset_config = config.get('ruleset', 'config')
             self.cuckoo_mode = config.get('cuckoo', 'mode')
+            self.cuckoo_url = config.get('cuckoo', 'url')
+            self.cuckoo_poll_interval = config.get('cuckoo', 'poll_interval')
             self.cuckoo_storage = config.get('cuckoo', 'storage_path')
             self.cuckoo_exec = config.get('cuckoo', 'exec')
             self.cuckoo_submit = config.get('cuckoo', 'submit').split(' ')
@@ -157,6 +161,15 @@ class PeekabooConfig(object):
         if self.db_con:
             return self.db_con
         raise ValueError('Database connection is not configured.')
+
+    def add_cuckoo_obj(self, cuckoo_obj):
+        self.cuckoo_obj = cuckoo_obj
+        
+    def get_cuckoo_obj(self):
+        if self.cuckoo_obj:
+            return self.cuckoo_obj
+        raise ValueError('Cuckoo Object is not set.')
+
 
     def __parse_log_level(self, log_level):
         if log_level == 'CRITICAL':
