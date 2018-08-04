@@ -90,6 +90,7 @@ class PeekabooConfig(object):
         self.db_url = None
         self.ruleset_config = None
         self.cuckoo_mode = "api"
+        self.cuckoo_dummy_report = None
         self.cuckoo_url = "http://127.0.0.1:8090"
         self.cuckoo_poll_interval = 5
         self.cuckoo_storage = None
@@ -128,6 +129,7 @@ class PeekabooConfig(object):
             self.db_url = config.get('db', 'url')
             self.ruleset_config = config.get('ruleset', 'config')
             self.cuckoo_mode = config.get('cuckoo', 'mode')
+            self.cuckoo_dummy_report = config.get('cuckoo', 'dummy_report')
             self.cuckoo_url = config.get('cuckoo', 'url')
             self.cuckoo_poll_interval = config.get('cuckoo', 'poll_interval')
             self.cuckoo_storage = config.get('cuckoo', 'storage_path')

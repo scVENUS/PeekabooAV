@@ -40,7 +40,7 @@ from peekaboo.toolbox.sampletools import ConnectionMap
 from peekaboo.queuing import JobQueue, create_workers
 from peekaboo.sample import make_sample
 from peekaboo.exceptions import PeekabooDatabaseError
-from peekaboo.toolbox.cuckoo import Cuckoo, CuckooEmbed, CuckooApi
+from peekaboo.toolbox.cuckoo import Cuckoo, CuckooEmbed, CuckooApi, CuckooDummy
 
 
 logger = logging.getLogger(__name__)
@@ -213,6 +213,8 @@ def run():
         # If this dies Peekaboo dies, since this is the main thread. (legacy)
         if config.cuckoo_mode == "embed":
             cuckoo = CuckooEmbed(config.interpreter, config.cuckoo_exec)
+        elif config.cuckoo_mode == "dummy":
+            cuckoo = CuckooDummy()
         # otherwise it's the new API method and default
         else:
             cuckoo = CuckooApi(config.cuckoo_url)
