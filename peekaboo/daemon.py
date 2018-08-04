@@ -30,6 +30,9 @@ import pwd
 import stat
 import logging
 import SocketServer
+import socket
+import signal
+from time import sleep
 from threading import Thread
 from argparse import ArgumentParser
 from sdnotify import SystemdNotifier
@@ -47,6 +50,47 @@ from peekaboo.exceptions import PeekabooDatabaseError
 logger = logging.getLogger(__name__)
 
 
+class SignalHandler():
+    """
+    Signal handler.
+    
+    @author: Felix Bauer
+    """
+    def __init__(self, timeout):
+        """ register custom signal handler """
+        self.timeout = timeout
+        self.original_sigint_handler = signal.getsignal(signal.SIGINT)
+        self.original_sigterm_handler = signal.getsignal(signal.SIGTERM)
+        
+        signal.signal(signal.SIGINT, self.signal_handler_int)
+        signal.signal(signal.SIGTERM, self.signal_handler_int)
+
+    def signal_handler_int(self, sig, frame):
+        """ catch signal, give workers time to exit and kill """
+        signal.signal(signal.SIGINT, self.signal_handler_term)
+        signal.signal(signal.SIGTERM, self.signal_handler_term)
+        logger.info("Shutting down. Giving workers %d seconds to stop" % self.timeout)
+        # server.shutdown()
+        for w in JobQueue.workers:
+            w.active = False
+        # wait for workers to end
+        for t in range(0, self.timeout):
+            w = set(JobQueue.workers)
+            # check there is no existing worker
+            if len(w) == 1 and None in w:
+                break
+            sleep(1)
+        self.signal_handler_term(None, None)
+
+    def signal_handler_term(self, sig, frame):
+        """ restore original signal handlers and kill """
+        signal.signal(signal.SIGTERM, self.original_sigterm_handler)
+        signal.signal(signal.SIGINT, self.original_sigint_handler)
+        logger.info("The End")
+        os.kill(os.getpid(), signal.SIGINT)
+        sys.exit(0)
+
+
 class PeekabooStreamServer(SocketServer.ThreadingUnixStreamServer):
     """
     Asynchronous server.
@@ -59,9 +103,16 @@ class PeekabooStreamServer(SocketServer.ThreadingUnixStreamServer):
         # We can only accept 2 * worker_count connections.
         self.request_queue_size = self.config.worker_count * 2
         self.allow_reuse_address = True
-        SocketServer.ThreadingUnixStreamServer.__init__(self, server_address,
-                                                        request_handler_cls,
-                                                        bind_and_activate=bind_and_activate)
+        
+        # Try three times to start SocketServer
+        for i in range(0, 3):
+            try:
+                SocketServer.ThreadingUnixStreamServer.__init__(self, server_address,
+                                                                request_handler_cls,
+                                                                bind_and_activate=bind_and_activate)
+                break
+            except socket.error, msg:
+                logger.warning("SocketServer couldn't start (%i)" % i)
 
     def shutdown_request(self, request):
         """ Keep the connection alive until Cuckoo reports back, so the results can be send to the client. """
@@ -155,6 +206,8 @@ def run():
         print('Failed to read config, files does not exist.') # logger doesn't exist here
         sys.exit(1)
     config = parse_config(args.config)
+
+    SignalHandler(600)
 
     # Check if CLI arguments override the configuration
     if args.debug:
