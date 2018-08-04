@@ -119,9 +119,10 @@ class CuckooApi(Cuckoo):
     
     def __get(self, url, method="get", files=""):
         r = ""
-        retry=0
         logger.debug("Requesting %s, method %s" % (url, method))
-        while retry < 3:
+        
+        # try 3 times to get a successfull response
+        for retry in range(0, 3):
             try:
                 if method == "get":
                     r = requests.get("%s/%s" % (self.url, url))
@@ -130,20 +131,24 @@ class CuckooApi(Cuckoo):
                 else:
                     break
                 if r.status_code != 200:
-                    retry += 1
+                    continue
                 else:
                     return r.json()
             except requests.exceptions.Timeout as e:
                 # Maybe set up for a retry, or continue in a retry loop
                 print(e)
+                if e and retry >= 2:
+                    raise e
             except requests.exceptions.TooManyRedirects as e:
                 # Tell the user their URL was bad and try a different one
                 print(e)
+                if e and retry >= 2:
+                    raise e
             except requests.exceptions.RequestException as e:
                 # catastrophic error. bail.
                 print(e)
-            finally:
-                retry += 1
+                if e and retry >= 2:
+                    raise e
         return None
     
     def __status(self):
@@ -167,22 +172,35 @@ class CuckooApi(Cuckoo):
         # then:
         # sample = ConnectionMap.get_sample_by_job_id(job_id)
         # logger ......
+        
+        limit = 1000000
+        offset = self.__status()["tasks"]["total"]
+        
         while True:
-            r = self.__status()["tasks"]["reported"]
-            for job_id in range(self.reported, r):
-                logger.debug("Analysis done for task #%d" % job_id)
-                logger.debug("Remaining connections: %d" % ConnectionMap.size())
-                sample = ConnectionMap.get_sample_by_job_id(job_id)
-                if sample:
-                    logger.debug('Requesting Cuckoo report for sample %s' % sample)
-                    self.__report = CuckooReport(job_id)
-                    sample.set_attr('cuckoo_report', self.__report)
-                    sample.set_attr('cuckoo_json_report_file', self.__report.file_path)
-                    JobQueue.submit(sample, self.__class__)
-                    logger.debug("Remaining connections: %d" % ConnectionMap.size())
-                else:
-                    logger.debug('No connection found for ID %d' % job_id)
-            self.reported = r
+            cuckoo_tasks_list = self.__get("tasks/list/%i/%i" % (limit, offset))
+            #maxJobID = cuckoo_tasks_list[-1]["id"]
+            
+            first = True
+            if cuckoo_tasks_list:
+                for j in cuckoo_tasks_list["tasks"]:
+                    if j["status"] == "reported":
+                        if first:
+                            first = False
+                            offset += 1
+                        job_id = j["id"]
+                        logger.debug("Analysis done for task #%d" % job_id)
+                        logger.debug("Remaining connections: %d" % ConnectionMap.size())
+                        sample = ConnectionMap.get_sample_by_job_id(job_id)
+                        if sample:
+                            logger.debug('Requesting Cuckoo report for sample %s' % sample)
+                            self.__report = CuckooReport(job_id)
+                            sample.set_attr('cuckoo_report', self.__report)
+                            sample.set_attr('cuckoo_json_report_file', self.__report.file_path)
+                            JobQueue.submit(sample, self.__class__)
+                            logger.debug("Remaining connections: %d" % ConnectionMap.size())
+                        else:
+                            logger.debug('No connection found for ID %d' % job_id)
+            #self.reported = reported
             config = get_config()
             sleep(float(config.cuckoo_poll_interval))
 
