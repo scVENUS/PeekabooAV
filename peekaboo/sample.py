@@ -411,6 +411,7 @@ class Sample(object):
             try:
                 file_for_analysis = os.path.join(self.__wd, self.__symlink)
                 logger.debug("Submitting %s to Cuckoo" % file_for_analysis)
+                config = get_config()
                 cuckoo = config.get_cuckoo_obj()
                 job_id = cuckoo.submit(file_for_analysis)
                 self.set_attr('job_id', job_id)

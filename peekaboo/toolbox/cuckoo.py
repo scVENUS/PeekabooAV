@@ -157,7 +157,7 @@ class CuckooApi(Cuckoo):
     def submit(self, sample):
         filename = os.path.basename(sample)
         files = {"file": (filename, sample)}
-        r = self.get("tasks/create/file", method="post", files=files)
+        r = self.__get("tasks/create/file", method="post", files=files)
         
         task_id = r["task_id"]
         if task_id > 0:
@@ -165,6 +165,9 @@ class CuckooApi(Cuckoo):
         raise CuckooAnalysisFailedException(
                                             'Unable to extract job ID from given string %s' % response
                                             )
+
+    def getReport(self, job_id):
+        return self.__get("tasks/report/%d" % job_id)
     
     def do(self):
         # do the polling for finished jobs
@@ -184,21 +187,21 @@ class CuckooApi(Cuckoo):
             if cuckoo_tasks_list:
                 for j in cuckoo_tasks_list["tasks"]:
                     if j["status"] == "reported":
-                        if first:
-                            first = False
-                            offset += 1
                         job_id = j["id"]
                         logger.debug("Analysis done for task #%d" % job_id)
                         logger.debug("Remaining connections: %d" % ConnectionMap.size())
                         sample = ConnectionMap.get_sample_by_job_id(job_id)
                         if sample:
                             logger.debug('Requesting Cuckoo report for sample %s' % sample)
-                            self.__report = CuckooReport(job_id)
+                            self.__report = CuckooReport(job_id, self)
                             sample.set_attr('cuckoo_report', self.__report)
                             sample.set_attr('cuckoo_json_report_file', self.__report.file_path)
                             JobQueue.submit(sample, self.__class__)
                             logger.debug("Remaining connections: %d" % ConnectionMap.size())
                         else:
+                            #if first:
+                            #    first = False
+                            #    offset += 1
                             logger.debug('No connection found for ID %d' % job_id)
             #self.reported = reported
             config = get_config()
@@ -295,8 +298,9 @@ class CuckooReport(object):
 
     @author: Sebastian Deiss
     """
-    def __init__(self, job_id):
+    def __init__(self, job_id, cuckoo="native"):
         self.job_id = job_id
+        self.cuckoo = cuckoo
         self.file_path = None
         self.report = None
         self._parse()
@@ -306,25 +310,34 @@ class CuckooReport(object):
         Reads the JSON report from Cuckoo and loads it into the Sample object.
         """
         config = get_config()
-        cuckoo_report = os.path.join(
-            config.cuckoo_storage, 'analyses/%d/reports/report.json'
-                                   % self.job_id
-        )
-
-        if not os.path.isfile(cuckoo_report):
-            raise OSError('Cuckoo report not found at %s.' % cuckoo_report)
-        else:
-            logger.debug(
-                'Accessing Cuckoo report for task %d at %s '
-                % (self.job_id, cuckoo_report)
+        if self.cuckoo == "native":
+            cuckoo_report = os.path.join(
+                config.cuckoo_storage, 'analyses/%d/reports/report.json'
+                                       % self.job_id
             )
-            self.file_path = cuckoo_report
-            with open(cuckoo_report) as data:
-                try:
-                    report = json.load(data)
-                    self.report = report
-                except ValueError as e:
-                    logger.exception(e)
+
+            if not os.path.isfile(cuckoo_report):
+                raise OSError('Cuckoo report not found at %s.' % cuckoo_report)
+            else:
+                logger.debug(
+                    'Accessing Cuckoo report for task %d at %s '
+                    % (self.job_id, cuckoo_report)
+                )
+                self.file_path = cuckoo_report
+                with open(cuckoo_report) as data:
+                    try:
+                        report = json.load(data)
+                        self.report = report
+                    except ValueError as e:
+                        logger.exception(e)
+        elif isinstance(self.cuckoo, CuckooApi):
+            logger.debug("Report from Cuckoo API requested, job_id = %d" % self.job_id)
+            report = self.cuckoo.getReport(self.job_id)
+            self.report = report
+        else:
+            print(type(self.cuckoo))
+            raise Exception("Invalid report source given")
+
 
     @property
     def requested_domains(self):
