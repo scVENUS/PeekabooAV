@@ -16,7 +16,7 @@ For news and announcements follow us on twitter [@peekabooAV](https://twitter.co
 
 * [Python 2.7](https://www.python.org/downloads/)
 * [Cuckoo 2.0](https://github.com/cuckoosandbox/cuckoo)
-* Our [AMaViSd](https://github.com/scVENUS/PeekabooAV-amavisd) Fork
+* [AMaViSd 2.11.0](https://www.ijs.si/software/amavisd/)
 
 
 ### Installation ###

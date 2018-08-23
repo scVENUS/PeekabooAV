@@ -4,7 +4,7 @@ Installation
 
 This chapter explains how to install Peekaboo and its dependencies.
 In this chapter we assume that you want to use Peekaboo's extended capabilities to perform behavioural analysis of
-files and directores with Cuckoo. Further, we assume that you want to install AMaViSd and our patch for it to run
+files and directores with Cuckoo. Further, we assume that you want to install AMaViSd to run
 analysis of email attachments. Also, we assume that you use a Debian based Linux distribution.
 
 

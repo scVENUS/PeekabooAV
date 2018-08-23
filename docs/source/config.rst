@@ -103,7 +103,7 @@ Helpers & 3rd Party Applications
 Peekaboo requires a little tool called ``chwon2me`` in order to change the ownership of files and directories
 to be analyed by Peekaboo.
 Also, Peekaboo can run behavioural analysis of file and directories by utilizing Cuckoo sandbox for this purpose.
-Further, email attachments can be supplied to Peekaboo for analysis using our patched version of AMaViSd.
+Further, email attachments can be supplied to Peekaboo for analysis directly from AMaViSd.
 
 The remaining sections cover the setup of these components.
 
@@ -124,35 +124,10 @@ Please refer to the Cuckoo documentation available at https://cuckoo.sh/docs/ind
 
 AMaViSd
 -------
-First, replace your AMaViSd with our patched version of AMaViSd. To do so, download the AMaViSd 2.11.0 source code
-and extract ``amavisd.conf-default`` and ``amavisd``.
-
-.. code-block:: shell
-
-    curl https://www.ijs.si/software/amavisd/amavisd-new-2.11.0.tar.xz -o amavisd-new-2.11.0.tar.xz
-    tar xvf amavisd-new-2.11.0.tar.xz  amavisd-new-2.11.0/amavisd.conf-default
-    tar xvf amavisd-new-2.11.0.tar.xz  amavisd-new-2.11.0/amavisd
-
-Now, you can apply our patch.
-
-.. code-block:: shell
-
-    cd amavisd-new-2.11.0/
-    patch -p4 < ../peekaboo-amavisd.patch
-    patch -p1 < ../debian-find_config_files.patch
-    mv amavisd /usr/sbin/amavisd-new
-
-
-Next, edit ``/etc/amavis/amavis.conf``:
-
-.. code-block:: perl
-   
-   $mydomain = 'peekaboo.test';
-   $myhostname = 'host.peekaboo.test';
-   
-   # Optional for development if you want to receive the results of AMaViSd via email
-   $notify_method = 'smtp:[127.0.0.1]:10025';
-   $forward_method = 'smtp:[127.0.0.1]:10025'; 
+First, install the ``10-ask_peekaboo`` plugin as
+``/etc/amavis/conf.d/10-ask_peekaboo``.
+It is available from the ``amavis`` subdirectory of the PeekabooAV installation
+and has been tested with AMaViS 2.11.0.
 
 
 Put the following code into ``/etc/amavis/conf.d/15-av_scanners``:
@@ -161,7 +136,7 @@ Put the following code into ``/etc/amavis/conf.d/15-av_scanners``:
 
     @av_scanners = (
         ['Peekaboo-Analysis',
-        \&ask_daemon, ["{}\n", "/var/lib/peekaboo/peekaboo.sock"],
+        \&ask_peekaboo, ["{}\n", "/var/lib/peekaboo/peekaboo.sock"],
         qr/wurde als "(unknown|checked|good|ignored)" eingestuft/m,
         qr/wurde als "bad" eingestuft/m ],
     );
@@ -185,15 +160,20 @@ and for mail notifications for the user ``peekaboo`` add this line to
    
    $virus_admin = 'peekaboo';
 
-Let AMaViSd use unique directories for temporary files. This configuration is mandatory for Peekaboo.
-So, edit ``/etc/amavis/conf.d/50-user``:
+Next, create an ``/etc/amavis/conf.d/50-peekaboo`` and fill it with:
 
 .. code-block:: perl
    
+   # force a fresh child for each request
    $max_requests = 1;
-   $enable_dump_info  = 1;       # set to 1 to enable dump_info feature
-   $dump_info_tempdir = '/tmp';  # base directory where dump_info() will put its stuff
 
+   # if not autodetectable or misconfigured, override hostname and domain
+   $mydomain = 'peekaboo.test';
+   $myhostname = 'host.peekaboo.test';
+
+   # Optional for development if you want to receive the results of AMaViSd via email
+   $notify_method = 'smtp:[127.0.0.1]:10025';
+   $forward_method = 'smtp:[127.0.0.1]:10025';
 
 Finally, restart AMaViSd
 

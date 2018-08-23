@@ -1,0 +1,101 @@
+use strict;
+use File::Copy;
+
+# base directory where dump_info() will put its stuff
+my $dump_info_tempdir = '/tmp';
+
+# dump_info creates a .info file for every processed attachment that contains
+# internal meta information determined by amavis. It can be used by
+# av_scanners. E.g. for behavioural analysis checking in sandboxes where the
+# original file extension is required.
+#
+# example: p002.info
+#
+# [attachment]
+# full_name:     : /var/lib/amavis/tmp/amavis-20170427T174709-03863-dIJwSsyE/parts/p002
+# name_declared: : hugo.txt
+# type_declared: : text/plain
+# type_long:     : ASCII text
+# type_short:    : asc
+# size:          : 14
+# digest:        : fecf3151ca5ce7b9d24defdc140edc0eefaaeaed:text/plain
+# attributes:    : 
+# queue_id:      : 96C866A02E4
+sub dump_info($$$) {
+  my ($part, $tempdir, $own_tempdir) = @_;
+
+  my $full_name = $part->full_name;
+  my $base_name = $part->base_name;
+  my $dir_name  = $part->dir_name;
+
+  # redirect amavis tempdir into our tempdir but keep intermediate path
+  # components ->/var/lib/amavis/tmp/amavis-20180822T155830-07760-4DfB2yxI/parts ->
+  # /tmp/amavis-20180822T155830-07760-4DfB2yxI/parts
+  $dir_name =~ s|^$tempdir/|$own_tempdir/|;
+  # remove /parts subdir component from end
+  $dir_name =~ s|/parts$||;
+
+  unless (-d $dir_name || mkdir($dir_name, 0770)) {
+    Amavis::Util::do_log(-1, "WARN: Couldn't create info dir $dir_name: $!");
+    return 0;
+  }
+
+  my $info_file = "$dir_name/$base_name.info";
+  my $info_fh;
+  unless (open($info_fh, ">:encoding(UTF-8)", $info_file)) {
+    Amavis::Util::do_log(-1, "WARN: Couldn't create info file $info_file: $!");
+    return 0;
+  }
+
+  printf $info_fh "[attachment]\n";
+  for my $field (qw(
+               full_name
+               name_declared
+               type_declared
+               type_long
+               type_short
+               size
+               digest
+               attributes
+               queue_id
+              )) {
+    my $val = $part->can($field) ? $part->$field() : $Amavis::MSGINFO->$field();
+    $val = ref $val eq 'ARRAY' ? $val->[-1] : $val;
+    $val = Amavis::Util::safe_decode_mime($val) if $field eq "name_declared";
+    printf $info_fh "%-15s: %s\n", "$field", $val;
+  }
+  close $info_fh;
+
+  unless (copy($full_name, $dir_name)) {
+    Amavis::Util::do_log(-1, "WARN: couldn't copy $full_name to $dir_name");
+    return 0;
+  }
+
+  return 1;
+}
+
+sub ask_peekaboo {
+  my($bare_fnames, $names_to_parts, $tempdir, $dummy) = @_;
+
+  # default to /tmp but let dump_info_tempdir override
+  my $own_tempdir = '/tmp';
+  $own_tempdir = $dump_info_tempdir if defined $dump_info_tempdir;
+
+  # remove everything after and including last slash (job identifier in e.g.
+  # /var/lib/amavis/tmp/amavis-20180822T155830-07760-4DfB2yxI) to get amavis
+  # tempdir
+  $tempdir =~ s|/+[^/]+$||;
+
+  # dump out some additional info for peekaboo
+  foreach my $part (values %{$names_to_parts}) {
+    unless (dump_info($part, $tempdir, $own_tempdir)) {
+      # signal virus scanning failure if info can't be dumped
+      return (undef, '', undef);
+    }
+  }
+
+  # use standard daemon socket communication to trigger peekaboo
+  ask_daemon(@_);
+}
+
+1;  # ensure a defined return value
