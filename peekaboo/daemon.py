@@ -104,15 +104,9 @@ class PeekabooStreamServer(SocketServer.ThreadingUnixStreamServer):
         self.request_queue_size = self.config.worker_count * 2
         self.allow_reuse_address = True
         
-        # Try three times to start SocketServer
-        for i in range(0, 3):
-            try:
-                SocketServer.ThreadingUnixStreamServer.__init__(self, server_address,
-                                                                request_handler_cls,
-                                                                bind_and_activate=bind_and_activate)
-                break
-            except socket.error, msg:
-                logger.warning("SocketServer couldn't start (%i)" % i)
+        SocketServer.ThreadingUnixStreamServer.__init__(self, server_address,
+                                                        request_handler_cls,
+                                                        bind_and_activate=bind_and_activate)
 
     def shutdown_request(self, request):
         """ Keep the connection alive until Cuckoo reports back, so the results can be send to the client. """
@@ -252,7 +246,14 @@ def run():
         pidfile.write("%s\n" % pid)
 
     systemd = SystemdNotifier()
-    server = PeekabooStreamServer(config.sock_file, PeekabooStreamRequestHandler)
+    # Try three times to start SocketServer
+    for i in range(0, 3):
+        try:
+            server = PeekabooStreamServer(config.sock_file, PeekabooStreamRequestHandler)
+            break
+        except socket.error, msg:
+            logger.warning("SocketServer couldn't start (%i)" % i)
+
     runner = Thread(target=server.serve_forever)
     runner.daemon = True
 
