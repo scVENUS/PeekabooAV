@@ -253,6 +253,9 @@ def run():
             break
         except socket.error, msg:
             logger.warning("SocketServer couldn't start (%i)" % i)
+    if not server:
+        logger.error('Fatal: Couldn\'t initialise Peekaboo Server')
+        sys.exit(1)
 
     runner = Thread(target=server.serve_forever)
     runner.daemon = True
