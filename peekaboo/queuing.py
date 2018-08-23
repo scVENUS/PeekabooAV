@@ -25,7 +25,7 @@
 
 import logging
 from threading import Thread
-from Queue import Queue
+from Queue import Queue, Empty
 from peekaboo import Singleton
 from peekaboo.ruleset.engine import RulesetEngine
 from peekaboo.exceptions import CuckooReportPendingException
@@ -87,8 +87,10 @@ class Worker(Thread):
 
     def run(self):
         while self.active:
-            logger.debug('Worker is ready')
-            sample = JobQueue.jobs.get(True)  # wait blocking for next job (thread safe)
+            try:
+                sample = JobQueue.jobs.get(True, 5)  # wait blocking for next job (thread safe)
+            except Empty:
+                continue
             logger.info('Worker %d: Processing sample %s' % (self.worker_id, sample))
 
             sample.init()
@@ -101,6 +103,11 @@ class Worker(Thread):
                 pass
             except Exception as e:
                 logger.exception(e)
+
+            logger.debug('Worker is ready')
+        logger.info('Worker %d: Stopping' % self.worker_id)
+        JobQueue.workers[self.worker_id] = None
+
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.active = False
