@@ -26,7 +26,7 @@
 import re
 
 
-VERSION = (1, 6, 1, 22)
+VERSION = (1, 6, 1)
 AUTHORS = ['Felix Bauer', 'Sebastian Deiss']
 
 __version__ = '.'.join(map(str, VERSION))
