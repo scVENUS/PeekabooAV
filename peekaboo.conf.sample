@@ -54,6 +54,17 @@ url              :    sqlite:////path/to/database.db
 # Cuckoo specific settings
 #
 [cuckoo]
+# mode has two options:
+#  embed   : for legacy embeded mode
+#  api     : to access cuckoo via the REST api
+mode             :    api
+
+# embed mode
 exec             :    /usr/local/bin/cuckoo
 submit           :    /usr/local/bin/cuckoo submit
+
+# api mode
+url              :    http://127.0.0.1:8090
+poll_interval    :    5
+
 storage_path     :    /home/peekaboo/.cuckoo/storage

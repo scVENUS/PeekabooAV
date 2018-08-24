@@ -29,7 +29,10 @@ import os
 import logging
 import json
 import subprocess
-from twisted.internet import protocol
+import requests
+import random
+from twisted.internet import protocol, reactor
+from time import sleep
 from peekaboo import MultiRegexMatcher
 from peekaboo.config import get_config
 from peekaboo.exceptions import CuckooAnalysisFailedException
@@ -40,47 +43,184 @@ from peekaboo.queuing import JobQueue
 logger = logging.getLogger(__name__)
 
 
-def submit_to_cuckoo(sample):
+class Cuckoo:
     """
-    Submit a file or directory to Cuckoo for behavioural analysis.
-
-    :param sample: Path to a file or a directory.
-    :return: The job ID used by Cuckoo to identify this analysis task.
+        Parent class, defines interface to Cuckoo
     """
-    config = get_config()
-    try:
-        proc = config.cuckoo_submit
-        proc.append(sample)
-        p = subprocess.Popen(proc,
-                             stdout=subprocess.PIPE,
-                             stderr=subprocess.PIPE)
-        p.wait()
-    except Exception as e:
-        raise CuckooAnalysisFailedException(e)
+    def __init__(self):
+        pass
+    
+    def submit(self):
+        logger.error("Not implemented yet")
+    
+    def do(self):
+        # wait for the cows to come home
+        while True:
+            sleep(600)
 
-    if not p.returncode == 0:
-        # TODO: tell opponent on socket that file has not been checked.
-        raise CuckooAnalysisFailedException('cuckoo submit returned a non-zero return code.')
-    else:
-        out, err = p.communicate()
-        logger.debug("cuckoo submit STDOUT: %s" % out)
-        logger.debug("cuckoo submit STDERR: %s" % err)
-        # process output to get job ID
-        patterns = list()
-        # Example: Success: File "/var/lib/peekaboo/.bashrc" added as task with ID #4
-        patterns.append(".*Success.*: File .* added as task with ID #([0-9]*).*")
-        patterns.append(".*added as task with ID ([0-9]*).*")
-        matcher = MultiRegexMatcher(patterns)
-        response = out.replace("\n", "")
-        m = matcher.match(response)
-        logger.debug('Pattern %d matched.' % matcher.matched_pattern)
 
-        if m:
-            job_id = int(m.group(1))
-            return job_id
+class CuckooEmbed(Cuckoo):
+    """
+        Runs and interfaces with Cuckoo in IPC
+        
+        @author: Sebastian Deiss
+        @author: Felix Bauer
+    """
+    def __init__(self, interpreter, cuckoo_exec):
+        self.interpreter = interpreter
+        self.cuckoo_exec = cuckoo_exec
+    
+    def submit(self, sample):
+        """
+            Submit a file or directory to Cuckoo for behavioural analysis.
+            
+            :param sample: Path to a file or a directory.
+            :return: The job ID used by Cuckoo to identify this analysis task.
+            """
+        config = get_config()
+        try:
+            proc = config.cuckoo_submit
+            proc.append(sample)
+            p = subprocess.Popen(proc,
+                                 stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE)
+            p.wait()
+        except Exception as e:
+            raise CuckooAnalysisFailedException(e)
+        
+        if not p.returncode == 0:
+            # TODO: tell opponent on socket that file has not been checked.
+            raise CuckooAnalysisFailedException('cuckoo submit returned a non-zero return code.')
+        else:
+            out, err = p.communicate()
+            logger.debug("cuckoo submit STDOUT: %s" % out)
+            logger.debug("cuckoo submit STDERR: %s" % err)
+            # process output to get job ID
+            patterns = list()
+            # Example: Success: File "/var/lib/peekaboo/.bashrc" added as task with ID #4
+            patterns.append(".*Success.*: File .* added as task with ID #([0-9]*).*")
+            patterns.append(".*added as task with ID ([0-9]*).*")
+            matcher = MultiRegexMatcher(patterns)
+            response = out.replace("\n", "")
+            m = matcher.match(response)
+            logger.debug('Pattern %d matched.' % matcher.matched_pattern)
+            
+            if m:
+                job_id = int(m.group(1))
+                return job_id
+            raise CuckooAnalysisFailedException(
+                                                'Unable to extract job ID from given string %s' % response
+                                                )
+
+    def do(self):
+        # reaktor and shit
+        # Run Cuckoo sandbox, parse log output, and report back of Peekaboo.
+        srv = CuckooServer()
+        reactor.spawnProcess(srv, self.interpreter, [self.interpreter, '-u',
+                                                     self.cuckoo_exec])
+        reactor.run()
+
+
+class CuckooApi(Cuckoo):
+    """
+        Interfaces with a Cuckoo installation via its REST API
+        
+        @author: Felix Bauer
+    """
+    def __init__(self, url="http://localhost:8090"):
+        self.url = url
+        self.reported = self.__status()["tasks"]["reported"]
+        logger.info("Connection to Cuckoo seems to work, %i reported tasks seen", self.reported)
+    
+    def __get(self, url, method="get", files=""):
+        r = ""
+        logger.debug("Requesting %s, method %s" % (url, method))
+        
+        # try 3 times to get a successfull response
+        for retry in range(0, 3):
+            try:
+                if method == "get":
+                    r = requests.get("%s/%s" % (self.url, url))
+                elif method == "post":
+                    r = requests.post("%s/%s" % (self.url, url), files=files)
+                else:
+                    break
+                if r.status_code != 200:
+                    continue
+                else:
+                    return r.json()
+            except requests.exceptions.Timeout as e:
+                # Maybe set up for a retry, or continue in a retry loop
+                print(e)
+                if e and retry >= 2:
+                    raise e
+            except requests.exceptions.TooManyRedirects as e:
+                # Tell the user their URL was bad and try a different one
+                print(e)
+                if e and retry >= 2:
+                    raise e
+            except requests.exceptions.RequestException as e:
+                # catastrophic error. bail.
+                print(e)
+                if e and retry >= 2:
+                    raise e
+        return None
+    
+    def __status(self):
+        return self.__get("cuckoo/status")
+    
+    def submit(self, sample):
+        filename = os.path.basename(sample)
+        files = {"file": (filename, sample)}
+        r = self.__get("tasks/create/file", method="post", files=files)
+        
+        task_id = r["task_id"]
+        if task_id > 0:
+            return task_id
         raise CuckooAnalysisFailedException(
-            'Unable to extract job ID from given string %s' % response
-        )
+                                            'Unable to extract job ID from given string %s' % response
+                                            )
+
+    def getReport(self, job_id):
+        return self.__get("tasks/report/%d" % job_id)
+    
+    def do(self):
+        # do the polling for finished jobs
+        # record analysis count and call status over and over again
+        # then:
+        # sample = ConnectionMap.get_sample_by_job_id(job_id)
+        # logger ......
+        
+        limit = 1000000
+        offset = self.__status()["tasks"]["total"]
+        config = get_config()
+        
+        while True:
+            cuckoo_tasks_list = self.__get("tasks/list/%i/%i" % (limit, offset))
+            #maxJobID = cuckoo_tasks_list[-1]["id"]
+            
+            first = True
+            if cuckoo_tasks_list:
+                for j in cuckoo_tasks_list["tasks"]:
+                    if j["status"] == "reported":
+                        job_id = j["id"]
+                        logger.debug("Analysis done for task #%d" % job_id)
+                        logger.debug("Remaining connections: %d" % ConnectionMap.size())
+                        sample = ConnectionMap.get_sample_by_job_id(job_id)
+                        if sample:
+                            logger.debug('Requesting Cuckoo report for sample %s' % sample)
+                            self.__report = CuckooReport(job_id, self)
+                            sample.set_attr('cuckoo_report', self.__report)
+                            sample.set_attr('cuckoo_json_report_file', self.__report.file_path)
+                            JobQueue.submit(sample, self.__class__)
+                            logger.debug("Remaining connections: %d" % ConnectionMap.size())
+                        else:
+                            #if first:
+                            #    first = False
+                            #    offset += 1
+                            logger.debug('No connection found for ID %d' % job_id)
+            #self.reported = reported
+            sleep(float(config.cuckoo_poll_interval))
 
 
 class CuckooServer(protocol.ProcessProtocol):
@@ -172,11 +312,17 @@ class CuckooReport(object):
     Represents a Cuckoo analysis JSON report.
 
     @author: Sebastian Deiss
+    @author: Felix Bauer
     """
-    def __init__(self, job_id):
+    def __init__(self, job_id, cuckoo="embed", cuckoo_report=None):
+        """
+        arg. cuckoo is either "embed", "dummy" or a cuckoo object to use the api
+        """
         self.job_id = job_id
+        self.cuckoo = cuckoo
         self.file_path = None
         self.report = None
+        self.cuckoo_report = cuckoo_report
         self._parse()
 
     def _parse(self):
@@ -184,25 +330,34 @@ class CuckooReport(object):
         Reads the JSON report from Cuckoo and loads it into the Sample object.
         """
         config = get_config()
-        cuckoo_report = os.path.join(
-            config.cuckoo_storage, 'analyses/%d/reports/report.json'
-                                   % self.job_id
-        )
+        if self.cuckoo == "embed":
+            if not self.cuckoo_report:
+                self.cuckoo_report = os.path.join(
+                                                  config.cuckoo_storage, 'analyses/%d/reports/report.json'
+                                                  % self.job_id
+                                                  )
 
-        if not os.path.isfile(cuckoo_report):
-            raise OSError('Cuckoo report not found at %s.' % cuckoo_report)
+            if not os.path.isfile(self.cuckoo_report):
+                raise OSError('Cuckoo report not found at %s.' % self.cuckoo_report)
+            else:
+                logger.debug(
+                    'Accessing Cuckoo report for task %d at %s '
+                    % (self.job_id, self.cuckoo_report)
+                )
+                self.file_path = self.cuckoo_report
+                with open(self.cuckoo_report) as data:
+                    try:
+                        report = json.load(data)
+                        self.report = report
+                    except ValueError as e:
+                        logger.exception(e)
+        elif isinstance(self.cuckoo, CuckooApi):
+            logger.debug("Report from Cuckoo API requested, job_id = %d" % self.job_id)
+            report = self.cuckoo.getReport(self.job_id)
+            self.report = report
         else:
-            logger.debug(
-                'Accessing Cuckoo report for task %d at %s '
-                % (self.job_id, cuckoo_report)
-            )
-            self.file_path = cuckoo_report
-            with open(cuckoo_report) as data:
-                try:
-                    report = json.load(data)
-                    self.report = report
-                except ValueError as e:
-                    logger.exception(e)
+            raise ValueError("Invalid report source given in config")
+
 
     @property
     def requested_domains(self):
