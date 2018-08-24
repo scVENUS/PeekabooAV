@@ -54,15 +54,10 @@ url              :    sqlite:////path/to/database.db
 # Cuckoo specific settings
 #
 [cuckoo]
-# mode has three options:
+# mode has two options:
 #  embed   : for legacy embeded mode
 #  api     : to access cuckoo via the REST api
-#  dummy   : for development and test, no analysis will be done
-#            dummy_report option required to point at json document cuckoo report
 mode             :    api
-
-# dummy mode
-dummy_report     :    /home/peekaboo/report.json
 
 # embed mode
 exec             :    /usr/local/bin/cuckoo
