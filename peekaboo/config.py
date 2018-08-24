@@ -91,7 +91,7 @@ class PeekabooConfig(object):
         self.ruleset_config = None
         self.cuckoo_mode = "api"
         self.cuckoo_dummy_report = None
-        self.cuckoo_url = "http://127.0.0.1:8090"
+        self.cuckoo_url = ""
         self.cuckoo_poll_interval = 5
         self.cuckoo_storage = None
         self.cuckoo_exec = None

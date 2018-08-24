@@ -121,49 +121,6 @@ class CuckooEmbed(Cuckoo):
         reactor.run()
 
 
-class CuckooDummy(Cuckoo):
-    """
-        Simulates a Cuckoo installation
-        For development only, no analysis done
-        
-        @author: Felix Bauer
-    """
-    def __init__(self):
-        random.seed()
-        self.lastId = 0
-        self.jobIdsTime = {}
-
-    def submit(self, sample):
-        self.lastId += 1
-        self.jobIdsTime[self.lastId] = random.randint(5, 60)
-        return self.lastId
-
-    def do(self):
-        config = get_config()
-        while True:
-            logger.debug("Waiting for Jobs: %s" % self.jobIdsTime)
-            for job_id,t in self.jobIdsTime.iteritems():
-                t = t - 1
-                self.jobIdsTime[job_id] = t
-                # check if time is up
-                if t <= 0:
-                    logger.debug("Analysis done for task #%d" % job_id)
-                    logger.debug("Remaining connections: %d" % ConnectionMap.size())
-                    sample = ConnectionMap.get_sample_by_job_id(job_id)
-                    if sample:
-                        logger.debug('Requesting Cuckoo report for sample %s' % sample)
-                        self.__report = CuckooReport(1, cuckoo_report=config.cuckoo_dummy_report)
-                        sample.set_attr('cuckoo_report', self.__report)
-                        sample.set_attr('cuckoo_json_report_file', self.__report.file_path)
-                        JobQueue.submit(sample, self.__class__)
-                        logger.debug("Remaining connections: %d" % ConnectionMap.size())
-                    else:
-                        logger.debug('No connection found for ID %d' % job_id)
-            # remove ready jobs (time == 0)
-            self.jobIdsTime = {key:val for key, val in self.jobIdsTime.items() if val != 0}
-            sleep(1)
-
-
 class CuckooApi(Cuckoo):
     """
         Interfaces with a Cuckoo installation via its REST API
@@ -399,7 +356,7 @@ class CuckooReport(object):
             report = self.cuckoo.getReport(self.job_id)
             self.report = report
         else:
-            raise Exception("Invalid report source given")
+            raise ValueError("Invalid report source given in config")
 
 
     @property

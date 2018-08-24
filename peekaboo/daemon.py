@@ -40,7 +40,7 @@ from peekaboo.toolbox.sampletools import ConnectionMap
 from peekaboo.queuing import JobQueue, create_workers
 from peekaboo.sample import make_sample
 from peekaboo.exceptions import PeekabooDatabaseError
-from peekaboo.toolbox.cuckoo import Cuckoo, CuckooEmbed, CuckooApi, CuckooDummy
+from peekaboo.toolbox.cuckoo import Cuckoo, CuckooEmbed, CuckooApi
 
 
 logger = logging.getLogger(__name__)
