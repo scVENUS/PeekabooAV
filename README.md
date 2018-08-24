@@ -31,13 +31,6 @@ Install dependencies
 pip install -r requirements.txt
 ```
 
-Compile ``chown2me``
-```shell
-cd bin/
-make chown2me
-sudo setcap cap_chown+ep chown2me
-```
-
 Install PeekabooAV
 ```shell
 python setup.py install

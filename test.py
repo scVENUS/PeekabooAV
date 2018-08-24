@@ -44,7 +44,6 @@ class PeekabooDummyConfig(object):
         self.db_con = None
         self.job_hash_regex = r'/var/lib/amavis/tmp/([^/]+)/parts.*'
         self.sample_base_dir = '/tmp'
-        self.chown2me_exec = 'bin/chown2me'
 
     def set_db_con(self, db_con):
         self.db_con = db_con
@@ -181,44 +180,28 @@ class TestSample(unittest.TestCase):
         self.assertFalse(self.sample.known)
 
     def test_sample_attributes_with_meta_info(self):
-        test_meta_info = '[attachment]\n'
-        test_meta_info += 'full_name     : /tmp/test.pyc\n'
-        test_meta_info += 'name_declared : test.pyc\n'
-        test_meta_info += 'type_declared : application/x-bytecode.python\n'
-        test_meta_info += 'type_long     : application/x-python-bytecode\n'
-        test_meta_info += 'type_short    : pyc\n'
-        test_meta_info += 'size          : 200\n'
-        test_meta_info += 'digest        :\n'
-        test_meta_info += 'attributes    :\n'
-        test_meta_info += 'queue_id      :\n'
-        with open('./test_meta_info.info', 'w+') as f:
-            f.write(test_meta_info)
-        self.sample.load_meta_info('./test_meta_info.info')
-        self.assertEqual(self.sample.file_extension, 'pyc')
+        sample = Sample('test.pyc', {
+            'full_name': '/tmp/test.pyc',
+            'name_declared': 'test.pyc',
+            'type_declared': 'application/x-bytecode.python',
+            'type_long': 'application/x-python-bytecode',
+            'type_short': 'pyc',
+            'size': '200' })
+        self.assertEqual(sample.file_extension, 'pyc')
 
     def test_sample_without_suffix(self):
-        test_meta_info = '[attachment]\n'
-        test_meta_info += 'full_name     : /tmp/junk\n'
-        test_meta_info += 'name_declared : Report.docx\n'
-        test_meta_info += 'type_declared : application/vnd.openxmlformats-officedocument.wordprocessingml.document\n'
-        test_meta_info += 'type_long     : application/vnd.openxmlformats-officedocument.wordprocessingml.document\n'
-        test_meta_info += 'type_short    : docx\n'
-        test_meta_info += 'size          : 212\n'
-        test_meta_info += 'digest        :\n'
-        test_meta_info += 'attributes    :\n'
-        test_meta_info += 'queue_id      :\n'
-        with open('./junk.info', 'w+') as f:
-            f.write(test_meta_info)
-        sample = Sample('junk')
-        self.assertEqual(sample.file_extension, '')
-        sample.load_meta_info('./junk.info')
+        sample = Sample('junk', {
+            'full_name': '/tmp/junk',
+            'name_declared': 'Report.docx',
+            'type_declared': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'type_long': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'type_short': 'docx',
+            'size': '212' })
         self.assertEqual(sample.file_extension, 'docx')
 
     @classmethod
     def tearDownClass(cls):
         os.unlink(cls.test_db)
-        os.unlink('./test_meta_info.info')
-        os.unlink('./junk.info')
 
 
 def main():

@@ -10,7 +10,6 @@ group            :    peekaboo
 socket_file      :    /opt/peekaboo/peekaboo.sock
 pid_file         :    /opt/peekaboo/peekaboo.pid
 interpreter      :    /usr/bin/python
-chown2me_exec    :    /opt/peekaboo/bin/chown2me
 worker_count     :    3
 sample_base_dir  :    /tmp
 job_hash_regex   :    /var/lib/amavis/tmp/([^/]+)/parts.*

@@ -48,10 +48,6 @@ install_requires = [x.strip() for x in all_reqs if 'git+' not in x]
 dependency_links = [x.strip().replace('git+', '')
                     for x in all_reqs if 'git+' not in x]
 
-# compile chown2me
-system('cd bin/ && make chown2me')
-
-
 setup(
     name='PeekabooAV',
     version=__version__,

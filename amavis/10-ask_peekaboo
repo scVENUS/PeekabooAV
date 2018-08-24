@@ -1,101 +1,110 @@
+###############################################################################
+#                                                                             #
+# Peekaboo Extended Email Attachment Behavior Observation Owl                 #
+#                                                                             #
+# 10-ask_peekaboo
+###############################################################################
+#                                                                             #
+# Copyright (C) 2016-2018  science + computing ag                             #
+#                                                                             #
+# This program is free software: you can redistribute it and/or modify        #
+# it under the terms of the GNU General Public License as published by        #
+# the Free Software Foundation, either version 3 of the License, or (at       #
+# your option) any later version.                                             #
+#                                                                             #
+# This program is distributed in the hope that it will be useful, but         #
+# WITHOUT ANY WARRANTY; without even the implied warranty of                  #
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU           #
+# General Public License for more details.                                    #
+#                                                                             #
+# You should have received a copy of the GNU General Public License           #
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.       #
+#                                                                             #
+###############################################################################
+
 use strict;
-use File::Copy;
 
-# base directory where dump_info() will put its stuff
-my $dump_info_tempdir = '/tmp';
-
-# dump_info creates a .info file for every processed attachment that contains
-# internal meta information determined by amavis. It can be used by
-# av_scanners. E.g. for behavioural analysis checking in sandboxes where the
-# original file extension is required.
+# define our own JSON-based protocol by plugging into AMaViS' AV control flow.
+# Standard ask_daemon call graph:
 #
-# example: p002.info
+# virus_scan (iterate over active virus scanners)
+# -> ask_daemon (decide what protocol routine to use)
+# -> run_av (iterate over files, run scanner and collect results)
+# -> ask_daemon_internal (protocol routine: communicate with scanner)
 #
-# [attachment]
-# full_name:     : /var/lib/amavis/tmp/amavis-20170427T174709-03863-dIJwSsyE/parts/p002
-# name_declared: : hugo.txt
-# type_declared: : text/plain
-# type_long:     : ASCII text
-# type_short:    : asc
-# size:          : 14
-# digest:        : fecf3151ca5ce7b9d24defdc140edc0eefaaeaed:text/plain
-# attributes:    : 
-# queue_id:      : 96C866A02E4
-sub dump_info($$$) {
-  my ($part, $tempdir, $own_tempdir) = @_;
+# Our call graph:
+#
+# virus_scan
+# -> ask_peekaboo (force our protocol routine)
+# -> run_av
+# -> ask_peekaboo_internal (override query to JSON)
+# -> ask_daemon_internal
+#
+# See below for reasoning.
 
-  my $full_name = $part->full_name;
-  my $base_name = $part->base_name;
-  my $dir_name  = $part->dir_name;
+# use pure-perl implementation since performance should be enough for our needs
+# and it's been a core module since 5.14, avoiding an additional dependency on
+# JSON or JSON::XS
+use JSON::PP;
+# Yes, Amavis has its own minimalist JSON implementation Amavis::JSON. But it
+# doesn't seem to do UTF-8 encoding correctly - everything ends up as latin1.
 
-  # redirect amavis tempdir into our tempdir but keep intermediate path
-  # components ->/var/lib/amavis/tmp/amavis-20180822T155830-07760-4DfB2yxI/parts ->
-  # /tmp/amavis-20180822T155830-07760-4DfB2yxI/parts
-  $dir_name =~ s|^$tempdir/|$own_tempdir/|;
-  # remove /parts subdir component from end
-  $dir_name =~ s|/parts$||;
+sub ask_peekaboo_internal {
+  my ($dummy, $dummy, $names_to_parts, $dummy) = @_;
 
-  unless (-d $dir_name || mkdir($dir_name, 0770)) {
-    Amavis::Util::do_log(-1, "WARN: Couldn't create info dir $dir_name: $!");
-    return 0;
+  # extract some additional info for peekaboo from the parts objects
+  # structure:
+  # [ { "full_name" => "<path>", "name_declared" => ..., ... },
+  #   { ... },
+  #   ... ]
+  my $metainfo = [];
+  foreach my $partname (keys %{$names_to_parts}) {
+    my $pmi = {};
+
+    # certain attributes are only known to a global MSGINFO object
+    for my $field (qw( queue_id )) {
+      my $val = $Amavis::MSGINFO->$field();
+      $pmi->{$field} = $val if (defined($val));
+    }
+
+    my $part = $names_to_parts->{$partname};
+    for my $field (qw(
+          full_name
+          name_declared
+          type_declared
+          type_long
+          type_short
+          size
+          digest
+          attributes
+        )) {
+      my $val = $part->$field();
+
+      # name_declared can be an array of names, if so use the last
+      $val = ref $val eq 'ARRAY' ? $val->[-1] : $val;
+      $val = Amavis::Util::safe_decode_mime($val) if $field eq "name_declared";
+
+      # do not transfer undef values since they're no good for nothing
+      $pmi->{$field} = $val if defined($val);
+    }
+
+    push(@$metainfo, $pmi);
   }
 
-  my $info_file = "$dir_name/$base_name.info";
-  my $info_fh;
-  unless (open($info_fh, ">:encoding(UTF-8)", $info_file)) {
-    Amavis::Util::do_log(-1, "WARN: Couldn't create info file $info_file: $!");
-    return 0;
-  }
-
-  printf $info_fh "[attachment]\n";
-  for my $field (qw(
-               full_name
-               name_declared
-               type_declared
-               type_long
-               type_short
-               size
-               digest
-               attributes
-               queue_id
-              )) {
-    my $val = $part->can($field) ? $part->$field() : $Amavis::MSGINFO->$field();
-    $val = ref $val eq 'ARRAY' ? $val->[-1] : $val;
-    $val = Amavis::Util::safe_decode_mime($val) if $field eq "name_declared";
-    printf $info_fh "%-15s: %s\n", "$field", $val;
-  }
-  close $info_fh;
-
-  unless (copy($full_name, $dir_name)) {
-    Amavis::Util::do_log(-1, "WARN: couldn't copy $full_name to $dir_name");
-    return 0;
-  }
-
-  return 1;
+  # format the whole thing as JSON, enforcing UTF-8 encoding and override
+  # AMaViS-expanded query for standard ask_daemon_internal to execute
+  $_[0] = JSON::PP->new->utf8->encode($metainfo) . "\n";
+  Amavis::AV::ask_daemon_internal(@_);
 }
 
+# force run_av to execute our protocol routine so we can generate the final
+# JSON request structure there. We cannot do it here because run_av will expand
+# special placeholders {} and * in the query template and corrupt our JSON if
+# it contains those, either because of empty hashes formatted as {} or just a
+# simple file name containing the sequence.
 sub ask_peekaboo {
-  my($bare_fnames, $names_to_parts, $tempdir, $dummy) = @_;
-
-  # default to /tmp but let dump_info_tempdir override
-  my $own_tempdir = '/tmp';
-  $own_tempdir = $dump_info_tempdir if defined $dump_info_tempdir;
-
-  # remove everything after and including last slash (job identifier in e.g.
-  # /var/lib/amavis/tmp/amavis-20180822T155830-07760-4DfB2yxI) to get amavis
-  # tempdir
-  $tempdir =~ s|/+[^/]+$||;
-
-  # dump out some additional info for peekaboo
-  foreach my $part (values %{$names_to_parts}) {
-    unless (dump_info($part, $tempdir, $own_tempdir)) {
-      # signal virus scanning failure if info can't be dumped
-      return (undef, '', undef);
-    }
-  }
-
-  # use standard daemon socket communication to trigger peekaboo
-  ask_daemon(@_);
+  $_[4] = \&ask_peekaboo_internal;
+  Amavis::AV::run_av(@_);
 }
 
 1;  # ensure a defined return value

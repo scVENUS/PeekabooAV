@@ -29,54 +29,11 @@ import string
 import threading
 from random import choice
 from datetime import datetime
-from ConfigParser import SafeConfigParser
 from peekaboo import Singleton
 from peekaboo.ruleset import Result
 
 
 logger = logging.getLogger(__name__)
-
-
-class SampleMetaInfo(object):
-    """
-    Additional meta information about a Sample.
-
-    @author: Felix Bauer
-    @author: Sebastian Deiss
-    """
-    def __init__(self, meta_info_file):
-        self.__meta_info_file = meta_info_file
-        self.meta_info = None
-        self._parse()
-
-    def _parse(self):
-        """
-        Parse a meta information file.
-
-        @see: SafeConfigParser
-        """
-        logger.debug('Parsing sample metadata from %s' % self.__meta_info_file)
-        self.meta_info = SafeConfigParser()
-        self.meta_info.read(self.__meta_info_file)
-
-    def get_all(self):
-        """
-        Gets the parsed meta info file.
-
-        :return: A ConfigParser instance for the parsed meta info file.
-        """
-        return self.meta_info
-
-    def get_mime_type(self):
-        """
-        Gets the MIME type parsed from the meta info file field 'type_declared'.
-
-        :return: The MIME type from the meta info file field 'type_declared'.
-        """
-        return self.meta_info.get('attachment', 'type_declared')
-
-    def __str__(self):
-        return '<SampleMetaInfo(%s)>' % str(self.meta_info)
 
 
 class ConnectionMap(Singleton):

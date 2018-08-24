@@ -1,6 +1,5 @@
 *.log
 *.pyc
-chown2me
 # eclipse stuff
 .project
 .pydevproject
@@ -15,8 +14,6 @@ chown2me
 *.db
 # config files
 *.conf
-# chown2me binary
-bin/chown2me
 # Sphinx output
 docs/build
 # build files

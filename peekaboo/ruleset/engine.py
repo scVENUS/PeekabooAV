@@ -132,7 +132,7 @@ class RulesetEngine(object):
 
 def dump_processing_info(sample):
     """
-    Saves the Cuckoo report as HTML + JSON and the meta info file (if available)
+    Saves the Cuckoo report as HTML + JSON
     to a directory named after the job hash.
     """
     job_hash = sample.get_job_hash()
@@ -142,14 +142,6 @@ def dump_processing_info(sample):
     filename = sample.get_filename() + '-' + sample.sha256sum
 
     logger.debug('Dumping processing info to %s for sample %s' % (dump_dir, sample))
-
-    # meta info file
-    if sample.has_attr('meta_info_file'):
-        try:
-            copyfile(sample.get_attr('meta_info_file'),
-                     os.path.join(dump_dir, filename + '.info'))
-        except Exception as e:
-            logger.exception(e)
 
     # Peekaboo's report
     try:

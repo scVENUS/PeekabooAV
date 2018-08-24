@@ -81,7 +81,6 @@ class PeekabooConfig(object):
         self.log_format = '%(asctime)s - %(name)s - (%(threadName)s) - ' \
                           '%(levelname)s - %(message)s'
         self.interpreter = None
-        self.chown2me_exec = None
         self.worker_count = 3
         self.sample_base_dir = None
         self.job_hash_regex = None
@@ -115,7 +114,6 @@ class PeekabooConfig(object):
             self.pid_file = config.get('global', 'pid_file')
             self.sock_file = config.get('global', 'socket_file')
             self.interpreter = config.get('global', 'interpreter')
-            self.chown2me_exec = config.get('global', 'chown2me_exec')
             self.worker_count = int(config.get('global', 'worker_count'))
             self.sample_base_dir = config.get('global', 'sample_base_dir')
             self.job_hash_regex = config.get('global', 'job_hash_regex')

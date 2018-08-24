@@ -33,6 +33,7 @@ import SocketServer
 import socket
 import signal
 from time import sleep
+import json
 from threading import Thread
 from argparse import ArgumentParser
 from sdnotify import SystemdNotifier
@@ -41,7 +42,7 @@ from peekaboo.config import parse_config, get_config
 from peekaboo.db import PeekabooDatabase
 from peekaboo.toolbox.sampletools import ConnectionMap
 from peekaboo.queuing import JobQueue, create_workers
-from peekaboo.sample import make_sample
+from peekaboo.sample import Sample
 from peekaboo.exceptions import PeekabooDatabaseError
 from peekaboo.toolbox.cuckoo import Cuckoo, CuckooEmbed, CuckooApi
 
@@ -125,40 +126,62 @@ class PeekabooStreamRequestHandler(SocketServer.StreamRequestHandler):
     """
     def handle(self):
         """
-        Handles a analysis request. The path of the directory / file to analyse must
-        be written to the corresponding socket.
-        The maximum buffer size is 1024 bytes.
+        Handles an analysis request. This is expected to be a JSON structure
+        containing the path of the directory / file to analyse. Structure:
+
+        [ { "full_name": "<path>",
+            "name_declared": ...,
+            ... },
+          { ... },
+          ... ]
+
+        The maximum buffer size is 16 KiB, because JSON incurs some bloat.
         """
         self.request.sendall('Hallo das ist Peekaboo\n\n')
-        path = self.request.recv(1024).rstrip()
-        logger.info("Got run_analysis request for %s" % path)
+        request = self.request.recv(1024 * 16).rstrip()
 
-        if not os.path.exists(path):
-            self.request.sendall(
-                'FEHLER: Pfad existiert nicht oder Zugriff verweigert.'
-            )
-            logger.error("ERROR: Path does not exist or no permission to access it.")
-        else:
-            for_analysis = []
-            if os.path.isfile(path):
-                sample = make_sample(path, self.request)
-                if sample:
-                    for_analysis.append(sample)
-            else:
-                # walk recursively through entries in the given directory.
-                for dirname, __, filenames in os.walk(path):
-                    for filename in filenames:
-                        logger.debug("Found file %s" % filename)
-                        f = os.path.join(dirname, filename)
-                        sample = make_sample(f, self.request)
-                        if sample:
-                            for_analysis.append(sample)
+        try:
+            parts = json.loads(request)
+        except:
+            self.request.sendall('FEHLER: Ungueltiges JSON.')
+            logger.error('Invalid JSON in request.')
+            return
 
-            # introduced after an issue where results were reported
-            # before all files could be added.
-            for sample in for_analysis:
-                ConnectionMap.add(self.request, sample)
-                JobQueue.submit(sample, self.__class__)
+        if type(parts) not in (list, tuple):
+            self.request.sendall('FEHLER: Ungueltiges Datenformat.')
+            logger.error('Invalid data structure.')
+            return
+
+        for_analysis = []
+        for part in parts:
+            if not part.has_key('full_name'):
+                self.request.sendall('FEHLER: Unvollstaendige Datenstruktur.')
+                logger.error('Incomplete data structure.')
+                return
+
+            path = part['full_name']
+            logger.info("Got run_analysis request for %s" % path)
+            if not os.path.exists(path):
+                self.request.sendall('FEHLER: Pfad existiert nicht oder '
+                        'Zugriff verweigert.')
+                logger.error('Path does not exist or no permission '
+                        'to access it.')
+                return
+
+            if not os.path.isfile(path):
+                self.request.sendall('FEHLER: Eingabe ist keine Datei.')
+                logger.error('Input is not a file')
+                return
+
+            sample = Sample(path, part, self.request)
+            for_analysis.append(sample)
+            logger.debug('Created sample %s' % sample)
+
+        # introduced after an issue where results were reported
+        # before all files could be added.
+        for sample in for_analysis:
+            ConnectionMap.add(self.request, sample)
+            JobQueue.submit(sample, self.__class__)
 
 
 def run():
