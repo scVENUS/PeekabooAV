@@ -61,23 +61,8 @@ sub ask_peekaboo_internal {
   foreach my $partname (keys %{$names_to_parts}) {
     my $pmi = {};
 
-    # certain attributes are only known to a global MSGINFO object
-    for my $field (qw( queue_id )) {
-      my $val = $Amavis::MSGINFO->$field();
-      $pmi->{$field} = $val if (defined($val));
-    }
-
     my $part = $names_to_parts->{$partname};
-    for my $field (qw(
-          full_name
-          name_declared
-          type_declared
-          type_long
-          type_short
-          size
-          digest
-          attributes
-        )) {
+    for my $field (qw( full_name name_declared type_declared )) {
       my $val = $part->$field();
 
       # name_declared can be an array of names, if so use the last
