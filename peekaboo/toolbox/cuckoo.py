@@ -316,7 +316,7 @@ class CuckooReport(object):
     """
     def __init__(self, job_id, cuckoo="embed", cuckoo_report=None):
         """
-        arg. cuckoo is either "embed", "dummy" or a cuckoo object to use the api
+        arg. cuckoo is either "embed" or a cuckoo object to use the api
         """
         self.job_id = job_id
         self.cuckoo = cuckoo

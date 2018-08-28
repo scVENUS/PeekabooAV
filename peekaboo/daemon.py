@@ -270,8 +270,6 @@ def run():
         # If this dies Peekaboo dies, since this is the main thread. (legacy)
         if config.cuckoo_mode == "embed":
             cuckoo = CuckooEmbed(config.interpreter, config.cuckoo_exec)
-        elif config.cuckoo_mode == "dummy":
-            cuckoo = CuckooDummy()
         # otherwise it's the new API method and default
         else:
             cuckoo = CuckooApi(config.cuckoo_url)
