@@ -171,7 +171,7 @@ class CuckooApi(Cuckoo):
     
     def submit(self, sample):
         filename = os.path.basename(sample)
-        files = {"file": (filename, sample)}
+        files = {"file": (filename, open(sample, 'rb'))}
         r = self.__get("tasks/create/file", method="post", files=files)
         
         task_id = r["task_id"]
