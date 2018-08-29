@@ -107,17 +107,6 @@ Further, email attachments can be supplied to Peekaboo for analysis directly fro
 
 The remaining sections cover the setup of these components.
 
-Compile ``chown2me``
---------------------
-
-.. code-block:: shell
-
-   cd bin/
-   make chown2me
-   cp chown2me /opt/peekaboo/bin
-   sudo setcap cap_chown+ep /opt/peekaboo/bin/chown2me
-   chown peekaboo:amavis /opt/peekaboo/bin/chown2me
-
 Cuckoo
 ------
 Please refer to the Cuckoo documentation available at https://cuckoo.sh/docs/index.html.

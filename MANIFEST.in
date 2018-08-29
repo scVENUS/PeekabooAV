@@ -1,6 +1,5 @@
 include README.md
 include LICENSE.txt
-include bin/chown2me.c
 include requirements.txt
 include peekaboo.conf.sample
 include systemd/peekaboo.service

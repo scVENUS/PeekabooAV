@@ -29,35 +29,19 @@ import re
 import errno
 import shutil
 import logging
+import tempfile
 from datetime import datetime
 from peekaboo.config import get_config
 from peekaboo.exceptions import CuckooReportPendingException, \
                                 CuckooAnalysisFailedException
-from peekaboo.toolbox.sampletools import SampleMetaInfo, ConnectionMap, next_job_hash
-from peekaboo.toolbox.files import chown2me, guess_mime_type_from_file_contents, \
+from peekaboo.toolbox.sampletools import ConnectionMap, next_job_hash
+from peekaboo.toolbox.files import guess_mime_type_from_file_contents, \
                                    guess_mime_type_from_filename
 from peekaboo.toolbox.ms_office import has_office_macros
 import peekaboo.ruleset as ruleset
 
 
 logger = logging.getLogger(__name__)
-
-
-def make_sample(file, socket):
-    """
-    Create a Sample object from a given file.
-
-    :param file: Path to the file to create a Sample object from.
-    :param socket: An optional socket to write the report to.
-    :return: A sample object representing the given file or None if the file does not exist.
-    """
-    logger.debug("Looking at file %s" % file)
-    if not os.path.isfile(file):
-        logger.debug('%s is not a file' % file)
-        return None
-    s = Sample(file, socket)
-    logger.debug('Created sample %s' % s)
-    return s
 
 
 class Sample(object):
@@ -74,11 +58,10 @@ class Sample(object):
     @author: Felix Bauer
     @author: Sebastian Deiss
     """
-    def __init__(self, file_path, sock=None):
+    def __init__(self, file_path, metainfo = {}, sock=None):
         self.__path = file_path
         self.__config = get_config()
         self.__db_con = self.__config.get_db_con()
-        self.__meta_info = None
         self.__wd = None
         self.__filename = os.path.basename(self.__path)
         # A symlink that points to the actual file named
@@ -90,7 +73,14 @@ class Sample(object):
         # Additional attributes for a sample object (e. g. meta info)
         self.__attributes = {}
         self.initialized = False
-        self.meta_info_loaded = False
+
+        for field in metainfo:
+            logger.debug('meta_info_%s = %s' % (field, metainfo[field]))
+
+            # JSON will transfer null/None values but we don't want them as
+            # attributes in that case
+            if metainfo[field] is not None:
+                self.set_attr('meta_info_' + field, metainfo[field])
 
     def init(self):
         """
@@ -108,18 +98,19 @@ class Sample(object):
         logger.debug("initializing sample")
 
         job_hash = self.get_job_hash()
-        self.__wd = os.path.join(self.__config.sample_base_dir, job_hash)
+        self.__wd = tempfile.mkdtemp(prefix = job_hash,
+                dir = self.__config.sample_base_dir)
 
-        chown2me()
-
-        meta_info_file = os.path.join(self.__wd, self.__filename + '.info')
-        self.set_attr('meta_info_file', meta_info_file)
-        self.load_meta_info(meta_info_file)
-
+        # create a symlink to submit the file with the correct file extension
+        # to cuckoo via submit.py.
+        self.__symlink = os.path.join(self.__wd,
+                '%s.%s' % (self.sha256sum, self.file_extension))
+        logger.debug('ln -s %s %s' % (self.__path, self.__symlink))
         try:
-            self.__create_symlink()
+            os.symlink(self.__path, self.__symlink)
         except OSError:
             pass
+
         self.initialized = True
 
         # Add sample to database with state 'inProgress' if the sample is unknown
@@ -201,18 +192,6 @@ class Sample(object):
 
         logger.debug("Job hash for this sample: %s" % job_hash)
         return job_hash
-
-    def load_meta_info(self, meta_info_file):
-        try:
-            self.__meta_info = SampleMetaInfo(meta_info_file)
-            logger.debug('Parsing meta info file %s for file %s' % (meta_info_file, self.__path))
-            # Add the information from the dump info file as attributes to the sample object.
-            for info in self.__meta_info.get_all().items('attachment'):
-                logger.debug('meta_info_%s = %s' % (info[0], info[1]))
-                self.set_attr('meta_info_' + info[0], info[1])
-            self.meta_info_loaded = True
-        except Exception:
-            logger.info('No metadata available for file %s' % self.__path)
 
     def save_result(self):
         if self.__db_con.known(self):
@@ -318,15 +297,14 @@ class Sample(object):
 
         # get MIME type from meta info
         try:
-            declared_mt = self.__meta_info.get_mime_type()
+            declared_mt = self.get_attr('meta_info_type_declared')
             if declared_mt is not None:
                 logger.debug('Sample declared as "%s"' % declared_mt)
                 mime_types.append(declared_mt)
         except Exception as e:
             logger.exception(e)
             declared_mt = None
-            if self.meta_info_loaded:
-                logger.error('Cannot get MIME type from meta info although meta info is loaded.')
+            logger.error('Cannot get MIME type from meta info.')
 
         try:
             declared_filename = self.get_attr('meta_info_name_declared')
@@ -409,11 +387,10 @@ class Sample(object):
     def cuckoo_report(self):
         if not self.has_attr('cuckoo_report'):
             try:
-                file_for_analysis = os.path.join(self.__wd, self.__symlink)
-                logger.debug("Submitting %s to Cuckoo" % file_for_analysis)
+                logger.debug("Submitting %s to Cuckoo" % self.__symlink)
                 config = get_config()
                 cuckoo = config.get_cuckoo_obj()
-                job_id = cuckoo.submit(file_for_analysis)
+                job_id = cuckoo.submit(self.__symlink)
                 self.set_attr('job_id', job_id)
                 message = 'Erfolgreich an Cuckoo gegeben %s als Job %d\n' \
                           % (self, job_id)
@@ -435,19 +412,6 @@ class Sample(object):
                 else:
                     self.set_attr('cuckoo_failed', False)
         return self.get_attr('cuckoo_failed')
-
-    def __create_symlink(self):
-        """
-        creates a symlink to submit the file with the correct
-        file extension to cuckoo via submit.py.
-        """
-        orig = os.path.join(self.__wd, self.__filename)
-        self.__symlink = '%s/%s.%s' % (self.__wd,
-                                       self.sha256sum,
-                                       self.file_extension)
-        logger.debug('ln -s %s %s' % (orig, self.__symlink))
-
-        os.symlink(orig, self.__symlink)
 
     def __close_socket(self):
         logger.debug('Closing socket connection.')
@@ -490,18 +454,14 @@ class Sample(object):
                 logger.exception(e)
 
     def __str__(self):
-        meta_info_loaded = 'no'
         job_id = -1
-        if self.__meta_info:
-            meta_info_loaded = 'yes'
         if self.has_attr('job_id'):
             job_id = self.get_attr('job_id')
 
-        return ("<Sample(filename='%s', known='%s', meta_info_loaded='%s', job_id='%d',"
+        return ("<Sample(filename='%s', known='%s', job_id='%d',"
                 " result='%s', sha256sum='%s')>"
                 % (self.__filename,
                    'yes' if self.known else 'no',
-                   meta_info_loaded,
                    job_id,
                    self.__result,
                    self.sha256sum))

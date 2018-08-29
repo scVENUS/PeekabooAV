@@ -41,6 +41,5 @@ Simply
 * ``/path/to/your/venv/bin/pip install -r requirements.txt``
 * ``/path/to/your/venv/bin/pip install -r dev-requirements.txt``
 * Derive your own config from ``peekaboo.conf.sample`` and save it to ``peekaboo.conf``
-* Compile ``chown2me`` as described in the installation chapter.
 * Run Peekaboo with: ``/path/to/your/venv/bin/python peekaboo_debug.py``
 * For command line options run ``/path/to/your/venv/bin/python peekaboo_debug.py --help``
