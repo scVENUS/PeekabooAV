@@ -171,7 +171,7 @@ class CuckooApi(Cuckoo):
     
     def submit(self, sample):
         filename = os.path.basename(sample)
-        files = {"file": (filename, sample)}
+        files = {"file": (filename, open(sample, 'rb'))}
         r = self.__get("tasks/create/file", method="post", files=files)
         
         task_id = r["task_id"]
@@ -196,7 +196,13 @@ class CuckooApi(Cuckoo):
         config = get_config()
         
         while True:
-            cuckoo_tasks_list = self.__get("tasks/list/%i/%i" % (limit, offset))
+            cuckoo_tasks_list = None
+            try:
+                cuckoo_tasks_list = self.__get("tasks/list/%i/%i" % (limit, offset))
+            except Exception as e:
+                logger.warn('Unable to communicate with Cuckoo API: %s' % e)
+                pass
+
             #maxJobID = cuckoo_tasks_list[-1]["id"]
             
             first = True
@@ -211,7 +217,6 @@ class CuckooApi(Cuckoo):
                             logger.debug('Requesting Cuckoo report for sample %s' % sample)
                             self.__report = CuckooReport(job_id, self)
                             sample.set_attr('cuckoo_report', self.__report)
-                            sample.set_attr('cuckoo_json_report_file', self.__report.file_path)
                             JobQueue.submit(sample, self.__class__)
                             logger.debug("Remaining connections: %d" % ConnectionMap.size())
                         else:
