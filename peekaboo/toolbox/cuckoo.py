@@ -196,7 +196,13 @@ class CuckooApi(Cuckoo):
         config = get_config()
         
         while True:
-            cuckoo_tasks_list = self.__get("tasks/list/%i/%i" % (limit, offset))
+            cuckoo_tasks_list = None
+            try:
+                cuckoo_tasks_list = self.__get("tasks/list/%i/%i" % (limit, offset))
+            except Exception as e:
+                logger.warn('Unable to communicate with Cuckoo API: %s' % e)
+                pass
+
             #maxJobID = cuckoo_tasks_list[-1]["id"]
             
             first = True
