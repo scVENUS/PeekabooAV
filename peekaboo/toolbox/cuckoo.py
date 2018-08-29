@@ -211,7 +211,6 @@ class CuckooApi(Cuckoo):
                             logger.debug('Requesting Cuckoo report for sample %s' % sample)
                             self.__report = CuckooReport(job_id, self)
                             sample.set_attr('cuckoo_report', self.__report)
-                            sample.set_attr('cuckoo_json_report_file', self.__report.file_path)
                             JobQueue.submit(sample, self.__class__)
                             logger.debug("Remaining connections: %d" % ConnectionMap.size())
                         else:
