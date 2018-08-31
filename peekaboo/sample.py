@@ -132,8 +132,11 @@ class Sample(object):
 
         # create a symlink to submit the file with the correct file extension
         # to cuckoo via submit.py.
+        file_ext = self.file_extension
+        if file_ext:
+            file_ext = ".%s" % file_ext
         self.__symlink = os.path.join(self.__wd,
-                '%s.%s' % (self.sha256sum, self.file_extension))
+                '%s%s' % (self.sha256sum, file_ext))
         logger.debug('ln -s %s %s' % (self.__path, self.__symlink))
         try:
             os.symlink(self.__path, self.__symlink)
