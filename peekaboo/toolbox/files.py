@@ -36,8 +36,10 @@ logger = logging.getLogger(__name__)
 def guess_mime_type_from_file_contents(file_path):
     """  Get type from file magic bytes. """
     mt = magic.from_file(file_path, mime=True)
-    if mt:
-        return mt
+    if not mt:
+        return None
+
+    return mt
 
 
 def guess_mime_type_from_filename(file_path):
@@ -47,5 +49,7 @@ def guess_mime_type_from_filename(file_path):
         mimetypes.add_type('application/javascript', '.jse')
 
     mt = mimetypes.guess_type(file_path)[0]
-    if mt:
-        return mt
+    if not mt:
+        return None
+
+    return mt
