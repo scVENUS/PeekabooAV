@@ -307,17 +307,21 @@ class Sample(object):
 
     @property
     def file_extension(self):
+        if self.has_attr('file_extension'):
+            return self.get_attr('file_extension')
+
+        # try to find a file name containing an extension. Using
+        # self.__filename will almost never yield anything useful because
+        # amavis intentionally hands us files named only p001, p002 and so on.
+        # But we still try it in case there's no declared name.
+        filename = self.__filename
         if self.has_attr('meta_info_name_declared'):
-            file_ext = os.path.splitext(self.get_attr('meta_info_name_declared'))[1][1:]
-            if self.has_attr('file_extension'):
-                if self.get_attr('file_extension') != file_ext:
-                    self.set_attr('file_extension', file_ext, override=True)
-            else:
-                self.set_attr('file_extension', file_ext)
-        elif not self.has_attr('file_extension'):
-            file_ext = os.path.splitext(self.__filename)[1][1:]
-            self.set_attr('file_extension', file_ext)
-        return self.get_attr('file_extension')
+            filename = self.get_attr('meta_info_name_declared')
+
+        # extension or the empty string if none found
+        file_ext = os.path.splitext(filename)[1][1:]
+        self.set_attr('file_extension', file_ext)
+        return file_ext
 
     @property
     def mimetypes(self):
