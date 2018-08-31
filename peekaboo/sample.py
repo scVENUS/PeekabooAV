@@ -459,12 +459,13 @@ class Sample(object):
         if not self.__wd:
             return
 
+        if self.__keep_mail_data:
+            logger.debug('Keeping mail data in %s' % self.__wd)
+            return
+
+        logger.debug("Deleting tempdir %s" % self.__wd)
         try:
-            if self.__keep_mail_data:
-                logger.debug('Keeping mail data in %s' % self.__wd)
-            else:
-                logger.debug("Deleting tempdir %s" % self.__wd)
-                shutil.rmtree(self.__wd)
+            shutil.rmtree(self.__wd)
         except OSError as e:
             logger.exception(e)
 
