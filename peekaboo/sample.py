@@ -88,7 +88,7 @@ class Sample(object):
         self.__filename = os.path.basename(self.__path)
         # A symlink that points to the actual file named
         # sha256sum.suffix
-        self.__symlink = None
+        self.__submit_path = None
         self.__result = ruleset.Result.unchecked
         self.__report = []  # Peekaboo's own report
         self.__connection_map = connection_map
@@ -127,21 +127,24 @@ class Sample(object):
 
         logger.debug("initializing sample")
 
-        job_hash = self.get_job_hash()
-        self.__wd = tempfile.mkdtemp(prefix = job_hash, dir = self.__base_dir)
-
         # create a symlink to submit the file with the correct file extension
-        # to cuckoo via submit.py.
+        # to cuckoo via submit.py - but only if we can actually figure out an
+        # extension. Otherwise the point is moot.
+        self.__submit_path = self.__path
         file_ext = self.file_extension
         if file_ext:
-            file_ext = ".%s" % file_ext
-        self.__symlink = os.path.join(self.__wd,
-                '%s%s' % (self.sha256sum, file_ext))
-        logger.debug('ln -s %s %s' % (self.__path, self.__symlink))
-        try:
-            os.symlink(self.__path, self.__symlink)
-        except OSError:
-            pass
+            # create a temporary directory where mkdtemp makes sure that
+            # creation is atomic, i.e. no other process is using it
+            self.__wd = tempfile.mkdtemp(prefix = self.get_job_hash(),
+                    dir = self.__base_dir)
+            self.__submit_path = os.path.join(self.__wd,
+                    '%s.%s' % (self.sha256sum, file_ext))
+
+            logger.debug('ln -s %s %s' % (self.__path, self.__submit_path))
+            try:
+                os.symlink(self.__path, self.__submit_path)
+            except OSError:
+                pass
 
         self.initialized = True
 
@@ -425,8 +428,8 @@ class Sample(object):
     def cuckoo_report(self):
         if not self.has_attr('cuckoo_report'):
             try:
-                logger.debug("Submitting %s to Cuckoo" % self.__symlink)
-                job_id = self.__cuckoo.submit(self.__symlink)
+                logger.debug("Submitting %s to Cuckoo" % self.__submit_path)
+                job_id = self.__cuckoo.submit(self.__submit_path)
                 self.set_attr('job_id', job_id)
                 message = 'Erfolgreich an Cuckoo gegeben %s als Job %d\n' \
                           % (self, job_id)
@@ -452,6 +455,10 @@ class Sample(object):
                 logger.exception(e)
 
     def __cleanup_temp_files(self):
+        # nothing to do if we never created a workdir
+        if not self.__wd:
+            return
+
         try:
             if self.__keep_mail_data:
                 logger.debug('Keeping mail data in %s' % self.__wd)
