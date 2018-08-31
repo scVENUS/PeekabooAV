@@ -308,7 +308,7 @@ class Sample(object):
     @property
     def file_extension(self):
         if self.has_attr('meta_info_name_declared'):
-            file_ext = self.get_attr('meta_info_name_declared').split('.')[-1]
+            file_ext = os.path.splitext(self.get_attr('meta_info_name_declared'))[1][1:]
             if self.has_attr('file_extension'):
                 if self.get_attr('file_extension') != file_ext:
                     self.set_attr('file_extension', file_ext, override=True)
