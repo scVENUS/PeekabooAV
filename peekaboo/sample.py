@@ -141,10 +141,7 @@ class Sample(object):
                     '%s.%s' % (self.sha256sum, file_ext))
 
             logger.debug('ln -s %s %s' % (self.__path, self.__submit_path))
-            try:
-                os.symlink(self.__path, self.__submit_path)
-            except OSError:
-                pass
+            os.symlink(self.__path, self.__submit_path)
 
         self.initialized = True
 
