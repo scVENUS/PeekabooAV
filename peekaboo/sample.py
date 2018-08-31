@@ -334,7 +334,7 @@ class Sample(object):
         determine mime on original p[0-9]* file
         later result will be "inode/symlink"
         """
-        mime_types = []
+        mime_types = set()
 
         smime = {
             'p7s': [
@@ -350,7 +350,7 @@ class Sample(object):
             declared_mt = self.get_attr('meta_info_type_declared')
             if declared_mt is not None:
                 logger.debug('Sample declared as "%s"' % declared_mt)
-                mime_types.append(declared_mt)
+                mime_types.add(declared_mt)
         except Exception as e:
             logger.exception(e)
             declared_mt = None
@@ -362,19 +362,19 @@ class Sample(object):
             declared_filename = self.__filename
 
         content_based_mime_type = guess_mime_type_from_file_contents(self.__path)
-        if content_based_mime_type is not None and content_based_mime_type not in mime_types:
-            mime_types.append(content_based_mime_type)
+        if content_based_mime_type is not None:
+            mime_types.add(content_based_mime_type)
 
         name_based_mime_type = guess_mime_type_from_filename(declared_filename)
-        if name_based_mime_type is not None and name_based_mime_type not in mime_types:
-            mime_types.append(name_based_mime_type)
+        if name_based_mime_type is not None:
+            mime_types.add(name_based_mime_type)
 
         logger.debug('Determined MIME Types: %s' % mime_types)
         # check if the sample is an S/MIME signature (smime.p7s)
         # If so, don't overwrite the MIME type since we do not want to analyse S/MIME signatures.
         if declared_filename == 'smime.p7s' and declared_mt in smime['p7s']:
             logger.info('S/MIME signature detected. Using declared MIME type over detected ones.')
-            mime_types = [declared_mt]
+            mime_types = set([declared_mt])
 
         if not self.has_attr('mimetypes'):
             self.set_attr('mimetypes', mime_types)
