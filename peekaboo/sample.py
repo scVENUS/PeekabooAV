@@ -328,15 +328,29 @@ class Sample(object):
 
     @property
     def mimetypes(self):
-        """
-        Can not be cached (hard to determine if known/complete).
+        if self.has_attr('mimetypes'):
+            return self.get_attr('mimetypes')
 
-        determine mime on original p[0-9]* file
-        later result will be "inode/symlink"
-        """
         mime_types = set()
 
-        smime = {
+        # get MIME type from meta info
+        declared_mt = None
+        if self.has_attr('meta_info_type_declared'):
+            declared_mt = self.get_attr('meta_info_type_declared')
+            if declared_mt is not None:
+                logger.debug('Sample declared as "%s"' % declared_mt)
+                mime_types.add(declared_mt)
+
+        declared_filename = self.__filename
+        if self.has_attr('meta_info_name_declared'):
+            declared_filename = self.get_attr('meta_info_name_declared')
+
+        # check if the sample is an S/MIME signature (smime.p7s)
+        # If so, don't overwrite the MIME type since we do not want to analyse
+        # S/MIME signatures.
+        # FIXME: This is oddly specific for this generic routine. Should it be
+        # some sort of callback or plugin?
+        leave_alone_types = {
             'p7s': [
                 'application/pkcs7-signature',
                 'application/x-pkcs7-signature',
@@ -345,22 +359,14 @@ class Sample(object):
             ]
         }
 
-        # get MIME type from meta info
-        try:
-            declared_mt = self.get_attr('meta_info_type_declared')
-            if declared_mt is not None:
-                logger.debug('Sample declared as "%s"' % declared_mt)
-                mime_types.add(declared_mt)
-        except Exception as e:
-            logger.exception(e)
-            declared_mt = None
-            logger.error('Cannot get MIME type from meta info.')
+        if declared_filename == 'smime.p7s' and declared_mt in leave_alone_types['p7s']:
+            logger.info('S/MIME signature detected. Using declared MIME type over detected ones.')
+            mime_types = set([declared_mt])
+            self.set_attr('mimetypes', mime_types)
+            return mime_types
 
-        try:
-            declared_filename = self.get_attr('meta_info_name_declared')
-        except KeyError:
-            declared_filename = self.__filename
-
+        # determine mime on original p[0-9]* file
+        # result of __submit_path would be "inode/symlink"
         content_based_mime_type = guess_mime_type_from_file_contents(self.__path)
         if content_based_mime_type is not None:
             mime_types.add(content_based_mime_type)
@@ -370,16 +376,8 @@ class Sample(object):
             mime_types.add(name_based_mime_type)
 
         logger.debug('Determined MIME Types: %s' % mime_types)
-        # check if the sample is an S/MIME signature (smime.p7s)
-        # If so, don't overwrite the MIME type since we do not want to analyse S/MIME signatures.
-        if declared_filename == 'smime.p7s' and declared_mt in smime['p7s']:
-            logger.info('S/MIME signature detected. Using declared MIME type over detected ones.')
-            mime_types = set([declared_mt])
-
-        if not self.has_attr('mimetypes'):
-            self.set_attr('mimetypes', mime_types)
-
-        return self.get_attr('mimetypes')
+        self.set_attr('mimetypes', mime_types)
+        return mime_types
 
     @property
     def job_id(self):
