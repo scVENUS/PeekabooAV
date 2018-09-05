@@ -246,9 +246,11 @@ def run():
         sys.exit(1)
 
     # Import debug module if we are in debug mode
+    debugger = None
     if config.use_debug_module:
-        from peekaboo.debug import peekaboo_debugger
-        peekaboo_debugger()
+        from peekaboo.debug import PeekabooDebugger
+        debugger = PeekabooDebugger()
+        debugger.start()
 
     if os.getuid() == 0:
         logger.warning('Peekaboo should not run as root.')
@@ -303,6 +305,8 @@ def run():
         logger.exception(e)
     finally:
         server.shutdown()
+        if debugger is not None:
+            debugger.shut_down()
 
 
 if __name__ == '__main__':
