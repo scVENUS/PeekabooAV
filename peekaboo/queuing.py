@@ -24,7 +24,7 @@
 
 
 import logging
-from threading import Thread
+from threading import Thread, Lock
 from Queue import Queue, Empty
 from peekaboo import Singleton
 from peekaboo.ruleset.engine import RulesetEngine
@@ -57,8 +57,17 @@ class JobQueue(Singleton):
     workers = []
     jobs = Queue()
 
+    queue_timeout = 300
+
+    # keep a backlog of samples with hashes identical to samples currently
+    # in analysis to avoid analysis multiple identical samples
+    # simultaneously. Once one analysis has finished, we can submit the
+    # others and the ruleset will notice that we already know the result.
+    duplicates = {}
+    duplock = Lock()
+
     @staticmethod
-    def submit(sample, submitter, timeout=300):
+    def submit(sample, submitter):
         """
         Adds a Sample object to the job queue.
         If the queue is full, we block for 300 seconds and then throw an exception.
@@ -69,9 +78,70 @@ class JobQueue(Singleton):
                         if the job has not been submitted.
         :raises Full: if the queue is full.
         """
-        logger.debug("New sample submitted to job queue by %s. %s" % (submitter, sample))
-        # thread safe most likely no race condition possible
-        JobQueue.jobs.put(sample, True, timeout)
+        sample_hash = sample.sha256sum
+        sample_str = str(sample)
+        duplicate = None
+        resubmit = None
+        # we have to lock this down because apart from callbacks from our
+        # Workers we're also called from the ThreadingUnixStreamServer
+        with JobQueue.duplock:
+            # check if a sample with same hash is currently in flight
+            duplicates = JobQueue.duplicates.get(sample_hash)
+            if duplicates is not None:
+                # we are regularly resubmitting samples, e.g. after we've
+                # noticed that cuckoo is finished analysing them. This
+                # obviously isn't a duplicate but continued processing of the
+                # same sample.
+                if duplicates['master'] == sample:
+                    resubmit = sample_str
+                    JobQueue.jobs.put(sample, True, JobQueue.queue_timeout)
+                else:
+                    # record the to-be-submitted sample as duplicate and do nothing
+                    duplicate = sample_str
+                    duplicates['duplicates'].append(sample)
+            else:
+                # initialise a per-duplicate backlog for this sample which also
+                # serves as in-flight marker and submit to queue
+                JobQueue.duplicates[sample_hash] = { 'master': sample, 'duplicates': [] }
+                JobQueue.jobs.put(sample, True, JobQueue.queue_timeout)
+
+        if duplicate:
+            logger.debug("Sample from %s is duplicate and waiting for "
+                    "running analysis to finish: %s" % (submitter, duplicate))
+        elif resubmit:
+            logger.debug("Resubmitted sample to job queue for %s: %s" %
+                    (submitter, resubmit))
+        else:
+            logger.debug("New sample submitted to job queue by %s. %s" %
+                    (submitter, sample_str))
+
+    @staticmethod
+    def done(sample_hash):
+        submitted_duplicates = []
+        with JobQueue.duplock:
+            # duplicates which have been submitted from the backlog still
+            # report done but do not get registered as potentially having
+            # duplicates because we expect the ruleset to identify them as
+            # already known and process them quickly now that the first
+            # instance has gone through full analysis
+            if not JobQueue.duplicates.has_key(sample_hash):
+                return
+
+            # submit all samples which have accumulated in the backlog
+            for s in JobQueue.duplicates[sample_hash]['duplicates']:
+                submitted_duplicates.append(str(s))
+                JobQueue.jobs.put(s, True, JobQueue.queue_timeout)
+
+            sample_str = str(JobQueue.duplicates[sample_hash]['master'])
+            del JobQueue.duplicates[sample_hash]
+
+        logger.debug("Cleared sample %s from in-flight list" % sample_str)
+        if len(submitted_duplicates) > 0:
+            logger.debug("Submitted duplicates from backlog: %s" % submitted_duplicates)
+
+    @staticmethod
+    def dequeue(timeout):
+        return JobQueue.jobs.get(True, timeout)
 
 
 class Worker(Thread):
@@ -80,15 +150,18 @@ class Worker(Thread):
 
     @author: Sebastian Deiss
     """
-    def __init__(self, wid):
+
+    def __init__(self, wid, dequeue_timeout = 5):
         self.active = True
         self.worker_id = wid
+        self.dequeue_timeout = dequeue_timeout
         Thread.__init__(self)
 
     def run(self):
         while self.active:
             try:
-                sample = JobQueue.jobs.get(True, 5)  # wait blocking for next job (thread safe)
+                # wait blocking for next job (thread safe) with timeout
+                sample = JobQueue.dequeue(self.dequeue_timeout)
             except Empty:
                 continue
             logger.info('Worker %d: Processing sample %s' % (self.worker_id, sample))
@@ -99,10 +172,15 @@ class Worker(Thread):
                 engine = RulesetEngine(sample)
                 engine.run()
                 engine.report()
+                JobQueue.done(sample.sha256sum)
             except CuckooReportPendingException:
+                logger.debug("Report for sample %s still pending" % sample)
                 pass
             except Exception as e:
                 logger.exception(e)
+                # it's no longer in-flight even though processing seems to have
+                # failed
+                JobQueue.done(sample.sha256sum)
 
             logger.debug('Worker is ready')
         logger.info('Worker %d: Stopping' % self.worker_id)

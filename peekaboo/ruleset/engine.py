@@ -32,7 +32,6 @@ from peekaboo.ruleset import Result, RuleResult
 from peekaboo.ruleset.rules import *
 from peekaboo.toolbox.peekabooyar import contains_peekabooyar
 from peekaboo.exceptions import CuckooReportPendingException
-from peekaboo.toolbox.plugins.oneanalysis import OneAnalysis
 
 
 logger = logging.getLogger(__name__)
@@ -65,18 +64,8 @@ class RulesetEngine(object):
         ruleset_config.parse()
         self.sample = sample
         self.config = ruleset_config.get_config()
-        self.one_analysis_tool = OneAnalysis()
 
     def run(self):
-        # TODO: Integrate this special rule in the base ruleset.
-        result = self.__exec_rule(
-            self.config,
-            self.sample,
-            self.one_analysis_tool.already_in_progress
-        )
-        if not result.further_analysis:
-            return
-
         for rule in RulesetEngine.rules:
             result = self.__exec_rule(self.config, self.sample, rule)
             if not result.further_analysis:
@@ -90,8 +79,6 @@ class RulesetEngine(object):
         if self.sample.get_result() == Result.bad:
             dump_processing_info(self.sample)
         self.sample.save_result()
-        # TODO: might be better to move this call to a separate function, since it's not related to reporting.
-        self.one_analysis_tool.queue_identical_samples(self.sample)  # depends on already_in_progress
 
     def __exec_rule(self, config, sample, rule_function):
         """
