@@ -41,7 +41,7 @@ from peekaboo import _owl, __version__
 from peekaboo.config import parse_config, get_config
 from peekaboo.db import PeekabooDatabase
 from peekaboo.toolbox.sampletools import ConnectionMap
-from peekaboo.queuing import JobQueue, create_workers
+from peekaboo.queuing import JobQueue
 from peekaboo.sample import Sample
 from peekaboo.exceptions import PeekabooDatabaseError
 from peekaboo.toolbox.cuckoo import Cuckoo, CuckooEmbed, CuckooApi
@@ -56,8 +56,9 @@ class SignalHandler():
     
     @author: Felix Bauer
     """
-    def __init__(self, timeout):
+    def __init__(self, job_queue, timeout):
         """ register custom signal handler """
+        self.job_queue = job_queue
         self.timeout = timeout
         self.original_sigint_handler = signal.getsignal(signal.SIGINT)
         self.original_sigterm_handler = signal.getsignal(signal.SIGTERM)
@@ -71,11 +72,11 @@ class SignalHandler():
         signal.signal(signal.SIGTERM, self.signal_handler_term)
         logger.info("Shutting down. Giving workers %d seconds to stop" % self.timeout)
         # server.shutdown()
-        for w in JobQueue.workers:
+        for w in self.job_queue.workers:
             w.active = False
         # wait for workers to end
         for t in range(0, self.timeout):
-            w = set(JobQueue.workers)
+            w = set(self.job_queue.workers)
             # check there is no existing worker
             if len(w) == 1 and None in w:
                 break
@@ -97,16 +98,25 @@ class PeekabooStreamServer(SocketServer.ThreadingUnixStreamServer):
 
     @author: Sebastian Deiss
     """
-    def __init__(self, server_address, request_handler_cls, bind_and_activate=True):
-        self.config = get_config()
-        create_workers(self.config.worker_count)
-        # We can only accept 2 * worker_count connections.
-        self.request_queue_size = self.config.worker_count * 2
+    def __init__(self, server_address, request_handler_cls, job_queue,
+            connection_map, bind_and_activate = True, request_queue_size = 10):
+        self.server_address = server_address
+        self.__job_queue = job_queue
+        self.__connection_map = connection_map
+        self.request_queue_size = request_queue_size
         self.allow_reuse_address = True
         
         SocketServer.ThreadingUnixStreamServer.__init__(self, server_address,
                                                         request_handler_cls,
                                                         bind_and_activate=bind_and_activate)
+
+    @property
+    def job_queue(self):
+        return self.__job_queue
+
+    @property
+    def connection_map(self):
+        return self.__connection_map
 
     def shutdown_request(self, request):
         """ Keep the connection alive until Cuckoo reports back, so the results can be send to the client. """
@@ -114,7 +124,8 @@ class PeekabooStreamServer(SocketServer.ThreadingUnixStreamServer):
         pass
 
     def server_close(self):
-        os.remove(self.config.sock_file)
+        # no new connections from this point on
+        os.remove(self.server_address)
         return SocketServer.ThreadingUnixStreamServer.server_close(self)
 
 
@@ -124,6 +135,11 @@ class PeekabooStreamRequestHandler(SocketServer.StreamRequestHandler):
 
     @author: Sebastian Deiss
     """
+    def setup(self):
+        SocketServer.StreamRequestHandler.setup(self)
+        self.job_queue = self.server.job_queue
+        self.connection_map = self.server.connection_map
+
     def handle(self):
         """
         Handles an analysis request. This is expected to be a JSON structure
@@ -173,15 +189,16 @@ class PeekabooStreamRequestHandler(SocketServer.StreamRequestHandler):
                 logger.error('Input is not a file')
                 return
 
-            sample = Sample(path, part, self.request)
+            sample = Sample(path, metainfo = part,
+                    connection_map = self.connection_map,
+                    socket = self.request)
             for_analysis.append(sample)
             logger.debug('Created sample %s' % sample)
 
         # introduced after an issue where results were reported
         # before all files could be added.
         for sample in for_analysis:
-            ConnectionMap.add(self.request, sample)
-            JobQueue.submit(sample, self.__class__)
+            self.job_queue.submit(sample, self.__class__)
 
 
 def run():
@@ -222,8 +239,6 @@ def run():
         print('Failed to read config, files does not exist.') # logger doesn't exist here
         sys.exit(1)
     config = parse_config(args.config)
-
-    SignalHandler(600)
 
     # Check if CLI arguments override the configuration
     if args.debug:
@@ -270,13 +285,23 @@ def run():
         pidfile.write("%s\n" % pid)
 
     systemd = SystemdNotifier()
+    job_queue = JobQueue(worker_count = config.worker_count)
+    connection_map = ConnectionMap()
+    sig_handler = SignalHandler(job_queue, 600)
+
+
     # Try three times to start SocketServer
     for i in range(0, 3):
         try:
-            server = PeekabooStreamServer(config.sock_file, PeekabooStreamRequestHandler)
+            # We only want to accept 2 * worker_count connections.
+            server = PeekabooStreamServer(config.sock_file,
+                    PeekabooStreamRequestHandler,
+                    job_queue = job_queue,
+                    connection_map = connection_map,
+                    request_queue_size = config.worker_count * 2)
             break
         except socket.error, msg:
-            logger.warning("SocketServer couldn't start (%i)" % i)
+            logger.warning("SocketServer couldn't start (%i): %s" % (i, msg))
     if not server:
         logger.error('Fatal: Couldn\'t initialise Peekaboo Server')
         sys.exit(1)
@@ -294,10 +319,10 @@ def run():
 
         # If this dies Peekaboo dies, since this is the main thread. (legacy)
         if config.cuckoo_mode == "embed":
-            cuckoo = CuckooEmbed(config.interpreter, config.cuckoo_exec)
+            cuckoo = CuckooEmbed(job_queue, connection_map, config.interpreter, config.cuckoo_exec)
         # otherwise it's the new API method and default
         else:
-            cuckoo = CuckooApi(config.cuckoo_url)
+            cuckoo = CuckooApi(job_queue, connection_map, config.cuckoo_url)
         config.add_cuckoo_obj(cuckoo)
         systemd.notify("READY=1")
         cuckoo.do()
@@ -305,6 +330,7 @@ def run():
         logger.exception(e)
     finally:
         server.shutdown()
+        server.server_close()
         if debugger is not None:
             debugger.shut_down()
 

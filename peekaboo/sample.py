@@ -34,7 +34,7 @@ from datetime import datetime
 from peekaboo.config import get_config
 from peekaboo.exceptions import CuckooReportPendingException, \
                                 CuckooAnalysisFailedException
-from peekaboo.toolbox.sampletools import ConnectionMap, next_job_hash
+from peekaboo.toolbox.sampletools import next_job_hash
 from peekaboo.toolbox.files import guess_mime_type_from_file_contents, \
                                    guess_mime_type_from_filename
 from peekaboo.toolbox.ms_office import has_office_macros
@@ -58,7 +58,7 @@ class Sample(object):
     @author: Felix Bauer
     @author: Sebastian Deiss
     """
-    def __init__(self, file_path, metainfo = {}, sock=None):
+    def __init__(self, file_path, metainfo = {}, connection_map = None, socket = None):
         self.__path = file_path
         self.__config = get_config()
         self.__db_con = self.__config.get_db_con()
@@ -69,10 +69,15 @@ class Sample(object):
         self.__symlink = None
         self.__result = ruleset.Result.unchecked
         self.__report = []  # Peekaboo's own report
-        self.__socket = sock
+        self.__connection_map = connection_map
+        self.__socket = socket
         # Additional attributes for a sample object (e. g. meta info)
         self.__attributes = {}
         self.initialized = False
+
+        # register ourselves with the connection map
+        if self.__connection_map is not None and self.__socket is not None:
+            self.__connection_map.add(self.__socket, self)
 
         for field in metainfo:
             logger.debug('meta_info_%s = %s' % (field, metainfo[field]))
@@ -199,11 +204,15 @@ class Sample(object):
         else:
             logger.debug('Saving results to database')
             self.__db_con.sample_info_update(self)
-        if self.__socket is not None:
-            ConnectionMap.remove(self.__socket, self)
-        if not ConnectionMap.has_connection(self.__socket):
-            self.__cleanup_temp_files()
-            self.__close_socket()
+
+        if self.__connection_map is not None:
+            # de-register ourselves from the connection map
+            if self.__socket is not None:
+                self.__connection_map.remove(self.__socket, self)
+
+            if not self.__connection_map.has_connection(self.__socket):
+                self.__cleanup_temp_files()
+                self.__close_socket()
 
     def add_rule_result(self, res):
         logger.debug('Adding rule result %s' % str(res))

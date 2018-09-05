@@ -36,8 +36,6 @@ from time import sleep
 from peekaboo import MultiRegexMatcher
 from peekaboo.config import get_config
 from peekaboo.exceptions import CuckooAnalysisFailedException
-from peekaboo.toolbox.sampletools import ConnectionMap
-from peekaboo.queuing import JobQueue
 
 
 logger = logging.getLogger(__name__)
@@ -47,24 +45,25 @@ class Cuckoo:
     """
         Parent class, defines interface to Cuckoo
     """
-    def __init__(self):
-        pass
-    
+    def __init__(self, job_queue, connection_map):
+        self.job_queue = job_queue
+        self.connection_map = connection_map
+
     def submit(self):
         logger.error("Not implemented yet")
 
     def resubmit_with_report(self, job_id):
         logger.debug("Analysis done for task #%d" % job_id)
-        logger.debug("Remaining connections: %d" % ConnectionMap.size())
-        sample = ConnectionMap.get_sample_by_job_id(job_id)
+        logger.debug("Remaining connections: %d" % self.connection_map.size())
+        sample = self.connection_map.get_sample_by_job_id(job_id)
         if sample:
             logger.debug('Requesting Cuckoo report for sample %s' % sample)
             report = CuckooReport(job_id)
             sample.set_attr('cuckoo_report', report)
             if report.file_path:
                 sample.set_attr('cuckoo_json_report_file', report.file_path)
-            JobQueue.submit(sample, self.__class__)
-            logger.debug("Remaining connections: %d" % ConnectionMap.size())
+            self.job_queue.submit(sample, self.__class__)
+            logger.debug("Remaining connections: %d" % self.connection_map.size())
         else:
             logger.debug('No connection found for ID %d' % job_id)
 
@@ -81,7 +80,9 @@ class CuckooEmbed(Cuckoo):
         @author: Sebastian Deiss
         @author: Felix Bauer
     """
-    def __init__(self, interpreter, cuckoo_exec):
+    def __init__(self, job_queue, connection_map, interpreter,
+            cuckoo_exec):
+        Cuckoo.__init__(self, job_queue, connection_map)
         self.interpreter = interpreter
         self.cuckoo_exec = cuckoo_exec
     
@@ -142,7 +143,9 @@ class CuckooApi(Cuckoo):
         
         @author: Felix Bauer
     """
-    def __init__(self, url="http://localhost:8090"):
+    def __init__(self, job_queue, connection_map,
+            url="http://localhost:8090"):
+        Cuckoo.__init__(self, job_queue, connection_map)
         self.url = url
         self.reported = self.__status()["tasks"]["reported"]
         logger.info("Connection to Cuckoo seems to work, %i reported tasks seen", self.reported)

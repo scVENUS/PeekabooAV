@@ -29,14 +29,13 @@ import string
 import threading
 from random import choice
 from datetime import datetime
-from peekaboo import Singleton
 from peekaboo.ruleset import Result
 
 
 logger = logging.getLogger(__name__)
 
 
-class ConnectionMap(Singleton):
+class ConnectionMap:
     """
     Maps socket objects with one or more samples.
     This is required for the reporting, so we know which
@@ -44,11 +43,11 @@ class ConnectionMap(Singleton):
 
     @author: Sebastian Deiss
     """
-    __lock = threading.RLock()
-    __map = {}
+    def __init__(self):
+        self.__lock = threading.RLock()
+        self.__map = {}
 
-    @staticmethod
-    def add(socket, sample):
+    def add(self, socket, sample):
         """
         Add an entry to the connection map. An entry consists of a
         socket object and a list of Sample objects.
@@ -57,16 +56,15 @@ class ConnectionMap(Singleton):
         :param sample: The corresponding Samples objects for the socket.
         :return:The length of the connection map.
         """
-        with ConnectionMap.__lock:
+        with self.__lock:
             logger.debug('Registered sample for connection %s' % socket)
-            if ConnectionMap.has_connection(socket):
-                ConnectionMap.__map[socket].append(sample)
+            if self.has_connection(socket):
+                self.__map[socket].append(sample)
             else:
-                ConnectionMap.__map[socket] = [sample]
-            return ConnectionMap.size()
+                self.__map[socket] = [sample]
+            return self.size()
 
-    @staticmethod
-    def remove(socket, sample):
+    def remove(self, socket, sample):
         """
         Remove a Sample or an entry from the connection map. First, we
         remove the given Sample object from the list of Sample objects of
@@ -77,56 +75,52 @@ class ConnectionMap(Singleton):
         :param sample: The sample to remove.
         :return: The length of the connection map.
         """
-        with ConnectionMap.__lock:
-            if ConnectionMap.has_connection(socket):
+        with self.__lock:
+            if self.has_connection(socket):
                 logger.debug(
                     'Removing sample for connection %s, Sample: %s' % (socket, sample)
                 )
-                ConnectionMap.__map[socket].remove(sample)
-                if len(ConnectionMap.__map[socket]) == 0:
-                    ConnectionMap.__map.pop(socket)
+                self.__map[socket].remove(sample)
+                if len(self.__map[socket]) == 0:
+                    self.__map.pop(socket)
                     logger.debug('Removing connection: %s' % socket)
             else:
                 logger.debug(
                     'Connection does not exist.'
                     'Connection: %s, Sample: %s, Map: %s'
-                    % (socket, sample, ConnectionMap.__map)
+                    % (socket, sample, self.__map)
                 )
-            return ConnectionMap.size()
+            return self.size()
 
-    @staticmethod
-    def size():
+    def size(self):
         """ Gets the length of the connection map. """
-        return len(ConnectionMap.__map)
+        return len(self.__map)
 
-    @staticmethod
-    def _dump():
+    def _dump(self):
         """ Get the connection map. This method might be useful for debugging. """
-        return ConnectionMap.__map
+        return self.__map
 
-    @staticmethod
-    def has_connection(socket):
+    def has_connection(self, socket):
         """
         Check if the given socket object exists in the map.
 
         :param socket: A socket object to search for in the map.
         :return: True if the map contains the given socket object, otherwise False.
         """
-        if socket in ConnectionMap.__map.keys():
+        if socket in self.__map.keys():
             return True
         return False
 
-    @staticmethod
-    def get_sample_by_job_id(job_id):
+    def get_sample_by_job_id(self, job_id):
         """
         Get a Sample object from the map by its job ID.
 
         :param job_id: The job ID of the Sample object to fetch.
         :return:The Sample object with the given job ID or None.
         """
-        with ConnectionMap.__lock:
+        with self.__lock:
             logger.debug("Searching for a sample with job ID %d" % job_id)
-            for __, samples in ConnectionMap.__map.iteritems():
+            for __, samples in self.__map.iteritems():
                 logger.debug('Samples for this connection: %s' % samples)
                 for sample in samples:
                     if job_id == sample.job_id:
