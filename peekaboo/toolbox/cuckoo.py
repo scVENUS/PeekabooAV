@@ -52,7 +52,22 @@ class Cuckoo:
     
     def submit(self):
         logger.error("Not implemented yet")
-    
+
+    def resubmit_with_report(self, job_id):
+        logger.debug("Analysis done for task #%d" % job_id)
+        logger.debug("Remaining connections: %d" % ConnectionMap.size())
+        sample = ConnectionMap.get_sample_by_job_id(job_id)
+        if sample:
+            logger.debug('Requesting Cuckoo report for sample %s' % sample)
+            report = CuckooReport(job_id)
+            sample.set_attr('cuckoo_report', report)
+            if report.file_path:
+                sample.set_attr('cuckoo_json_report_file', report.file_path)
+            JobQueue.submit(sample, self.__class__)
+            logger.debug("Remaining connections: %d" % ConnectionMap.size())
+        else:
+            logger.debug('No connection found for ID %d' % job_id)
+
     def do(self):
         # wait for the cows to come home
         while True:
@@ -115,7 +130,7 @@ class CuckooEmbed(Cuckoo):
     def do(self):
         # reaktor and shit
         # Run Cuckoo sandbox, parse log output, and report back of Peekaboo.
-        srv = CuckooServer()
+        srv = CuckooServer(self)
         reactor.spawnProcess(srv, self.interpreter, [self.interpreter, '-u',
                                                      self.cuckoo_exec])
         reactor.run()
@@ -187,8 +202,6 @@ class CuckooApi(Cuckoo):
     def do(self):
         # do the polling for finished jobs
         # record analysis count and call status over and over again
-        # then:
-        # sample = ConnectionMap.get_sample_by_job_id(job_id)
         # logger ......
         
         limit = 1000000
@@ -210,20 +223,7 @@ class CuckooApi(Cuckoo):
                 for j in cuckoo_tasks_list["tasks"]:
                     if j["status"] == "reported":
                         job_id = j["id"]
-                        logger.debug("Analysis done for task #%d" % job_id)
-                        logger.debug("Remaining connections: %d" % ConnectionMap.size())
-                        sample = ConnectionMap.get_sample_by_job_id(job_id)
-                        if sample:
-                            logger.debug('Requesting Cuckoo report for sample %s' % sample)
-                            self.__report = CuckooReport(job_id, self)
-                            sample.set_attr('cuckoo_report', self.__report)
-                            JobQueue.submit(sample, self.__class__)
-                            logger.debug("Remaining connections: %d" % ConnectionMap.size())
-                        else:
-                            #if first:
-                            #    first = False
-                            #    offset += 1
-                            logger.debug('No connection found for ID %d' % job_id)
+                        self.resubmit_with_report(job_id)
             #self.reported = reported
             sleep(float(config.cuckoo_poll_interval))
 
@@ -241,8 +241,8 @@ class CuckooServer(protocol.ProcessProtocol):
     @author: Felix Bauer
     @author: Sebastian Deiss
     """
-    def __init__(self):
-        self.__report = None
+    def __init__(self, cuckoo):
+        self.cuckoo = cuckoo
 
     def connectionMade(self):
         logger.info('Connected. Cuckoo PID: %s' % self.transport.pid)
@@ -278,18 +278,7 @@ class CuckooServer(protocol.ProcessProtocol):
                      data)
         if m:
             job_id = int(m.group(1))
-            logger.debug("Analysis done for task #%d" % job_id)
-            logger.debug("Remaining connections: %d" % ConnectionMap.size())
-            sample = ConnectionMap.get_sample_by_job_id(job_id)
-            if sample:
-                logger.debug('Requesting Cuckoo report for sample %s' % sample)
-                self.__report = CuckooReport(job_id)
-                sample.set_attr('cuckoo_report', self.__report)
-                sample.set_attr('cuckoo_json_report_file', self.__report.file_path)
-                JobQueue.submit(sample, self.__class__)
-                logger.debug("Remaining connections: %d" % ConnectionMap.size())
-            else:
-                logger.debug('No connection found for ID %d' % job_id)
+            self.cuckoo.resubmit_with_report(job_id)
 
     def inConnectionLost(self):
         logger.debug("Cuckoo closed STDIN")
