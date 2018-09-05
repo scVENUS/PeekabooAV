@@ -31,7 +31,7 @@ import json
 import subprocess
 import requests
 import random
-from twisted.internet import protocol, reactor
+from twisted.internet import protocol, reactor, process
 from time import sleep
 from peekaboo import MultiRegexMatcher
 from peekaboo.config import get_config
@@ -48,9 +48,7 @@ class Cuckoo:
     def __init__(self, job_queue, connection_map):
         self.job_queue = job_queue
         self.connection_map = connection_map
-
-    def submit(self):
-        logger.error("Not implemented yet")
+        self.shutdown_requested = False
 
     def resubmit_with_report(self, job_id):
         logger.debug("Analysis done for task #%d" % job_id)
@@ -67,11 +65,11 @@ class Cuckoo:
         else:
             logger.debug('No connection found for ID %d' % job_id)
 
-    def do(self):
-        # wait for the cows to come home
-        while True:
-            sleep(600)
+    def shut_down(self):
+        self.shutdown_requested = True
 
+    def reap_children(self):
+        pass
 
 class CuckooEmbed(Cuckoo):
     """
@@ -85,6 +83,7 @@ class CuckooEmbed(Cuckoo):
         Cuckoo.__init__(self, job_queue, connection_map)
         self.interpreter = interpreter
         self.cuckoo_exec = cuckoo_exec
+        self.exit_code = 0
     
     def submit(self, sample):
         """
@@ -129,13 +128,38 @@ class CuckooEmbed(Cuckoo):
                                                 )
 
     def do(self):
-        # reaktor and shit
         # Run Cuckoo sandbox, parse log output, and report back of Peekaboo.
         srv = CuckooServer(self)
         reactor.spawnProcess(srv, self.interpreter, [self.interpreter, '-u',
                                                      self.cuckoo_exec])
-        reactor.run()
 
+        # do not install twisted's signal handlers because it will screw with
+        # our logic (install a handler for SIGTERM and SIGCHLD but not for
+        # SIGINT). Instead do what their SIGCHLD handler would do and call the
+        # global process reaper.
+        reactor.run(installSignalHandlers = False)
+        process.reapAllProcesses()
+        return self.exit_code
+
+    def shut_down(self, exit_code = 0):
+        """ Signal handler callback but in this instance also used as callback
+        for protocol to ask us to shut down if anything adverse happens to the
+        child """
+        # the reactor doesn't like it to be stopped more than once and catching
+        # the resulting ReactorNotRunning exception is foiled by the fact that
+        # sigTerm defers the call through a queue into another thread which
+        # insists on logging it
+        if not self.shutdown_requested:
+            reactor.sigTerm(0)
+
+        self.shutdown_requested = True
+        self.exit_code = exit_code
+
+    def reap_children(self):
+        """ Since we only have one child, SIGCHLD will cause us to shut down
+        and we reap all child processes on shutdown. This method is therefore
+        (currently) intentionally a no-op. """
+        pass
 
 class CuckooApi(Cuckoo):
     """
@@ -211,7 +235,7 @@ class CuckooApi(Cuckoo):
         offset = self.__status()["tasks"]["total"]
         config = get_config()
         
-        while True:
+        while not self.shutdown_requested:
             cuckoo_tasks_list = None
             try:
                 cuckoo_tasks_list = self.__get("tasks/list/%i/%i" % (limit, offset))
@@ -230,6 +254,7 @@ class CuckooApi(Cuckoo):
             #self.reported = reported
             sleep(float(config.cuckoo_poll_interval))
 
+        return 0
 
 class CuckooServer(protocol.ProcessProtocol):
     """
@@ -285,23 +310,23 @@ class CuckooServer(protocol.ProcessProtocol):
 
     def inConnectionLost(self):
         logger.debug("Cuckoo closed STDIN")
-        os._exit(1)
+        self.cuckoo.shut_down(1)
 
     def outConnectionLost(self):
         logger.debug("Cuckoo closed STDOUT")
-        os._exit(1)
+        self.cuckoo.shut_down(1)
 
     def errConnectionLost(self):
         logger.warning("Cuckoo closed STDERR")
-        os._exit(1)
+        self.cuckoo.shut_down(1)
 
     def processExited(self, reason):
         logger.info("Cuckoo exited with status %s" % str(reason.value.exitCode))
-        os._exit(0)
+        self.cuckoo.shut_down()
 
     def processEnded(self, reason):
         logger.info("Cuckoo ended with status %s" % str(reason.value.exitCode))
-        os._exit(0)
+        self.cuckoo.shut_down()
 
 
 class CuckooReport(object):

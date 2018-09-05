@@ -38,7 +38,7 @@ from threading import Thread
 from argparse import ArgumentParser
 from sdnotify import SystemdNotifier
 from peekaboo import _owl, __version__
-from peekaboo.config import parse_config, get_config
+from peekaboo.config import parse_config
 from peekaboo.db import PeekabooDatabase
 from peekaboo.toolbox.sampletools import ConnectionMap
 from peekaboo.queuing import JobQueue
@@ -56,40 +56,35 @@ class SignalHandler():
     
     @author: Felix Bauer
     """
-    def __init__(self, job_queue, timeout):
+    def __init__(self):
         """ register custom signal handler """
-        self.job_queue = job_queue
-        self.timeout = timeout
-        self.original_sigint_handler = signal.getsignal(signal.SIGINT)
-        self.original_sigterm_handler = signal.getsignal(signal.SIGTERM)
-        
-        signal.signal(signal.SIGINT, self.signal_handler_int)
-        signal.signal(signal.SIGTERM, self.signal_handler_int)
+        self.listeners = []
 
-    def signal_handler_int(self, sig, frame):
-        """ catch signal, give workers time to exit and kill """
-        signal.signal(signal.SIGINT, self.signal_handler_term)
-        signal.signal(signal.SIGTERM, self.signal_handler_term)
-        logger.info("Shutting down. Giving workers %d seconds to stop" % self.timeout)
-        # server.shutdown()
-        for w in self.job_queue.workers:
-            w.active = False
-        # wait for workers to end
-        for t in range(0, self.timeout):
-            w = set(self.job_queue.workers)
-            # check there is no existing worker
-            if len(w) == 1 and None in w:
-                break
-            sleep(1)
-        self.signal_handler_term(None, None)
+        signal.signal(signal.SIGINT, self.signal_handler)
+        signal.signal(signal.SIGTERM, self.signal_handler)
+        signal.signal(signal.SIGCHLD, self.signal_handler)
 
-    def signal_handler_term(self, sig, frame):
-        """ restore original signal handlers and kill """
-        signal.signal(signal.SIGTERM, self.original_sigterm_handler)
-        signal.signal(signal.SIGINT, self.original_sigint_handler)
-        logger.info("The End")
-        os.kill(os.getpid(), signal.SIGINT)
-        sys.exit(0)
+    def register_listener(self, listener):
+        """ Register a listener object which is expected to implement a very
+        simple interface: Method shut_down() is called if SIGINT or SIGTERM
+        arrive, reap_children() is called if SIGCHLD arrives. Both are expected
+        to defer actual handling of the condition. """
+        self.listeners.append(listener)
+
+    def signal_handler(self, sig, frame):
+        """ catch signal and call appropriate methods in registered listener
+        classes """
+        if sig == signal.SIGINT or sig == signal.SIGTERM:
+            logger.debug("SIGINT/TERM")
+
+            # these should take serious care about being called across threads
+            for listener in self.listeners:
+                listener.shut_down()
+
+        if sig == signal.SIGCHLD:
+            logger.debug("SIGCHLD")
+            for listener in self.listeners:
+                listener.reap_children()
 
 
 class PeekabooStreamServer(SocketServer.ThreadingUnixStreamServer):
@@ -287,8 +282,6 @@ def run():
     systemd = SystemdNotifier()
     job_queue = JobQueue(worker_count = config.worker_count)
     connection_map = ConnectionMap()
-    sig_handler = SignalHandler(job_queue, 600)
-
 
     # Try three times to start SocketServer
     for i in range(0, 3):
@@ -309,6 +302,8 @@ def run():
     runner = Thread(target=server.serve_forever)
     runner.daemon = True
 
+    sig_handler = SignalHandler()
+    rc = 1
     try:
         runner.start()
         logger.info('Peekaboo server is listening on %s' % server.server_address)
@@ -323,17 +318,20 @@ def run():
         # otherwise it's the new API method and default
         else:
             cuckoo = CuckooApi(job_queue, connection_map, config.cuckoo_url)
+        sig_handler.register_listener(cuckoo)
         config.add_cuckoo_obj(cuckoo)
         systemd.notify("READY=1")
-        cuckoo.do()
+        rc = cuckoo.do()
     except Exception as e:
         logger.exception(e)
     finally:
         server.shutdown()
         server.server_close()
+        job_queue.shut_down()
         if debugger is not None:
             debugger.shut_down()
 
+    sys.exit(rc)
 
 if __name__ == '__main__':
     run()

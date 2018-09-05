@@ -41,7 +41,7 @@ class JobQueue:
     @author: Sebastian Deiss
     """
     def __init__(self, worker_count = 4, queue_timeout = 300,
-            dequeue_timeout = 5):
+            dequeue_timeout = 5, shutdown_timeout = 600):
         """ Initialise job queue by creating n Peekaboo worker threads to
         process samples.
 
@@ -52,6 +52,7 @@ class JobQueue:
         self.worker_count = worker_count
         self.queue_timeout = queue_timeout
         self.dequeue_timeout = dequeue_timeout
+        self.shutdown_timeout = shutdown_timeout
 
         # keep a backlog of samples with hashes identical to samples currently
         # in analysis to avoid analysis multiple identical samples
@@ -142,6 +143,31 @@ class JobQueue:
     def dequeue(self, timeout):
         return self.jobs.get(True, timeout)
 
+    def shut_down(self, timeout = None):
+        if not timeout:
+            timeout = self.shutdown_timeout
+
+        logger.info("Shutting down. Giving workers %d seconds to stop" % timeout)
+
+        for w in self.workers:
+            w.shut_down()
+
+        # wait for workers to end
+        for t in range(0, timeout):
+            still_running = []
+            for w in self.workers:
+                if w.running:
+                    still_running.append(w)
+
+            self.workers = still_running
+            if len(self.workers) == 0:
+                break
+
+            sleep(1)
+
+        if len(self.workers) > 0:
+            logger.error("Some workers refused to stop.")
+
 
 class Worker(Thread):
     """
@@ -149,16 +175,21 @@ class Worker(Thread):
 
     @author: Sebastian Deiss
     """
-
     def __init__(self, wid, job_queue, dequeue_timeout = 5):
-        self.active = True
+        # whether we should run
+        self.shutdown_requested = Event()
+        self.shutdown_requested.clear()
+        # whether we are actually running
+        self.running_flag = Event()
+        self.running_flag.clear()
         self.worker_id = wid
         self.job_queue = job_queue
         self.dequeue_timeout = dequeue_timeout
         Thread.__init__(self)
 
     def run(self):
-        while self.active:
+        self.running_flag.set()
+        while not self.shutdown_requested.is_set():
             try:
                 # wait blocking for next job (thread safe) with timeout
                 sample = self.job_queue.dequeue(self.dequeue_timeout)
@@ -183,9 +214,13 @@ class Worker(Thread):
                 self.job_queue.done(sample.sha256sum)
 
             logger.debug('Worker is ready')
-        logger.info('Worker %d: Stopping' % self.worker_id)
-        self.job_queue.workers[self.worker_id] = None
 
+        logger.info('Worker %d: Stopped' % self.worker_id)
+        self.running_flag.clear()
 
-    def __exit__(self, exc_type, exc_value, traceback):
-        self.active = False
+    def shut_down(self):
+        self.shutdown_requested.set()
+
+    @property
+    def running(self):
+        return self.running_flag.is_set()
