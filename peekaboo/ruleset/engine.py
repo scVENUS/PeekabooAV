@@ -26,6 +26,7 @@
 
 import os
 import logging
+import json
 from shutil import copyfile
 from peekaboo.config import PeekabooRulesetConfiguration, get_config
 from peekaboo.ruleset import Result, RuleResult
@@ -147,17 +148,12 @@ def dump_processing_info(sample):
         except Exception as e:
             logger.exception(e)
 
-    if sample.has_attr('cuckoo_json_report_file'):
-        # Cuckoo report
+    # Cuckoo report
+    if sample.has_attr('cuckoo_report'):
+        report = sample.get_attr('cuckoo_report').raw
+
         try:
-            # JSON
-            copyfile(sample.get_attr('cuckoo_json_report_file'),
-                     os.path.join(dump_dir, filename + '.json'))
-        except Exception as e:
-            logger.exception(e)
-        try:
-            # HTML
-            copyfile(sample.get_attr('cuckoo_json_report_file').replace('json', 'html'),
-                     os.path.join(dump_dir, filename + '.html'))
+            with open(os.path.join(dump_dir, filename + '_cuckoo_report.json'), 'w+') as f:
+                json.dump(report, f, indent = 1)
         except Exception as e:
             logger.exception(e)

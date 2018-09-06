@@ -56,10 +56,8 @@ class Cuckoo:
         sample = self.connection_map.get_sample_by_job_id(job_id)
         if sample:
             logger.debug('Requesting Cuckoo report for sample %s' % sample)
-            report = CuckooReport(job_id)
+            report = CuckooReport(self.get_report(job_id))
             sample.set_attr('cuckoo_report', report)
-            if report.file_path:
-                sample.set_attr('cuckoo_json_report_file', report.file_path)
             self.job_queue.submit(sample, self.__class__)
             logger.debug("Remaining connections: %d" % self.connection_map.size())
         else:
@@ -126,6 +124,25 @@ class CuckooEmbed(Cuckoo):
             raise CuckooAnalysisFailedException(
                                                 'Unable to extract job ID from given string %s' % response
                                                 )
+
+    def get_report(self, job_id):
+        path = os.path.join(get_config().cuckoo_storage,
+                'analyses/%d/reports/report.json' % job_id)
+
+        if not os.path.isfile(path):
+            raise OSError('Cuckoo report not found at %s.' % path)
+
+        logger.debug('Accessing Cuckoo report for task %d at %s ' %
+                (job_id, path))
+
+        report = None
+        with open(path) as data:
+            try:
+                report = json.load(data)
+            except ValueError as e:
+                logger.exception(e)
+
+        return report
 
     def do(self):
         # Run Cuckoo sandbox, parse log output, and report back of Peekaboo.
@@ -223,7 +240,8 @@ class CuckooApi(Cuckoo):
                                             'Unable to extract job ID from given string %s' % response
                                             )
 
-    def getReport(self, job_id):
+    def get_report(self, job_id):
+        logger.debug("Report from Cuckoo API requested, job_id = %d" % job_id)
         return self.__get("tasks/report/%d" % job_id)
     
     def do(self):
@@ -336,50 +354,15 @@ class CuckooReport(object):
     @author: Sebastian Deiss
     @author: Felix Bauer
     """
-    def __init__(self, job_id, cuckoo="embed", cuckoo_report=None):
+    def __init__(self, report):
         """
-        arg. cuckoo is either "embed" or a cuckoo object to use the api
+        :param report: hash with report data from Cuckoo
         """
-        self.job_id = job_id
-        self.cuckoo = cuckoo
-        self.file_path = None
-        self.report = None
-        self.cuckoo_report = cuckoo_report
-        self._parse()
+        self.report = report
 
-    def _parse(self):
-        """
-        Reads the JSON report from Cuckoo and loads it into the Sample object.
-        """
-        config = get_config()
-        if self.cuckoo == "embed":
-            if not self.cuckoo_report:
-                self.cuckoo_report = os.path.join(
-                                                  config.cuckoo_storage, 'analyses/%d/reports/report.json'
-                                                  % self.job_id
-                                                  )
-
-            if not os.path.isfile(self.cuckoo_report):
-                raise OSError('Cuckoo report not found at %s.' % self.cuckoo_report)
-            else:
-                logger.debug(
-                    'Accessing Cuckoo report for task %d at %s '
-                    % (self.job_id, self.cuckoo_report)
-                )
-                self.file_path = self.cuckoo_report
-                with open(self.cuckoo_report) as data:
-                    try:
-                        report = json.load(data)
-                        self.report = report
-                    except ValueError as e:
-                        logger.exception(e)
-        elif isinstance(self.cuckoo, CuckooApi):
-            logger.debug("Report from Cuckoo API requested, job_id = %d" % self.job_id)
-            report = self.cuckoo.getReport(self.job_id)
-            self.report = report
-        else:
-            raise ValueError("Invalid report source given in config")
-
+    @property
+    def raw(self):
+        return self.report
 
     @property
     def requested_domains(self):
