@@ -283,9 +283,6 @@ def run():
     # workers of the job queue need the ruleset configuration to create the
     # ruleset engine with it
     ruleset_config = PeekabooRulesetConfiguration(config.ruleset_config)
-    ruleset_config.parse()
-    ruleset_config = ruleset_config.get_config()
-
     job_queue = JobQueue(worker_count = config.worker_count,
             ruleset_config = ruleset_config)
     connection_map = ConnectionMap()

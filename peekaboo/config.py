@@ -172,8 +172,6 @@ class PeekabooRulesetConfiguration(object):
     def __init__(self, config_file):
         self.config_file = config_file
         self.ruleset_config = {}
-
-    def parse(self):
         config = SafeConfigParser()
         try:
             config.read(self.config_file)
@@ -193,8 +191,20 @@ class PeekabooRulesetConfiguration(object):
         except NoOptionError as e:
             logger.exception(e)
 
-    def get_config(self):
-        return self.ruleset_config
+    def rule_config(self, rule):
+        # potentially do some validity checks here
+
+        # arbitrary interface definition: return an empty hash if no rule
+        # config exists as empty rule config so the rule func can rely on it
+        # and does not need to do any type checking
+        return self.ruleset_config.get(rule, {})
+
+    # rule is enabled as long as:
+    # - no config section for that rule is present
+    # - enabled keyword is not present in that section or
+    # - enabled is not equal to 'no'
+    def rule_enabled(self, rule):
+        return (self.rule_config(rule).get('enabled', 'yes') != 'no')
 
     def __str__(self):
         return '<PeekabooRulesetConfiguration(filepath="%s")>' % self.config_file

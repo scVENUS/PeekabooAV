@@ -56,7 +56,8 @@ def file_larger_than(config, s):
     tb = tb[-1]
     position = "%s:%s" % (tb[2], tb[1])
 
-    size = int(config['file_larger_than']['bytes'])
+    size = int(config.get('bytes', 5))
+
     if s.file_size > size:
         return RuleResult(position,
                           result=Result.unknown,
@@ -76,7 +77,9 @@ def file_type_on_whitelist(config, s):
     tb = tb[-1]
     position = "%s:%s" % (tb[2], tb[1])
 
-    whitelist = config['file_type_on_whitelist']['whitelist']
+    whitelist = config.get('whitelist', ())
+    if len(whitelist) == 0:
+        logger.warn("Empty whitelist, check ruleset config.")
 
     if set(s.mimetypes).issubset(set(whitelist)):
         return RuleResult(position,
@@ -95,7 +98,9 @@ def file_type_on_greylist(config, s):
     tb = tb[-1]
     position = "%s:%s" % (tb[2], tb[1])
 
-    greylist = config['file_type_on_greylist']['greylist']
+    greylist = config.get('greylist', ())
+    if len(greylist) == 0:
+        logger.warn("Empty greylist, check ruleset config.")
 
     if set(s.mimetypes).issubset(set(greylist)):
         return RuleResult(position,
@@ -118,7 +123,9 @@ def cuckoo_evil_sig(config, s):
     # signatures that if matched mark a sample as bad
     # list all installed signatures
     # grep -o "description.*" -R . ~/cuckoo2.0/modules/signatures/
-    bad_sigs = config['cuckoo_evil_sig']['signature']
+    bad_sigs = config.get('signature', ())
+    if len(bad_sigs) == 0:
+        logger.warn("Empty bad signature list, check ruleset config.")
 
     sigs = []
 
@@ -152,7 +159,8 @@ def cuckoo_score(config, s):
     tb = tb[-1]
     position = "%s:%s" % (tb[2], tb[1])
 
-    threshold = float(config['cuckoo_score']['higher_than'])
+    threshold = float(config.get('higher_than', 4.0))
+
     if s.cuckoo_report.score >= threshold:
         return RuleResult(position,
                           result=Result.bad,
@@ -189,7 +197,9 @@ def requests_evil_domain(config, s):
     tb = tb[-1]
     position = "%s:%s" % (tb[2], tb[1])
 
-    evil_domains = config['requests_evil_domain']['domain']
+    evil_domains = config.get('domain', ())
+    if len(evil_domains) == 0:
+        logger.warn("Empty evil domain list, check ruleset config.")
 
     for d in s.requested_domains:
         if d in evil_domains:

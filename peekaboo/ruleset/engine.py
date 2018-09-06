@@ -86,15 +86,16 @@ class RulesetEngine(object):
 
         try:
             # skip disabled rules.
-            if rule_name in config.keys() and \
-               'enabled' in config[rule_name].keys() and \
-               config[rule_name]['enabled'] == 'no':
+            if config.rule_enabled(rule_name):
+                # guaranteed to be a hash, albeit empty if no rule config
+                # exists
+                rule_config = config.rule_config(rule_name)
+                result = rule_function(rule_config, sample)
+            else:
                 logger.debug("Rule '%s' is disabled." % rule_name)
                 result = RuleResult(rule_name, result=Result.unchecked,
                                     reason="Regel '%s' ist deaktiviert." % rule_name,
                                     further_analysis=True)
-            else:
-                result = rule_function(config, sample)
             sample.add_rule_result(result)
         except CuckooReportPendingException as e:
             # in case the Sample is requesting the Cuckoo report
