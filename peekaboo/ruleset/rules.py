@@ -27,7 +27,6 @@
 import traceback
 import re
 import logging
-from peekaboo.config import get_config
 from peekaboo.ruleset import Result, RuleResult
 
 
@@ -39,9 +38,8 @@ def known(config, s):
     tb = tb[-1]
     position = "%s:%s" % (tb[2], tb[1])
 
-    db = get_config().get_db_con()
-    if db.known(s):
-        sample_info = db.sample_info_fetch(s)
+    if s.known_to_db:
+        sample_info = s.info_from_db
         return RuleResult(position,
                           result=sample_info.get_result(),
                           reason=sample_info.reason,

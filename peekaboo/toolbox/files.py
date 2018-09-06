@@ -28,7 +28,6 @@ import logging
 import subprocess
 import magic
 import mimetypes
-from peekaboo.config import get_config
 
 
 logger = logging.getLogger(__name__)

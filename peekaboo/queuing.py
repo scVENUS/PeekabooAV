@@ -40,7 +40,7 @@ class JobQueue:
 
     @author: Sebastian Deiss
     """
-    def __init__(self, worker_count = 4, queue_timeout = 300,
+    def __init__(self, ruleset_config, worker_count = 4, queue_timeout = 300,
             dequeue_timeout = 5, shutdown_timeout = 600):
         """ Initialise job queue by creating n Peekaboo worker threads to
         process samples.
@@ -63,7 +63,7 @@ class JobQueue:
 
         for i in range(0, self.worker_count):
             logger.debug("Create Worker %d" % i)
-            w = Worker(i, self)
+            w = Worker(i, self, ruleset_config)
             self.workers.append(w)
             w.start()
 
@@ -175,7 +175,7 @@ class Worker(Thread):
 
     @author: Sebastian Deiss
     """
-    def __init__(self, wid, job_queue, dequeue_timeout = 5):
+    def __init__(self, wid, job_queue, ruleset_config, dequeue_timeout = 5):
         # whether we should run
         self.shutdown_requested = Event()
         self.shutdown_requested.clear()
@@ -184,6 +184,7 @@ class Worker(Thread):
         self.running_flag.clear()
         self.worker_id = wid
         self.job_queue = job_queue
+        self.ruleset_config = ruleset_config
         self.dequeue_timeout = dequeue_timeout
         Thread.__init__(self)
 
@@ -200,7 +201,7 @@ class Worker(Thread):
             sample.init()
 
             try:
-                engine = RulesetEngine(sample)
+                engine = RulesetEngine(sample, self.ruleset_config)
                 engine.run()
                 engine.report()
                 self.job_queue.done(sample.sha256sum)

@@ -28,7 +28,6 @@ import os
 import logging
 import json
 from shutil import copyfile
-from peekaboo.config import PeekabooRulesetConfiguration, get_config
 from peekaboo.ruleset import Result, RuleResult
 from peekaboo.ruleset.rules import *
 from peekaboo.toolbox.peekabooyar import contains_peekabooyar
@@ -59,12 +58,9 @@ class RulesetEngine(object):
         final_rule
     ]
 
-    def __init__(self, sample):
-        peekaboo_config = get_config()
-        ruleset_config = PeekabooRulesetConfiguration(peekaboo_config.ruleset_config)
-        ruleset_config.parse()
+    def __init__(self, sample, ruleset_config):
         self.sample = sample
-        self.config = ruleset_config.get_config()
+        self.config = ruleset_config
 
     def run(self):
         for rule in RulesetEngine.rules:

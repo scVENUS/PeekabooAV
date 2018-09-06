@@ -34,7 +34,6 @@ import random
 from twisted.internet import protocol, reactor, process
 from time import sleep
 from peekaboo import MultiRegexMatcher
-from peekaboo.config import get_config
 from peekaboo.exceptions import CuckooAnalysisFailedException
 
 
@@ -77,10 +76,12 @@ class CuckooEmbed(Cuckoo):
         @author: Felix Bauer
     """
     def __init__(self, job_queue, connection_map, interpreter,
-            cuckoo_exec):
+            cuckoo_exec, cuckoo_submit, cuckoo_storage):
         Cuckoo.__init__(self, job_queue, connection_map)
         self.interpreter = interpreter
         self.cuckoo_exec = cuckoo_exec
+        self.cuckoo_submit = cuckoo_submit
+        self.cuckoo_storage = cuckoo_storage
         self.exit_code = 0
     
     def submit(self, sample):
@@ -90,10 +91,10 @@ class CuckooEmbed(Cuckoo):
             :param sample: Path to a file or a directory.
             :return: The job ID used by Cuckoo to identify this analysis task.
             """
-        config = get_config()
         try:
-            proc = config.cuckoo_submit
-            proc.append(sample)
+            # cuckoo_submit is a list, make a copy as to not modify the
+            # original value
+            proc = self.cuckoo_submit + [sample]
             p = subprocess.Popen(proc,
                                  stdout=subprocess.PIPE,
                                  stderr=subprocess.PIPE)
@@ -126,7 +127,7 @@ class CuckooEmbed(Cuckoo):
                                                 )
 
     def get_report(self, job_id):
-        path = os.path.join(get_config().cuckoo_storage,
+        path = os.path.join(self.cuckoo_storage,
                 'analyses/%d/reports/report.json' % job_id)
 
         if not os.path.isfile(path):
@@ -185,9 +186,10 @@ class CuckooApi(Cuckoo):
         @author: Felix Bauer
     """
     def __init__(self, job_queue, connection_map,
-            url="http://localhost:8090"):
+            url="http://localhost:8090", poll_interval = 5):
         Cuckoo.__init__(self, job_queue, connection_map)
         self.url = url
+        self.poll_interval = poll_interval
         self.reported = self.__status()["tasks"]["reported"]
         logger.info("Connection to Cuckoo seems to work, %i reported tasks seen", self.reported)
     
@@ -251,7 +253,6 @@ class CuckooApi(Cuckoo):
         
         limit = 1000000
         offset = self.__status()["tasks"]["total"]
-        config = get_config()
         
         while not self.shutdown_requested:
             cuckoo_tasks_list = None
@@ -270,7 +271,7 @@ class CuckooApi(Cuckoo):
                         job_id = j["id"]
                         self.resubmit_with_report(job_id)
             #self.reported = reported
-            sleep(float(config.cuckoo_poll_interval))
+            sleep(float(self.poll_interval))
 
         return 0
 

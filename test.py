@@ -33,23 +33,14 @@ import unittest
 # Add Peekaboo to PYTHONPATH
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from peekaboo.sample import Sample
+from peekaboo.sample import SampleFactory
 from peekaboo.ruleset import RuleResult, Result
 from peekaboo.db import PeekabooDatabase
-from peekaboo.config import _set_config
-
 
 class PeekabooDummyConfig(object):
     def __init__(self):
-        self.db_con = None
         self.job_hash_regex = r'/var/lib/amavis/tmp/([^/]+)/parts.*'
         self.sample_base_dir = '/tmp'
-
-    def set_db_con(self, db_con):
-        self.db_con = db_con
-
-    def get_db_con(self):
-        return self.db_con
 
 
 class PeekabooDummyDB(object):
@@ -88,10 +79,14 @@ class TestDatabase(unittest.TestCase):
     def setUpClass(cls):
         cls.test_db = os.path.abspath('./test.db')
         cls.conf = PeekabooDummyConfig()
-        db_con = PeekabooDatabase('sqlite:///' + cls.test_db)
-        cls.conf.set_db_con(db_con)
-        _set_config(cls.conf)
-        cls.sample = Sample(os.path.realpath(__file__))
+        cls.db_con = PeekabooDatabase('sqlite:///' + cls.test_db)
+        cls.factory = SampleFactory(cuckoo = None,
+                db_con = cls.db_con,
+                connection_map = None,
+                base_dir = cls.conf.sample_base_dir,
+                job_hash_regex = cls.conf.job_hash_regex,
+                keep_mail_data = False)
+        cls.sample = cls.factory.make_sample(os.path.realpath(__file__))
         result = RuleResult('Unittest',
                             Result.unknown,
                             'This is just a test case.',
@@ -100,10 +95,10 @@ class TestDatabase(unittest.TestCase):
         cls.sample.determine_result()
 
     def test_1_analysis2db(self):
-        self.conf.db_con.analysis2db(self.sample)
+        self.db_con.analysis2db(self.sample)
 
     def test_2_sample_info_fetch(self):
-        sample_info = self.conf.db_con.sample_info_fetch(self.sample)
+        sample_info = self.db_con.sample_info_fetch(self.sample)
         self.assertEqual(self.sample.sha256sum, sample_info.sha256sum)
 
     def test_3_sample_info_update(self):
@@ -113,13 +108,13 @@ class TestDatabase(unittest.TestCase):
                             further_analysis=False)
         self.sample.add_rule_result(result)
         self.sample.determine_result()
-        self.conf.db_con.sample_info_update(self.sample)
-        rule_result = self.conf.db_con.fetch_rule_result(self.sample)
+        self.db_con.sample_info_update(self.sample)
+        rule_result = self.db_con.fetch_rule_result(self.sample)
         self.assertEqual(rule_result.result, Result.checked)
         self.assertEqual(rule_result.reason, 'This is another test case.')
 
     def test_4_fetch_rule_result(self):
-        rule_result = self.conf.db_con.fetch_rule_result(self.sample)
+        rule_result = self.db_con.fetch_rule_result(self.sample)
         # RuleResults from the DB have 'db' as rule name
         self.assertEqual(rule_result.rule, 'db')
         self.assertEqual(rule_result.result, Result.checked)
@@ -128,8 +123,8 @@ class TestDatabase(unittest.TestCase):
         self.assertTrue(rule_result.further_analysis)
 
     def test_5_known(self):
-        self.assertTrue(self.conf.db_con.known(self.sample))
-        self.assertFalse(self.conf.db_con.in_progress(self.sample))
+        self.assertTrue(self.db_con.known(self.sample))
+        self.assertFalse(self.db_con.in_progress(self.sample))
 
     @classmethod
     def tearDownClass(cls):
@@ -146,10 +141,14 @@ class TestSample(unittest.TestCase):
     def setUpClass(cls):
         cls.test_db = os.path.abspath('./test.db')
         cls.conf = PeekabooDummyConfig()
-        db_con = PeekabooDatabase('sqlite:///' + cls.test_db)
-        cls.conf.set_db_con(db_con)
-        _set_config(cls.conf)
-        cls.sample = Sample(os.path.realpath(__file__))
+        cls.db_con = PeekabooDatabase('sqlite:///' + cls.test_db)
+        cls.factory = SampleFactory(cuckoo = None,
+                db_con = cls.db_con,
+                connection_map = None,
+                base_dir = cls.conf.sample_base_dir,
+                job_hash_regex = cls.conf.job_hash_regex,
+                keep_mail_data = False)
+        cls.sample = cls.factory.make_sample(os.path.realpath(__file__))
 
     def test_attribute_dict(self):
         self.sample.set_attr('Unittest', 'Hello World!')
@@ -160,7 +159,7 @@ class TestSample(unittest.TestCase):
 
     def test_job_hash_regex(self):
         path_with_job_hash = '/var/lib/amavis/tmp/amavis-20170831T132736-07759-iSI0rJ4b/parts'
-        sample = Sample(path_with_job_hash)
+        sample = self.factory.make_sample(path_with_job_hash)
         job_hash = sample.get_job_hash()
         self.assertEqual(job_hash, 'amavis-20170831T132736-07759-iSI0rJ4b',
                          'Job hash regex is not working')
@@ -180,7 +179,7 @@ class TestSample(unittest.TestCase):
         self.assertFalse(self.sample.known)
 
     def test_sample_attributes_with_meta_info(self):
-        sample = Sample('test.pyc', {
+        sample = self.factory.make_sample('test.pyc', {
             'full_name': '/tmp/test.pyc',
             'name_declared': 'test.pyc',
             'type_declared': 'application/x-bytecode.python',
@@ -190,7 +189,7 @@ class TestSample(unittest.TestCase):
         self.assertEqual(sample.file_extension, 'pyc')
 
     def test_sample_without_suffix(self):
-        sample = Sample('junk', {
+        sample = self.factory.make_sample('junk', {
             'full_name': '/tmp/junk',
             'name_declared': 'Report.docx',
             'type_declared': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
