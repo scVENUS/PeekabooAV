@@ -193,7 +193,7 @@ def requests_evil_domain(config, s):
 
     evil_domains = config['requests_evil_domain']['domain']
 
-    for d in s.requested_domains:
+    for d in s.cuckoo_report.requested_domains:
         if d in evil_domains:
             return RuleResult(position,
                               result=Result.bad,
@@ -211,7 +211,7 @@ def cuckoo_analysis_failed(config, s):
     tb = tb[-1]
     position = "%s:%s" % (tb[2], tb[1])
 
-    if s.cuckoo_analysis_failed:
+    if s.cuckoo_report.analysis_failed:
         return RuleResult(position,
                           result=Result.bad,
                           reason="Die Verhaltensanalyse durch Cuckoo hat einen Fehler Produziert und konnte nicht erfolgreich abgeschlossen werden",
