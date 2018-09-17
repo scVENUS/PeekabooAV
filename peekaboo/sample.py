@@ -372,18 +372,6 @@ class Sample(object):
         return self.get_attr('analyses_time')
 
     @property
-    def requested_domains(self):
-        if not self.has_attr('requested_domains'):
-            try:
-                self.set_attr(
-                    'requested_domains',
-                    self.get_attr('cuckoo_report').requested_domains
-                )
-            except KeyError:
-                self.set_attr('requested_domains', [])
-        return self.get_attr('requested_domains')
-
-    @property
     def cuckoo_report(self):
         if not self.has_attr('cuckoo_report'):
             try:
@@ -401,17 +389,6 @@ class Sample(object):
             except CuckooAnalysisFailedException as e:
                 logger.exception(e)
         return self.get_attr('cuckoo_report')
-
-    @property
-    def cuckoo_analysis_failed(self):
-        if not self.has_attr('cuckoo_failed'):
-            if self.has_attr('cuckoo_report'):
-                report = self.get_attr('cuckoo_report')
-                if report.analysis_failed:
-                    self.set_attr('cuckoo_failed', True)
-                else:
-                    self.set_attr('cuckoo_failed', False)
-        return self.get_attr('cuckoo_failed')
 
     def __close_socket(self):
         logger.debug('Closing socket connection.')
