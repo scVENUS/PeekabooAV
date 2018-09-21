@@ -29,40 +29,6 @@ from ConfigParser import SafeConfigParser, NoSectionError, NoOptionError
 
 
 logger = logging.getLogger(__name__)
-_config = None
-
-
-def parse_config(config_file):
-    """
-    Parse the Peekaboo configuration file.
-
-    :param config_file: Path to the configuration file.
-    :return: A PeekabooConfig object containing the configuration options.
-    """
-    global _config
-    if _config is None:
-        _config = PeekabooConfig(config_file)
-    return _config
-
-
-def _set_config(config):
-    """
-    Set the configuration object manually. This is required e. g. for unit tests
-    with a mocked configuration object.
-
-    :param config: The mocked configuration object.
-    :return: The given configuration object.
-    """
-    global _config
-    if _config is None:
-        _config = config
-    return _config
-
-
-def get_config():
-    """ Get the Peekaboo configuration object. """
-    assert _config is not None
-    return _config
 
 
 class PeekabooConfig(object):
@@ -94,7 +60,6 @@ class PeekabooConfig(object):
         self.cuckoo_storage = None
         self.cuckoo_exec = None
         self.cuckoo_submit = None
-        self.db_con = None
         ##############################################
         # setup default logging to log any errors during the
         # parsing of the config file.
@@ -152,23 +117,6 @@ class PeekabooConfig(object):
         self.log_level = ll
         logger.setLevel(ll)
 
-    def add_db_con(self, db_con):
-        self.db_con = db_con
-
-    def get_db_con(self):
-        if self.db_con:
-            return self.db_con
-        raise ValueError('Database connection is not configured.')
-
-    def add_cuckoo_obj(self, cuckoo_obj):
-        self.cuckoo_obj = cuckoo_obj
-        
-    def get_cuckoo_obj(self):
-        if self.cuckoo_obj:
-            return self.cuckoo_obj
-        raise ValueError('Cuckoo Object is not set.')
-
-
     def __parse_log_level(self, log_level):
         if log_level == 'CRITICAL':
             return logging.CRITICAL
@@ -224,8 +172,6 @@ class PeekabooRulesetConfiguration(object):
     def __init__(self, config_file):
         self.config_file = config_file
         self.ruleset_config = {}
-
-    def parse(self):
         config = SafeConfigParser()
         try:
             config.read(self.config_file)
@@ -245,8 +191,20 @@ class PeekabooRulesetConfiguration(object):
         except NoOptionError as e:
             logger.exception(e)
 
-    def get_config(self):
-        return self.ruleset_config
+    def rule_config(self, rule):
+        # potentially do some validity checks here
+
+        # arbitrary interface definition: return an empty hash if no rule
+        # config exists as empty rule config so the rule func can rely on it
+        # and does not need to do any type checking
+        return self.ruleset_config.get(rule, {})
+
+    # rule is enabled as long as:
+    # - no config section for that rule is present
+    # - enabled keyword is not present in that section or
+    # - enabled is not equal to 'no'
+    def rule_enabled(self, rule):
+        return (self.rule_config(rule).get('enabled', 'yes') != 'no')
 
     def __str__(self):
         return '<PeekabooRulesetConfiguration(filepath="%s")>' % self.config_file

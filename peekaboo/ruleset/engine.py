@@ -26,13 +26,12 @@
 
 import os
 import logging
+import json
 from shutil import copyfile
-from peekaboo.config import PeekabooRulesetConfiguration, get_config
 from peekaboo.ruleset import Result, RuleResult
 from peekaboo.ruleset.rules import *
 from peekaboo.toolbox.peekabooyar import contains_peekabooyar
 from peekaboo.exceptions import CuckooReportPendingException
-from peekaboo.toolbox.plugins.oneanalysis import OneAnalysis
 
 
 logger = logging.getLogger(__name__)
@@ -59,24 +58,11 @@ class RulesetEngine(object):
         final_rule
     ]
 
-    def __init__(self, sample):
-        peekaboo_config = get_config()
-        ruleset_config = PeekabooRulesetConfiguration(peekaboo_config.ruleset_config)
-        ruleset_config.parse()
+    def __init__(self, sample, ruleset_config):
         self.sample = sample
-        self.config = ruleset_config.get_config()
-        self.one_analysis_tool = OneAnalysis()
+        self.config = ruleset_config
 
     def run(self):
-        # TODO: Integrate this special rule in the base ruleset.
-        result = self.__exec_rule(
-            self.config,
-            self.sample,
-            self.one_analysis_tool.already_in_progress
-        )
-        if not result.further_analysis:
-            return
-
         for rule in RulesetEngine.rules:
             result = self.__exec_rule(self.config, self.sample, rule)
             if not result.further_analysis:
@@ -90,8 +76,6 @@ class RulesetEngine(object):
         if self.sample.get_result() == Result.bad:
             dump_processing_info(self.sample)
         self.sample.save_result()
-        # TODO: might be better to move this call to a separate function, since it's not related to reporting.
-        self.one_analysis_tool.queue_identical_samples(self.sample)  # depends on already_in_progress
 
     def __exec_rule(self, config, sample, rule_function):
         """
@@ -102,15 +86,16 @@ class RulesetEngine(object):
 
         try:
             # skip disabled rules.
-            if rule_name in config.keys() and \
-               'enabled' in config[rule_name].keys() and \
-               config[rule_name]['enabled'] == 'no':
+            if config.rule_enabled(rule_name):
+                # guaranteed to be a hash, albeit empty if no rule config
+                # exists
+                rule_config = config.rule_config(rule_name)
+                result = rule_function(rule_config, sample)
+            else:
                 logger.debug("Rule '%s' is disabled." % rule_name)
                 result = RuleResult(rule_name, result=Result.unchecked,
                                     reason="Regel '%s' ist deaktiviert." % rule_name,
                                     further_analysis=True)
-            else:
-                result = rule_function(config, sample)
             sample.add_rule_result(result)
         except CuckooReportPendingException as e:
             # in case the Sample is requesting the Cuckoo report
@@ -160,17 +145,12 @@ def dump_processing_info(sample):
         except Exception as e:
             logger.exception(e)
 
-    if sample.has_attr('cuckoo_json_report_file'):
-        # Cuckoo report
+    # Cuckoo report
+    if sample.has_attr('cuckoo_report'):
+        report = sample.get_attr('cuckoo_report').raw
+
         try:
-            # JSON
-            copyfile(sample.get_attr('cuckoo_json_report_file'),
-                     os.path.join(dump_dir, filename + '.json'))
-        except Exception as e:
-            logger.exception(e)
-        try:
-            # HTML
-            copyfile(sample.get_attr('cuckoo_json_report_file').replace('json', 'html'),
-                     os.path.join(dump_dir, filename + '.html'))
+            with open(os.path.join(dump_dir, filename + '_cuckoo_report.json'), 'w+') as f:
+                json.dump(report, f, indent = 1)
         except Exception as e:
             logger.exception(e)

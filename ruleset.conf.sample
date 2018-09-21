@@ -11,8 +11,9 @@
 # if not specified the default is enabled : yes
 enabled : yes
 
-[file_larger_than]
-bytes : 5
+#[file_larger_than]
+# defaults:
+#bytes : 5
 
 [file_type_on_whitelist]
 whitelist.1 : text/plain
@@ -107,8 +108,9 @@ signature.41 : Tries to detect analysis programs from within the browser
 signature.42 : Tries to locate whether any sniffers are installed
 signature.43 : Wscript.exe initiated network communications indicative of a script based payload download
 
-[cuckoo_score]
-higher_than : 4.0
+#[cuckoo_score]
+# defaults:
+#higher_than : 4.0
 
 [requests_evil_domain]
 enabled  : no

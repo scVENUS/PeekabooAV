@@ -31,10 +31,9 @@ import shutil
 import logging
 import tempfile
 from datetime import datetime
-from peekaboo.config import get_config
 from peekaboo.exceptions import CuckooReportPendingException, \
                                 CuckooAnalysisFailedException
-from peekaboo.toolbox.sampletools import ConnectionMap, next_job_hash
+from peekaboo.toolbox.sampletools import next_job_hash
 from peekaboo.toolbox.files import guess_mime_type_from_file_contents, \
                                    guess_mime_type_from_filename
 from peekaboo.toolbox.ms_office import has_office_macros
@@ -43,6 +42,27 @@ import peekaboo.ruleset as ruleset
 
 logger = logging.getLogger(__name__)
 
+class SampleFactory(object):
+    """ A class for churning out loads of mostly identical sample objects.
+    Contains all the global configuration data and object references each
+    sample needs and thus serves as a registry of potential API breakage
+    perhaps deserving looking into. """
+    def __init__(self, cuckoo, db_con, connection_map, base_dir, job_hash_regex,
+            keep_mail_data):
+        # object references for interaction
+        self.cuckoo = cuckoo
+        self.db_con = db_con
+        self.connection_map = connection_map
+
+        # configuration
+        self.base_dir = base_dir
+        self.job_hash_regex = job_hash_regex
+        self.keep_mail_data = keep_mail_data
+
+    def make_sample(self, file_path, metainfo = {}, socket = None):
+        return Sample(file_path, self.cuckoo, self.db_con, metainfo,
+                self.connection_map, socket, self.base_dir, self.job_hash_regex,
+                self.keep_mail_data)
 
 class Sample(object):
     """
@@ -58,10 +78,12 @@ class Sample(object):
     @author: Felix Bauer
     @author: Sebastian Deiss
     """
-    def __init__(self, file_path, metainfo = {}, sock=None):
+    def __init__(self, file_path, cuckoo = None, db_con = None, metainfo = {},
+            connection_map = None, socket = None, base_dir = None,
+            job_hash_regex = None, keep_mail_data = False):
         self.__path = file_path
-        self.__config = get_config()
-        self.__db_con = self.__config.get_db_con()
+        self.__cuckoo = cuckoo
+        self.__db_con = db_con
         self.__wd = None
         self.__filename = os.path.basename(self.__path)
         # A symlink that points to the actual file named
@@ -69,10 +91,18 @@ class Sample(object):
         self.__symlink = None
         self.__result = ruleset.Result.unchecked
         self.__report = []  # Peekaboo's own report
-        self.__socket = sock
+        self.__connection_map = connection_map
+        self.__socket = socket
         # Additional attributes for a sample object (e. g. meta info)
         self.__attributes = {}
+        self.__base_dir = base_dir
+        self.__job_hash_regex = job_hash_regex
+        self.__keep_mail_data = keep_mail_data
         self.initialized = False
+
+        # register ourselves with the connection map
+        if self.__connection_map is not None and self.__socket is not None:
+            self.__connection_map.add(self.__socket, self)
 
         for field in metainfo:
             logger.debug('meta_info_%s = %s' % (field, metainfo[field]))
@@ -98,8 +128,7 @@ class Sample(object):
         logger.debug("initializing sample")
 
         job_hash = self.get_job_hash()
-        self.__wd = tempfile.mkdtemp(prefix = job_hash,
-                dir = self.__config.sample_base_dir)
+        self.__wd = tempfile.mkdtemp(prefix = job_hash, dir = self.__base_dir)
 
         # create a symlink to submit the file with the correct file extension
         # to cuckoo via submit.py.
@@ -180,30 +209,33 @@ class Sample(object):
         return ''.join(self.__report)
 
     def get_job_hash(self):
-        job_hash = re.sub(self.__config.job_hash_regex, r'\1',
+        job_hash = re.sub(self.__job_hash_regex, r'\1',
                           self.__path)
         if job_hash == self.__path:
             # regex did not match.
             # so we generate our own job hash and create the
             # working directory.
             job_hash = next_job_hash()
-            os.mkdir(os.path.join(self.__config.sample_base_dir,
-                                  job_hash))
+            os.mkdir(os.path.join(self.__base_dir, job_hash))
 
         logger.debug("Job hash for this sample: %s" % job_hash)
         return job_hash
 
     def save_result(self):
-        if self.__db_con.known(self):
+        if self.known_to_db:
             logger.debug('Known sample info not logged to database')
         else:
             logger.debug('Saving results to database')
             self.__db_con.sample_info_update(self)
-        if self.__socket is not None:
-            ConnectionMap.remove(self.__socket, self)
-        if not ConnectionMap.has_connection(self.__socket):
-            self.__cleanup_temp_files()
-            self.__close_socket()
+
+        if self.__connection_map is not None:
+            # de-register ourselves from the connection map
+            if self.__socket is not None:
+                self.__connection_map.remove(self.__socket, self)
+
+            if not self.__connection_map.has_connection(self.__socket):
+                self.__cleanup_temp_files()
+                self.__close_socket()
 
     def add_rule_result(self, res):
         logger.debug('Adding rule result %s' % str(res))
@@ -256,11 +288,22 @@ class Sample(object):
 
     @property
     def known(self):
-        _known = self.__db_con.known(self)
-        if _known:
+        if self.known_to_db:
             self.set_attr('known', True)
             return True
         return False
+
+    # These two hint at architectural breakage: Why do we sometimes want to know if
+    # a sample is known, its previous classification (result, reason) without
+    # updating its internal state (attribute)? Why is the sample interacting
+    # with the database in the first place?
+    @property
+    def known_to_db(self):
+        return self.__db_con.known(self)
+
+    @property
+    def info_from_db(self):
+        return self.__db_con.sample_info_fetch(self)
 
     @property
     def file_extension(self):
@@ -376,9 +419,7 @@ class Sample(object):
         if not self.has_attr('cuckoo_report'):
             try:
                 logger.debug("Submitting %s to Cuckoo" % self.__symlink)
-                config = get_config()
-                cuckoo = config.get_cuckoo_obj()
-                job_id = cuckoo.submit(self.__symlink)
+                job_id = self.__cuckoo.submit(self.__symlink)
                 self.set_attr('job_id', job_id)
                 message = 'Erfolgreich an Cuckoo gegeben %s als Job %d\n' \
                           % (self, job_id)
@@ -405,7 +446,7 @@ class Sample(object):
 
     def __cleanup_temp_files(self):
         try:
-            if self.__config.keep_mail_data:
+            if self.__keep_mail_data:
                 logger.debug('Keeping mail data in %s' % self.__wd)
             else:
                 logger.debug("Deleting tempdir %s" % self.__wd)

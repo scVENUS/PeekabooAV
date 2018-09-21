@@ -31,13 +31,10 @@ import json
 import subprocess
 import requests
 import random
-from twisted.internet import protocol, reactor
+from twisted.internet import protocol, reactor, process
 from time import sleep
 from peekaboo import MultiRegexMatcher
-from peekaboo.config import get_config
 from peekaboo.exceptions import CuckooAnalysisFailedException
-from peekaboo.toolbox.sampletools import ConnectionMap
-from peekaboo.queuing import JobQueue
 
 
 logger = logging.getLogger(__name__)
@@ -47,17 +44,29 @@ class Cuckoo:
     """
         Parent class, defines interface to Cuckoo
     """
-    def __init__(self):
-        pass
-    
-    def submit(self):
-        logger.error("Not implemented yet")
-    
-    def do(self):
-        # wait for the cows to come home
-        while True:
-            sleep(600)
+    def __init__(self, job_queue, connection_map):
+        self.job_queue = job_queue
+        self.connection_map = connection_map
+        self.shutdown_requested = False
 
+    def resubmit_with_report(self, job_id):
+        logger.debug("Analysis done for task #%d" % job_id)
+        logger.debug("Remaining connections: %d" % self.connection_map.size())
+        sample = self.connection_map.get_sample_by_job_id(job_id)
+        if sample:
+            logger.debug('Requesting Cuckoo report for sample %s' % sample)
+            report = CuckooReport(self.get_report(job_id))
+            sample.set_attr('cuckoo_report', report)
+            self.job_queue.submit(sample, self.__class__)
+            logger.debug("Remaining connections: %d" % self.connection_map.size())
+        else:
+            logger.debug('No connection found for ID %d' % job_id)
+
+    def shut_down(self):
+        self.shutdown_requested = True
+
+    def reap_children(self):
+        pass
 
 class CuckooEmbed(Cuckoo):
     """
@@ -66,9 +75,14 @@ class CuckooEmbed(Cuckoo):
         @author: Sebastian Deiss
         @author: Felix Bauer
     """
-    def __init__(self, interpreter, cuckoo_exec):
+    def __init__(self, job_queue, connection_map, interpreter,
+            cuckoo_exec, cuckoo_submit, cuckoo_storage):
+        Cuckoo.__init__(self, job_queue, connection_map)
         self.interpreter = interpreter
         self.cuckoo_exec = cuckoo_exec
+        self.cuckoo_submit = cuckoo_submit
+        self.cuckoo_storage = cuckoo_storage
+        self.exit_code = 0
     
     def submit(self, sample):
         """
@@ -77,10 +91,10 @@ class CuckooEmbed(Cuckoo):
             :param sample: Path to a file or a directory.
             :return: The job ID used by Cuckoo to identify this analysis task.
             """
-        config = get_config()
         try:
-            proc = config.cuckoo_submit
-            proc.append(sample)
+            # cuckoo_submit is a list, make a copy as to not modify the
+            # original value
+            proc = self.cuckoo_submit + [sample]
             p = subprocess.Popen(proc,
                                  stdout=subprocess.PIPE,
                                  stderr=subprocess.PIPE)
@@ -112,14 +126,58 @@ class CuckooEmbed(Cuckoo):
                                                 'Unable to extract job ID from given string %s' % response
                                                 )
 
+    def get_report(self, job_id):
+        path = os.path.join(self.cuckoo_storage,
+                'analyses/%d/reports/report.json' % job_id)
+
+        if not os.path.isfile(path):
+            raise OSError('Cuckoo report not found at %s.' % path)
+
+        logger.debug('Accessing Cuckoo report for task %d at %s ' %
+                (job_id, path))
+
+        report = None
+        with open(path) as data:
+            try:
+                report = json.load(data)
+            except ValueError as e:
+                logger.exception(e)
+
+        return report
+
     def do(self):
-        # reaktor and shit
         # Run Cuckoo sandbox, parse log output, and report back of Peekaboo.
-        srv = CuckooServer()
+        srv = CuckooServer(self)
         reactor.spawnProcess(srv, self.interpreter, [self.interpreter, '-u',
                                                      self.cuckoo_exec])
-        reactor.run()
 
+        # do not install twisted's signal handlers because it will screw with
+        # our logic (install a handler for SIGTERM and SIGCHLD but not for
+        # SIGINT). Instead do what their SIGCHLD handler would do and call the
+        # global process reaper.
+        reactor.run(installSignalHandlers = False)
+        process.reapAllProcesses()
+        return self.exit_code
+
+    def shut_down(self, exit_code = 0):
+        """ Signal handler callback but in this instance also used as callback
+        for protocol to ask us to shut down if anything adverse happens to the
+        child """
+        # the reactor doesn't like it to be stopped more than once and catching
+        # the resulting ReactorNotRunning exception is foiled by the fact that
+        # sigTerm defers the call through a queue into another thread which
+        # insists on logging it
+        if not self.shutdown_requested:
+            reactor.sigTerm(0)
+
+        self.shutdown_requested = True
+        self.exit_code = exit_code
+
+    def reap_children(self):
+        """ Since we only have one child, SIGCHLD will cause us to shut down
+        and we reap all child processes on shutdown. This method is therefore
+        (currently) intentionally a no-op. """
+        pass
 
 class CuckooApi(Cuckoo):
     """
@@ -127,8 +185,11 @@ class CuckooApi(Cuckoo):
         
         @author: Felix Bauer
     """
-    def __init__(self, url="http://localhost:8090"):
+    def __init__(self, job_queue, connection_map,
+            url="http://localhost:8090", poll_interval = 5):
+        Cuckoo.__init__(self, job_queue, connection_map)
         self.url = url
+        self.poll_interval = poll_interval
         self.reported = self.__status()["tasks"]["reported"]
         logger.info("Connection to Cuckoo seems to work, %i reported tasks seen", self.reported)
     
@@ -181,21 +242,19 @@ class CuckooApi(Cuckoo):
                                             'Unable to extract job ID from given string %s' % response
                                             )
 
-    def getReport(self, job_id):
+    def get_report(self, job_id):
+        logger.debug("Report from Cuckoo API requested, job_id = %d" % job_id)
         return self.__get("tasks/report/%d" % job_id)
     
     def do(self):
         # do the polling for finished jobs
         # record analysis count and call status over and over again
-        # then:
-        # sample = ConnectionMap.get_sample_by_job_id(job_id)
         # logger ......
         
         limit = 1000000
         offset = self.__status()["tasks"]["total"]
-        config = get_config()
         
-        while True:
+        while not self.shutdown_requested:
             cuckoo_tasks_list = None
             try:
                 cuckoo_tasks_list = self.__get("tasks/list/%i/%i" % (limit, offset))
@@ -210,23 +269,11 @@ class CuckooApi(Cuckoo):
                 for j in cuckoo_tasks_list["tasks"]:
                     if j["status"] == "reported":
                         job_id = j["id"]
-                        logger.debug("Analysis done for task #%d" % job_id)
-                        logger.debug("Remaining connections: %d" % ConnectionMap.size())
-                        sample = ConnectionMap.get_sample_by_job_id(job_id)
-                        if sample:
-                            logger.debug('Requesting Cuckoo report for sample %s' % sample)
-                            self.__report = CuckooReport(job_id, self)
-                            sample.set_attr('cuckoo_report', self.__report)
-                            JobQueue.submit(sample, self.__class__)
-                            logger.debug("Remaining connections: %d" % ConnectionMap.size())
-                        else:
-                            #if first:
-                            #    first = False
-                            #    offset += 1
-                            logger.debug('No connection found for ID %d' % job_id)
+                        self.resubmit_with_report(job_id)
             #self.reported = reported
-            sleep(float(config.cuckoo_poll_interval))
+            sleep(float(self.poll_interval))
 
+        return 0
 
 class CuckooServer(protocol.ProcessProtocol):
     """
@@ -241,8 +288,8 @@ class CuckooServer(protocol.ProcessProtocol):
     @author: Felix Bauer
     @author: Sebastian Deiss
     """
-    def __init__(self):
-        self.__report = None
+    def __init__(self, cuckoo):
+        self.cuckoo = cuckoo
 
     def connectionMade(self):
         logger.info('Connected. Cuckoo PID: %s' % self.transport.pid)
@@ -278,38 +325,27 @@ class CuckooServer(protocol.ProcessProtocol):
                      data)
         if m:
             job_id = int(m.group(1))
-            logger.debug("Analysis done for task #%d" % job_id)
-            logger.debug("Remaining connections: %d" % ConnectionMap.size())
-            sample = ConnectionMap.get_sample_by_job_id(job_id)
-            if sample:
-                logger.debug('Requesting Cuckoo report for sample %s' % sample)
-                self.__report = CuckooReport(job_id)
-                sample.set_attr('cuckoo_report', self.__report)
-                sample.set_attr('cuckoo_json_report_file', self.__report.file_path)
-                JobQueue.submit(sample, self.__class__)
-                logger.debug("Remaining connections: %d" % ConnectionMap.size())
-            else:
-                logger.debug('No connection found for ID %d' % job_id)
+            self.cuckoo.resubmit_with_report(job_id)
 
     def inConnectionLost(self):
         logger.debug("Cuckoo closed STDIN")
-        os._exit(1)
+        self.cuckoo.shut_down(1)
 
     def outConnectionLost(self):
         logger.debug("Cuckoo closed STDOUT")
-        os._exit(1)
+        self.cuckoo.shut_down(1)
 
     def errConnectionLost(self):
         logger.warning("Cuckoo closed STDERR")
-        os._exit(1)
+        self.cuckoo.shut_down(1)
 
     def processExited(self, reason):
         logger.info("Cuckoo exited with status %s" % str(reason.value.exitCode))
-        os._exit(0)
+        self.cuckoo.shut_down()
 
     def processEnded(self, reason):
         logger.info("Cuckoo ended with status %s" % str(reason.value.exitCode))
-        os._exit(0)
+        self.cuckoo.shut_down()
 
 
 class CuckooReport(object):
@@ -319,50 +355,15 @@ class CuckooReport(object):
     @author: Sebastian Deiss
     @author: Felix Bauer
     """
-    def __init__(self, job_id, cuckoo="embed", cuckoo_report=None):
+    def __init__(self, report):
         """
-        arg. cuckoo is either "embed" or a cuckoo object to use the api
+        :param report: hash with report data from Cuckoo
         """
-        self.job_id = job_id
-        self.cuckoo = cuckoo
-        self.file_path = None
-        self.report = None
-        self.cuckoo_report = cuckoo_report
-        self._parse()
+        self.report = report
 
-    def _parse(self):
-        """
-        Reads the JSON report from Cuckoo and loads it into the Sample object.
-        """
-        config = get_config()
-        if self.cuckoo == "embed":
-            if not self.cuckoo_report:
-                self.cuckoo_report = os.path.join(
-                                                  config.cuckoo_storage, 'analyses/%d/reports/report.json'
-                                                  % self.job_id
-                                                  )
-
-            if not os.path.isfile(self.cuckoo_report):
-                raise OSError('Cuckoo report not found at %s.' % self.cuckoo_report)
-            else:
-                logger.debug(
-                    'Accessing Cuckoo report for task %d at %s '
-                    % (self.job_id, self.cuckoo_report)
-                )
-                self.file_path = self.cuckoo_report
-                with open(self.cuckoo_report) as data:
-                    try:
-                        report = json.load(data)
-                        self.report = report
-                    except ValueError as e:
-                        logger.exception(e)
-        elif isinstance(self.cuckoo, CuckooApi):
-            logger.debug("Report from Cuckoo API requested, job_id = %d" % self.job_id)
-            report = self.cuckoo.getReport(self.job_id)
-            self.report = report
-        else:
-            raise ValueError("Invalid report source given in config")
-
+    @property
+    def raw(self):
+        return self.report
 
     @property
     def requested_domains(self):
