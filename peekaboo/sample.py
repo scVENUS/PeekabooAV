@@ -88,7 +88,7 @@ class Sample(object):
         self.__filename = os.path.basename(self.__path)
         # A symlink that points to the actual file named
         # sha256sum.suffix
-        self.__symlink = None
+        self.__submit_path = None
         self.__result = ruleset.Result.unchecked
         self.__report = []  # Peekaboo's own report
         self.__connection_map = connection_map
@@ -127,18 +127,21 @@ class Sample(object):
 
         logger.debug("initializing sample")
 
-        job_hash = self.get_job_hash()
-        self.__wd = tempfile.mkdtemp(prefix = job_hash, dir = self.__base_dir)
-
         # create a symlink to submit the file with the correct file extension
-        # to cuckoo via submit.py.
-        self.__symlink = os.path.join(self.__wd,
-                '%s.%s' % (self.sha256sum, self.file_extension))
-        logger.debug('ln -s %s %s' % (self.__path, self.__symlink))
-        try:
-            os.symlink(self.__path, self.__symlink)
-        except OSError:
-            pass
+        # to cuckoo via submit.py - but only if we can actually figure out an
+        # extension. Otherwise the point is moot.
+        self.__submit_path = self.__path
+        file_ext = self.file_extension
+        if file_ext:
+            # create a temporary directory where mkdtemp makes sure that
+            # creation is atomic, i.e. no other process is using it
+            self.__wd = tempfile.mkdtemp(prefix = self.get_job_hash(),
+                    dir = self.__base_dir)
+            self.__submit_path = os.path.join(self.__wd,
+                    '%s.%s' % (self.sha256sum, file_ext))
+
+            logger.debug('ln -s %s %s' % (self.__path, self.__submit_path))
+            os.symlink(self.__path, self.__submit_path)
 
         self.initialized = True
 
@@ -307,29 +310,47 @@ class Sample(object):
 
     @property
     def file_extension(self):
+        if self.has_attr('file_extension'):
+            return self.get_attr('file_extension')
+
+        # try to find a file name containing an extension. Using
+        # self.__filename will almost never yield anything useful because
+        # amavis intentionally hands us files named only p001, p002 and so on.
+        # But we still try it in case there's no declared name.
+        filename = self.__filename
         if self.has_attr('meta_info_name_declared'):
-            file_ext = self.get_attr('meta_info_name_declared').split('.')[-1]
-            if self.has_attr('file_extension'):
-                if self.get_attr('file_extension') != file_ext:
-                    self.set_attr('file_extension', file_ext, override=True)
-            else:
-                self.set_attr('file_extension', file_ext)
-        elif not self.has_attr('file_extension'):
-            file_ext = os.path.splitext(self.__filename)[1][1:]
-            self.set_attr('file_extension', file_ext)
-        return self.get_attr('file_extension')
+            filename = self.get_attr('meta_info_name_declared')
+
+        # extension or the empty string if none found
+        file_ext = os.path.splitext(filename)[1][1:]
+        self.set_attr('file_extension', file_ext)
+        return file_ext
 
     @property
     def mimetypes(self):
-        """
-        Can not be cached (hard to determine if known/complete).
+        if self.has_attr('mimetypes'):
+            return self.get_attr('mimetypes')
 
-        determine mime on original p[0-9]* file
-        later result will be "inode/symlink"
-        """
-        mime_types = []
+        mime_types = set()
 
-        smime = {
+        # get MIME type from meta info
+        declared_mt = None
+        if self.has_attr('meta_info_type_declared'):
+            declared_mt = self.get_attr('meta_info_type_declared')
+            if declared_mt is not None:
+                logger.debug('Sample declared as "%s"' % declared_mt)
+                mime_types.add(declared_mt)
+
+        declared_filename = self.__filename
+        if self.has_attr('meta_info_name_declared'):
+            declared_filename = self.get_attr('meta_info_name_declared')
+
+        # check if the sample is an S/MIME signature (smime.p7s)
+        # If so, don't overwrite the MIME type since we do not want to analyse
+        # S/MIME signatures.
+        # FIXME: This is oddly specific for this generic routine. Should it be
+        # some sort of callback or plugin?
+        leave_alone_types = {
             'p7s': [
                 'application/pkcs7-signature',
                 'application/x-pkcs7-signature',
@@ -338,41 +359,25 @@ class Sample(object):
             ]
         }
 
-        # get MIME type from meta info
-        try:
-            declared_mt = self.get_attr('meta_info_type_declared')
-            if declared_mt is not None:
-                logger.debug('Sample declared as "%s"' % declared_mt)
-                mime_types.append(declared_mt)
-        except Exception as e:
-            logger.exception(e)
-            declared_mt = None
-            logger.error('Cannot get MIME type from meta info.')
+        if declared_filename == 'smime.p7s' and declared_mt in leave_alone_types['p7s']:
+            logger.info('S/MIME signature detected. Using declared MIME type over detected ones.')
+            mime_types = set([declared_mt])
+            self.set_attr('mimetypes', mime_types)
+            return mime_types
 
-        try:
-            declared_filename = self.get_attr('meta_info_name_declared')
-        except KeyError:
-            declared_filename = self.__filename
-
+        # determine mime on original p[0-9]* file
+        # result of __submit_path would be "inode/symlink"
         content_based_mime_type = guess_mime_type_from_file_contents(self.__path)
-        if content_based_mime_type is not None and content_based_mime_type not in mime_types:
-            mime_types.append(content_based_mime_type)
+        if content_based_mime_type is not None:
+            mime_types.add(content_based_mime_type)
 
         name_based_mime_type = guess_mime_type_from_filename(declared_filename)
-        if name_based_mime_type is not None and name_based_mime_type not in mime_types:
-            mime_types.append(name_based_mime_type)
+        if name_based_mime_type is not None:
+            mime_types.add(name_based_mime_type)
 
         logger.debug('Determined MIME Types: %s' % mime_types)
-        # check if the sample is an S/MIME signature (smime.p7s)
-        # If so, don't overwrite the MIME type since we do not want to analyse S/MIME signatures.
-        if declared_filename == 'smime.p7s' and declared_mt in smime['p7s']:
-            logger.info('S/MIME signature detected. Using declared MIME type over detected ones.')
-            mime_types = [declared_mt]
-
-        if not self.has_attr('mimetypes'):
-            self.set_attr('mimetypes', mime_types)
-
-        return self.get_attr('mimetypes')
+        self.set_attr('mimetypes', mime_types)
+        return mime_types
 
     @property
     def job_id(self):
@@ -418,8 +423,8 @@ class Sample(object):
     def cuckoo_report(self):
         if not self.has_attr('cuckoo_report'):
             try:
-                logger.debug("Submitting %s to Cuckoo" % self.__symlink)
-                job_id = self.__cuckoo.submit(self.__symlink)
+                logger.debug("Submitting %s to Cuckoo" % self.__submit_path)
+                job_id = self.__cuckoo.submit(self.__submit_path)
                 self.set_attr('job_id', job_id)
                 message = 'Erfolgreich an Cuckoo gegeben %s als Job %d\n' \
                           % (self, job_id)
@@ -445,12 +450,17 @@ class Sample(object):
                 logger.exception(e)
 
     def __cleanup_temp_files(self):
+        # nothing to do if we never created a workdir
+        if not self.__wd:
+            return
+
+        if self.__keep_mail_data:
+            logger.debug('Keeping mail data in %s' % self.__wd)
+            return
+
+        logger.debug("Deleting tempdir %s" % self.__wd)
         try:
-            if self.__keep_mail_data:
-                logger.debug('Keeping mail data in %s' % self.__wd)
-            else:
-                logger.debug("Deleting tempdir %s" % self.__wd)
-                shutil.rmtree(self.__wd)
+            shutil.rmtree(self.__wd)
         except OSError as e:
             logger.exception(e)
 

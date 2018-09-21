@@ -81,7 +81,7 @@ def file_type_on_whitelist(config, s):
     if len(whitelist) == 0:
         logger.warn("Empty whitelist, check ruleset config.")
 
-    if set(s.mimetypes).issubset(set(whitelist)):
+    if s.mimetypes.issubset(set(whitelist)):
         return RuleResult(position,
                           result=Result.ignored,
                           reason="Dateityp ist auf Whitelist",
@@ -102,7 +102,7 @@ def file_type_on_greylist(config, s):
     if len(greylist) == 0:
         logger.warn("Empty greylist, check ruleset config.")
 
-    if set(s.mimetypes).issubset(set(greylist)):
+    if s.mimetypes.issubset(set(greylist)):
         return RuleResult(position,
                           result=Result.unknown,
                           reason="Dateityp ist auf der Liste der zu analysiserenden Typen",
