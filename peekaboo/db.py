@@ -413,6 +413,7 @@ class PeekabooDatabase(object):
             session.query(AnalysisJournal).filter_by(
                 sample=in_progress_sample
             ).delete()
+        session.query(SampleInfo).filter_by(result=in_progress).delete()
         try:
             session.commit()
             logger.debug('Cleared the database from "inProgress" entries.')
