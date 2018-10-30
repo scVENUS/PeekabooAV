@@ -55,8 +55,17 @@ class Cuckoo:
         sample = self.connection_map.get_sample_by_job_id(job_id)
         if sample:
             logger.debug('Requesting Cuckoo report for sample %s' % sample)
-            report = CuckooReport(self.get_report(job_id))
-            sample.set_attr('cuckoo_report', report)
+            report = self.get_report(job_id)
+
+            # do not set the sample attribute if we were unable to get the
+            # report because e.g. it was corrupted or the API connection
+            # failed. This will cause the sample to be resubmitted to Cuckoo
+            # upon the next try to access the report.
+            # TODO: This can cause an endless loop.
+            if report is not None:
+                reportobj = CuckooReport(report)
+                sample.set_attr('cuckoo_report', reportobj)
+
             self.job_queue.submit(sample, self.__class__)
             logger.debug("Remaining connections: %d" % self.connection_map.size())
         else:
