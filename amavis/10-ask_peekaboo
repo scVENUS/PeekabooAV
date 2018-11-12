@@ -67,7 +67,14 @@ sub ask_peekaboo_internal {
 
       # name_declared can be an array of names, if so use the last
       $val = ref $val eq 'ARRAY' ? $val->[-1] : $val;
-      $val = Amavis::Util::safe_decode_mime($val) if $field eq "name_declared";
+
+      # when running under perl 5.22.1 e.g. on Ubuntu 16.04 safe_decode_mime
+      # somehow corrupts the original value of $val so we may get errors in
+      # totally unrelated code later on such as:
+      #   FAILED: Malformed UTF-8 character (fatal) at /usr/sbin/amavisd-new
+      #   line 10210.
+      # We work around that by forcing a copy.
+      $val = Amavis::Util::safe_decode_mime("" . $val) if $field eq "name_declared";
 
       # do not transfer undef values since they're no good for nothing
       $pmi->{$field} = $val if defined($val);
