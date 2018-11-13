@@ -45,6 +45,8 @@ def main():
                         help='List results of all files not only bad ones')
     parser.add_argument('-vv', '--verbose2', action='store_true', required=False,
                         help='List detailed analysis results of every rule')
+    parser.add_argument('-d', '--debug', action='store_true', required=False,
+                        help='Output additional diagnostics')
     parser.add_argument('-s', '--socket_file', action='store', required=True,
                         help='Path to Peekaboo\'s socket file')
     parser.add_argument('-f', '--filename', action='store', required=True,
@@ -57,6 +59,8 @@ def main():
     peekaboo = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     peekaboo.connect(args.socket_file)
     request = '[ { "full_name": "%s" } ]' % file_abspath
+    if args.debug:
+        print ('Sending request: %s' % request)
     peekaboo.send(request)
     print ('Waiting for response...')
 
