@@ -56,7 +56,8 @@ def main():
     file_abspath = path.abspath(args.filename)
     peekaboo = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     peekaboo.connect(args.socket_file)
-    peekaboo.send(file_abspath)
+    request = '[ { "full_name": "%s" } ]' % file_abspath
+    peekaboo.send(request)
     print ('Waiting for response...')
 
     if args.verbose2:
