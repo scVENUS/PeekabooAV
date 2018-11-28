@@ -210,6 +210,7 @@ class TestSample(unittest.TestCase):
     def tearDownClass(cls):
         os.unlink(cls.test_db)
 
+
 class TestRules(unittest.TestCase):
     """
     Unittests for Rules.
@@ -234,7 +235,7 @@ class TestRules(unittest.TestCase):
             [True, ['text/plain', 'application/vnd.ms-excel']],
             [True, ['image/png', 'application/zip', 'application/vnd.ms-excel']],
             [True, ['', 'asdfjkl', '93219843298']],
-            [False, []], # should this really result in no further_analysis?
+            [True, []],
         ]
         for expected, types in combinations:
             self.sample.set_attr('mimetypes', set(types))
@@ -248,7 +249,7 @@ class TestRules(unittest.TestCase):
             [True, ['text/plain', 'application/x-dosexec']],
             [True, ['image/png', 'application/zip', 'application/vnd.ms-excel', 'application/vnd.ms-powerpoint']],
             [False, ['', 'asdfjkl', '93219843298']],
-            [False, []],
+            [True, []],
         ]
         for expected, types in combinations:
             self.sample.set_attr('mimetypes', set(types))
