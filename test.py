@@ -35,12 +35,20 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from peekaboo.sample import SampleFactory
 from peekaboo.ruleset import RuleResult, Result
+from peekaboo.ruleset.rules import file_type_on_whitelist, file_type_on_greylist
 from peekaboo.db import PeekabooDatabase
 
 class PeekabooDummyConfig(object):
     def __init__(self):
         self.job_hash_regex = r'/var/lib/amavis/tmp/([^/]+)/parts.*'
         self.sample_base_dir = '/tmp'
+
+    def get(self, option, default):
+        config = {
+            'whitelist':['text/plain', 'inode/x-empty'],
+            'greylist' :['application/x-dosexec', 'application/msword', 'application/vnd.ms-powerpoint'],
+        }
+        return config[option]
 
 
 class PeekabooDummyDB(object):
@@ -203,10 +211,60 @@ class TestSample(unittest.TestCase):
         os.unlink(cls.test_db)
 
 
+class TestRules(unittest.TestCase):
+    """
+    Unittests for Rules.
+
+    @author: Felix Bauer
+    """
+    @classmethod
+    def setUpClass(cls):
+        cls.conf = PeekabooDummyConfig()
+        cls.factory = SampleFactory(cuckoo = None,
+                db_con = None,
+                connection_map = None,
+                base_dir = cls.conf.sample_base_dir,
+                job_hash_regex = cls.conf.job_hash_regex,
+                keep_mail_data = False)
+        cls.sample = cls.factory.make_sample(os.path.realpath(__file__))
+
+    def test_rule_file_type_on_whitelist(self):
+        combinations = [
+            [False, ['text/plain']],
+            [True, ['application/vnd.ms-excel']],
+            [True, ['text/plain', 'application/vnd.ms-excel']],
+            [True, ['image/png', 'application/zip', 'application/vnd.ms-excel']],
+            [True, ['', 'asdfjkl', '93219843298']],
+            [True, []],
+        ]
+        for expected, types in combinations:
+            self.sample.set_attr('mimetypes', set(types))
+            r = file_type_on_whitelist(self.conf, self.sample)
+            self.assertEqual(r.further_analysis, expected)
+
+    def test_rule_file_type_on_greylist(self):
+        combinations = [
+            [False, ['text/plain']],
+            [True, ['application/msword']],
+            [True, ['text/plain', 'application/x-dosexec']],
+            [True, ['image/png', 'application/zip', 'application/vnd.ms-excel', 'application/vnd.ms-powerpoint']],
+            [False, ['', 'asdfjkl', '93219843298']],
+            [True, []],
+        ]
+        for expected, types in combinations:
+            self.sample.set_attr('mimetypes', set(types))
+            r = file_type_on_greylist(self.conf, self.sample)
+            self.assertEqual(r.further_analysis, expected)
+
+    @classmethod
+    def tearDownClass(cls):
+        pass
+
 def main():
     suite = unittest.TestSuite()
     suite.addTest(unittest.makeSuite(TestSample))
     suite.addTest(unittest.makeSuite(TestDatabase))
+    suite.addTest(unittest.makeSuite(TestRules))
     # TODO: We need more tests!!!
 
     runner = unittest.TextTestRunner(verbosity=2)
