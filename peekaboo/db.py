@@ -406,19 +406,13 @@ class PeekabooDatabase(object):
             AnalysisResult,
             name='inProgress'
         )
-        in_progress_samples = session.query(SampleInfo).filter_by(result=in_progress)
-        # The direct approach does not work currently with message:
-        #   in_() not yet supported for relationships.  For a simple many-to-one,
-        #   use in_() against the set of foreign key values.
-        # This is what we do below.
-        #session.query(AnalysisJournal).filter(
-        #        AnalysisJournal.sample.in_(in_progress_samples)).delete()
-        sample_ids = [s.id for s in in_progress_samples.all()]
-        if sample_ids:
-            session.query(AnalysisJournal).filter(
-                    AnalysisJournal.sample_id.in_(sample_ids)
-                ).delete(synchronize_session = False)
-            in_progress_samples.delete()
+        in_progress_samples = session.query(SampleInfo).filter_by(
+            result=in_progress
+        ).all()
+        for in_progress_sample in in_progress_samples:
+            session.query(AnalysisJournal).filter_by(
+                sample=in_progress_sample
+            ).delete()
         try:
             session.commit()
             logger.debug('Cleared the database from "inProgress" entries.')
