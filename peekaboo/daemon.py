@@ -230,7 +230,14 @@ def run():
 
     # read configuration
     if not os.path.isfile(args.config):
-        print('Failed to read config, files does not exist.') # logger doesn't exist here
+        # logger doesn't exist here
+        print('Configuration file "%s" does not exist or is not a file.' %
+                args.config)
+        sys.exit(1)
+
+    if not os.access(args.config, os.R_OK):
+        print('Configuration file "%s" is not accessible for reading.' %
+                args.config)
         sys.exit(1)
 
     config = PeekabooConfig(args.config)
