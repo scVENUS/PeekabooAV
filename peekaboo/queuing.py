@@ -41,7 +41,8 @@ class JobQueue:
     @author: Sebastian Deiss
     """
     def __init__(self, ruleset_config, worker_count = 4, queue_timeout = 300,
-            dequeue_timeout = 5, shutdown_timeout = 600):
+            dequeue_timeout = 5, shutdown_timeout = 600,
+            cluster_duplicate_interval = 5):
         """ Initialise job queue by creating n Peekaboo worker threads to
         process samples.
 
@@ -73,6 +74,10 @@ class JobQueue:
             w.start()
 
         logger.info('Created %d Workers.' % self.worker_count)
+
+        self.cluster_duplicate_handler = ClusterDuplicateHandler(
+                self, cluster_duplicate_interval)
+        self.cluster_duplicate_handler.start();
 
     def submit(self, sample, submitter):
         """
@@ -139,9 +144,46 @@ class JobQueue:
             logger.debug("New sample submitted to job queue by %s. %s" %
                     (submitter, sample_str))
 
+    def submit_cluster_duplicates(self):
+        if not self.cluster_duplicates.keys():
+            return
+
+        submitted_cluster_duplicates = []
+
+        with self.duplock:
+            # try to submit *all* samples which have been marked as being
+            # processed by another instance concurrently
+            for sample_hash, sample_duplicates in self.cluster_duplicates.items():
+                # try to mark as in-flight
+                if sample_duplicates[0].mark_as_in_flight():
+                    sample_str = str(sample_duplicates[0])
+                    if self.duplicates.get(sample_hash) is not None:
+                        logger.error("Possible backlog corruption for sample "
+                                "%s! Please file a bug report. Trying to "
+                                "continue..." % sample_str)
+                        continue
+
+                    # submit one of the held-back samples as a new master
+                    # analysis in case the analysis on the other instance
+                    # failed and we have no result in the database yet. If all
+                    # is well, this master should finish analysis very quickly
+                    # using the stored result, causing all the duplicates to be
+                    # submitted and finish quickly as well.
+                    sample = sample_duplicates.pop()
+                    self.duplicates[sample_hash] = {
+                            'master': sample,
+                            'duplicates': sample_duplicates }
+                    submitted_cluster_duplicates.append(sample_str)
+                    self.jobs.put(sample, True, self.queue_timeout)
+                    del self.cluster_duplicates[sample_hash]
+
+        if len(submitted_cluster_duplicates) > 0:
+            logger.debug("Submitted cluster duplicates (and potentially "
+                    "their duplicates) from backlog: %s" %
+                    submitted_cluster_duplicates)
+
     def done(self, sample_hash):
         submitted_duplicates = []
-        submitted_cluster_duplicates = []
         with self.duplock:
             # duplicates which have been submitted from the backlog still
             # report done but do not get registered as potentially having
@@ -161,39 +203,9 @@ class JobQueue:
             sample_str = str(sample)
             del self.duplicates[sample_hash]
 
-            # try to submit *all* samples which have been marked as being
-            # processed by another instance concurrently
-            for cd_sample_hash, cd_sample_duplicates in self.cluster_duplicates.items():
-                # try to mark as in-flight
-                if cd_sample_duplicates[0].mark_as_in_flight():
-                    sample_str = str(cd_sample_duplicates[0])
-                    if self.duplicates.get(cd_sample_hash) is not None:
-                        logger.error("Possible backlog corruption for sample "
-                                "%s! Please file a bug report. Trying to "
-                                "continue..." % sample_str)
-                        continue
-
-                    # submit one of the held-back samples as a new master
-                    # analysis in case the analysis on the other instance
-                    # failed and we have no result in the database yet. If all
-                    # is well, this master should finish analysis very quickly
-                    # using the stored result, causing all the duplicates to be
-                    # submitted and finish quickly as well.
-                    cd_sample = cd_sample_duplicates.pop()
-                    self.duplicates[cd_sample_hash] = {
-                            'master': cd_sample,
-                            'duplicates': cd_sample_duplicates }
-                    submitted_cluster_duplicates.append(sample_str)
-                    self.jobs.put(cd_sample, True, self.queue_timeout)
-                    del self.cluster_duplicates[cd_sample_hash]
-
         logger.debug("Cleared sample %s from in-flight list" % sample_str)
         if len(submitted_duplicates) > 0:
             logger.debug("Submitted duplicates from backlog: %s" % submitted_duplicates)
-        if len(submitted_cluster_duplicates) > 0:
-            logger.debug("Submitted cluster duplicates (and potentially "
-                    "their duplicates) from backlog: %s" %
-                    submitted_cluster_duplicates)
 
     def dequeue(self, timeout):
         return self.jobs.get(True, timeout)
@@ -204,6 +216,7 @@ class JobQueue:
 
         logger.info("Shutting down. Giving workers %d seconds to stop" % timeout)
 
+        self.cluster_duplicate_handler.shut_down()
         for w in self.workers:
             w.shut_down()
 
@@ -222,6 +235,27 @@ class JobQueue:
 
         if len(self.workers) > 0:
             logger.error("Some workers refused to stop.")
+
+class ClusterDuplicateHandler(Thread):
+    def __init__(self, job_queue, interval=5):
+        self.shutdown_requested = Event()
+        self.shutdown_requested.clear()
+        self.job_queue = job_queue
+        self.interval = interval
+        Thread.__init__(self)
+
+    def run(self):
+        logger.debug("Cluster duplicate handler started.")
+
+        while not self.shutdown_requested.wait(self.interval):
+            logger.debug("Checking for samples in processing by other "
+                         "instances to submit")
+            self.job_queue.submit_cluster_duplicates()
+
+        logger.debug("Cluster duplicate handler shut down.")
+
+    def shut_down(self):
+        self.shutdown_requested.set()
 
 
 class Worker(Thread):
