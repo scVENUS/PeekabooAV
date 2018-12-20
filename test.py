@@ -27,6 +27,7 @@
 
 import sys
 import os
+import hashlib
 import unittest
 
 
@@ -36,7 +37,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from peekaboo.sample import SampleFactory
 from peekaboo.ruleset import RuleResult, Result
 from peekaboo.ruleset.rules import file_type_on_whitelist, file_type_on_greylist
-from peekaboo.db import PeekabooDatabase
+from peekaboo.db import PeekabooDatabase, PeekabooDatabaseError
 
 class PeekabooDummyConfig(object):
     def __init__(self):
@@ -96,43 +97,85 @@ class TestDatabase(unittest.TestCase):
                 keep_mail_data = False)
         cls.sample = cls.factory.make_sample(os.path.realpath(__file__))
         result = RuleResult('Unittest',
-                            Result.unknown,
+                            Result.checked,
                             'This is just a test case.',
-                            further_analysis=True)
+                            further_analysis=False)
         cls.sample.add_rule_result(result)
         cls.sample.determine_result()
 
-    def test_1_analysis2db(self):
-        self.db_con.analysis2db(self.sample)
+    def test_1_analysis_save(self):
+        self.db_con.analysis_save(self.sample)
 
     def test_2_sample_info_fetch(self):
         sample_info = self.db_con.sample_info_fetch(self.sample)
         self.assertEqual(self.sample.sha256sum, sample_info.sha256sum)
 
-    def test_3_sample_info_update(self):
-        result = RuleResult('Unittest',
-                            Result.checked,
-                            'This is another test case.',
-                            further_analysis=False)
-        self.sample.add_rule_result(result)
-        self.sample.determine_result()
-        self.db_con.sample_info_update(self.sample)
-        rule_result = self.db_con.fetch_rule_result(self.sample)
-        self.assertEqual(rule_result.result, Result.checked)
-        self.assertEqual(rule_result.reason, 'This is another test case.')
-
-    def test_4_fetch_rule_result(self):
+    def test_3_fetch_rule_result(self):
         rule_result = self.db_con.fetch_rule_result(self.sample)
         # RuleResults from the DB have 'db' as rule name
         self.assertEqual(rule_result.rule, 'db')
         self.assertEqual(rule_result.result, Result.checked)
-        self.assertEqual(rule_result.reason, 'This is another test case.')
+        self.assertEqual(rule_result.reason, 'This is just a test case.')
         # We assert True since the DB rule result always sets further_analysis to True
         self.assertTrue(rule_result.further_analysis)
 
-    def test_5_known(self):
+    def test_4_known(self):
         self.assertTrue(self.db_con.known(self.sample))
-        self.assertFalse(self.db_con.in_progress(self.sample))
+
+    def test_5_in_flight_no_cluster(self):
+        # should all behave as no-ops
+        self.assertTrue(self.db_con.mark_sample_in_flight(self.sample, 0))
+        self.assertTrue(self.db_con.mark_sample_in_flight(self.sample, 0))
+        self.assertIsNone(self.db_con.clear_sample_in_flight(self.sample, 0))
+        self.assertIsNone(self.db_con.clear_sample_in_flight(self.sample, 0))
+
+    def test_6_in_flight_cluster(self):
+        self.assertTrue(self.db_con.mark_sample_in_flight(self.sample, 1))
+        # re-locking the same sample should fail
+        self.assertFalse(self.db_con.mark_sample_in_flight(self.sample, 1))
+        self.assertIsNone(self.db_con.clear_sample_in_flight(self.sample, 1))
+        # unlocking twice should fail
+        self.assertRaisesRegexp(PeekabooDatabaseError, "Unexpected "
+            "inconsistency: Sample .* not recoreded as in-flight upon "
+            "clearing flag",
+            self.db_con.clear_sample_in_flight, self.sample, 1)
+
+    def test_7_in_flight_clear(self):
+        sample2 = self.factory.make_sample('foo.pyc')
+        sample2.set_attr('sha256sum', hashlib.sha256('foo').hexdigest())
+        sample3 = self.factory.make_sample('bar.pyc')
+        sample3.set_attr('sha256sum', hashlib.sha256('bar').hexdigest())
+
+        self.assertTrue(self.db_con.mark_sample_in_flight(self.sample, 1))
+        self.assertTrue(self.db_con.mark_sample_in_flight(sample2, 1))
+        self.assertTrue(self.db_con.mark_sample_in_flight(sample3, 2))
+
+        # should only clear samples of instance 1
+        self.assertIsNone(self.db_con.clear_in_flight_samples(1))
+        self.assertTrue(self.db_con.mark_sample_in_flight(self.sample, 1))
+        self.assertTrue(self.db_con.mark_sample_in_flight(sample2, 1))
+        self.assertFalse(self.db_con.mark_sample_in_flight(sample3, 2))
+
+        # should only clear samples of instance 2
+        self.assertIsNone(self.db_con.clear_in_flight_samples(2))
+        self.assertFalse(self.db_con.mark_sample_in_flight(self.sample, 1))
+        self.assertFalse(self.db_con.mark_sample_in_flight(sample2, 1))
+        self.assertTrue(self.db_con.mark_sample_in_flight(sample3, 2))
+
+        # should clear all samples
+        self.assertIsNone(self.db_con.clear_in_flight_samples(-1))
+        self.assertTrue(self.db_con.mark_sample_in_flight(self.sample, 1))
+        self.assertTrue(self.db_con.mark_sample_in_flight(sample2, 1))
+        self.assertTrue(self.db_con.mark_sample_in_flight(sample3, 2))
+
+        # should be a no-op
+        self.assertIsNone(self.db_con.clear_in_flight_samples(0))
+        self.assertFalse(self.db_con.mark_sample_in_flight(self.sample, 1))
+        self.assertFalse(self.db_con.mark_sample_in_flight(sample2, 1))
+        self.assertFalse(self.db_con.mark_sample_in_flight(sample3, 2))
+
+        # leave as found
+        self.assertIsNone(self.db_con.clear_in_flight_samples(-1))
 
     @classmethod
     def tearDownClass(cls):

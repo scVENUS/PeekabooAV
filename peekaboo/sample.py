@@ -145,11 +145,6 @@ class Sample(object):
 
         self.initialized = True
 
-        # Add sample to database with state 'inProgress' if the sample is unknown
-        # to avoid multiple concurrent analysis.
-        self.__result = ruleset.Result.inProgress
-        self.__db_con.analysis2db(self)
-
         message = "Datei \"%s\" %s wird analysiert\n" % (self.__filename,
                                                          self.sha256sum)
         self.__report.append(message)
@@ -238,7 +233,7 @@ class Sample(object):
             logger.debug('Known sample info not logged to database')
         else:
             logger.debug('Saving results to database')
-            self.__db_con.sample_info_update(self)
+            self.__db_con.analysis_save(self)
 
         if self.__connection_map is not None:
             # de-register ourselves from the connection map
@@ -280,10 +275,6 @@ class Sample(object):
             self.__report.append(message)
             self.__send_message(message)
 
-        if self.__result == ruleset.Result.inProgress:
-            logger.warning('Ruleset result forces to unchecked.')
-            self.__result = ruleset.Result.unchecked
-
         message = "Die Datei \"%s\" wurde als \"%s\" eingestuft\n\n" \
                   % (self.__filename, self.__result.name)
         self.__report.append(message)
@@ -305,10 +296,16 @@ class Sample(object):
             return True
         return False
 
-    # These two hint at architectural breakage: Why do we sometimes want to know if
+    # These hint at architectural breakage: Why do we sometimes want to know if
     # a sample is known, its previous classification (result, reason) without
     # updating its internal state (attribute)? Why is the sample interacting
     # with the database in the first place?
+    def mark_as_in_flight(self):
+        return self.__db_con.mark_sample_in_flight(self)
+
+    def clear_in_flight(self):
+        return self.__db_con.clear_sample_in_flight(self)
+
     @property
     def known_to_db(self):
         return self.__db_con.known(self)
@@ -439,7 +436,6 @@ class Sample(object):
                           % (self, job_id)
                 self.__report.append(message)
                 logger.info('Sample submitted to Cuckoo. Job ID: %s. Sample: %s' % (job_id, self))
-                self.__db_con.analysis_update(self)
                 raise CuckooReportPendingException()
             except CuckooAnalysisFailedException as e:
                 logger.exception(e)

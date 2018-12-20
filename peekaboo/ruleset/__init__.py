@@ -32,7 +32,6 @@ class Result(Enum):
     """
     @author: Felix Bauer
     """
-    inProgress = 0
     unchecked = 1
     unknown = 2
     ignored = 3

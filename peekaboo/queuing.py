@@ -55,11 +55,16 @@ class JobQueue:
         self.shutdown_timeout = shutdown_timeout
 
         # keep a backlog of samples with hashes identical to samples currently
-        # in analysis to avoid analysis multiple identical samples
+        # in analysis to avoid analysing multiple identical samples
         # simultaneously. Once one analysis has finished, we can submit the
         # others and the ruleset will notice that we already know the result.
         self.duplicates = {}
         self.duplock = Lock()
+
+        # keep a similar backlog of samples currently being processed by
+        # other instances so we can regularly try to resubmit them and re-use
+        # the other instances' cached results from the database
+        self.cluster_duplicates = {}
 
         for i in range(0, self.worker_count):
             logger.debug("Create Worker %d" % i)
@@ -83,6 +88,7 @@ class JobQueue:
         sample_hash = sample.sha256sum
         sample_str = str(sample)
         duplicate = None
+        cluster_duplicate = None
         resubmit = None
         # we have to lock this down because apart from callbacks from our
         # Workers we're also called from the ThreadingUnixStreamServer
@@ -102,14 +108,30 @@ class JobQueue:
                     duplicate = sample_str
                     duplicates['duplicates'].append(sample)
             else:
-                # initialise a per-duplicate backlog for this sample which also
-                # serves as in-flight marker and submit to queue
-                self.duplicates[sample_hash] = { 'master': sample, 'duplicates': [] }
-                self.jobs.put(sample, True, self.queue_timeout)
+                # are we the first of potentially multiple instances working on
+                # this sample?
+                if sample.mark_as_in_flight():
+                    # initialise a per-duplicate backlog for this sample which
+                    # also serves as in-flight marker and submit to queue
+                    self.duplicates[sample_hash] = {
+                            'master': sample,
+                            'duplicates': [] }
+                    self.jobs.put(sample, True, self.queue_timeout)
+                else:
+                    # another instance is working on this
+                    if self.cluster_duplicates.get(sample_hash) is None:
+                        self.cluster_duplicates[sample_hash] = []
+
+                    cluster_duplicate = sample_str
+                    self.cluster_duplicates[sample_hash].append(sample)
 
         if duplicate:
             logger.debug("Sample from %s is duplicate and waiting for "
                     "running analysis to finish: %s" % (submitter, duplicate))
+        elif cluster_duplicate:
+            logger.debug("Sample from %s is concurrently processed by "
+                    "another instance and held: %s" % (submitter,
+                        cluster_duplicate))
         elif resubmit:
             logger.debug("Resubmitted sample to job queue for %s: %s" %
                     (submitter, resubmit))
@@ -119,6 +141,7 @@ class JobQueue:
 
     def done(self, sample_hash):
         submitted_duplicates = []
+        submitted_cluster_duplicates = []
         with self.duplock:
             # duplicates which have been submitted from the backlog still
             # report done but do not get registered as potentially having
@@ -133,12 +156,44 @@ class JobQueue:
                 submitted_duplicates.append(str(s))
                 self.jobs.put(s, True, self.queue_timeout)
 
-            sample_str = str(self.duplicates[sample_hash]['master'])
+            sample = self.duplicates[sample_hash]['master']
+            sample.clear_in_flight()
+            sample_str = str(sample)
             del self.duplicates[sample_hash]
+
+            # try to submit *all* samples which have been marked as being
+            # processed by another instance concurrently
+            for cd_sample_hash, cd_sample_duplicates in self.cluster_duplicates.items():
+                # try to mark as in-flight
+                if cd_sample_duplicates[0].mark_as_in_flight():
+                    sample_str = str(cd_sample_duplicates[0])
+                    if self.duplicates.get(cd_sample_hash) is not None:
+                        logger.error("Possible backlog corruption for sample "
+                                "%s! Please file a bug report. Trying to "
+                                "continue..." % sample_str)
+                        continue
+
+                    # submit one of the held-back samples as a new master
+                    # analysis in case the analysis on the other instance
+                    # failed and we have no result in the database yet. If all
+                    # is well, this master should finish analysis very quickly
+                    # using the stored result, causing all the duplicates to be
+                    # submitted and finish quickly as well.
+                    cd_sample = cd_sample_duplicates.pop()
+                    self.duplicates[cd_sample_hash] = {
+                            'master': cd_sample,
+                            'duplicates': cd_sample_duplicates }
+                    submitted_cluster_duplicates.append(sample_str)
+                    self.jobs.put(cd_sample, True, self.queue_timeout)
+                    del self.cluster_duplicates[cd_sample_hash]
 
         logger.debug("Cleared sample %s from in-flight list" % sample_str)
         if len(submitted_duplicates) > 0:
             logger.debug("Submitted duplicates from backlog: %s" % submitted_duplicates)
+        if len(submitted_cluster_duplicates) > 0:
+            logger.debug("Submitted cluster duplicates (and potentially "
+                    "their duplicates) from backlog: %s" %
+                    submitted_cluster_duplicates)
 
     def dequeue(self, timeout):
         return self.jobs.get(True, timeout)

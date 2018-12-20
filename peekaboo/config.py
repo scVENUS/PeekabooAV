@@ -53,6 +53,7 @@ class PeekabooConfig(object):
         self.use_debug_module = None
         self.keep_mail_data = None
         self.db_url = None
+        self.instance_id = 0
         self.ruleset_config = None
         self.cuckoo_mode = "api"
         self.cuckoo_url = ""
@@ -89,6 +90,7 @@ class PeekabooConfig(object):
                 'global', 'keep_mail_data'
             ) == 'yes' else False
             self.db_url = config.get('db', 'url')
+            self.instance_id = int(config.get('db', 'instance_id'))
             self.ruleset_config = config.get('ruleset', 'config')
             self.cuckoo_mode = config.get('cuckoo', 'mode')
             self.cuckoo_url = config.get('cuckoo', 'url')

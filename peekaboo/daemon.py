@@ -252,7 +252,7 @@ def run():
 
     # establish a connection to the database
     try:
-        db_con = PeekabooDatabase(config.db_url)
+        db_con = PeekabooDatabase(config.db_url, config.instance_id)
     except PeekabooDatabaseError as e:
         logging.exception(e)
         sys.exit(1)
@@ -350,6 +350,7 @@ def run():
         server.shutdown()
         server.server_close()
         job_queue.shut_down()
+        db_con.clear_in_flight_samples()
         if debugger is not None:
             debugger.shut_down()
 

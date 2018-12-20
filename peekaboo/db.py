@@ -28,7 +28,7 @@ from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.engine import create_engine
 from sqlalchemy.orm import sessionmaker, scoped_session, relationship
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from peekaboo import __version__
 from peekaboo.ruleset import Result, RuleResult
 from peekaboo.exceptions import PeekabooDatabaseError
@@ -78,7 +78,7 @@ class AnalysisResult(Base):
 
     @author: Sebastian Deiss
     """
-    __tablename__ = 'analysis_result_v3'
+    __tablename__ = 'analysis_result_v4'
 
     id = Column(Integer, primary_key=True)
     name = Column(String(255), nullable=False)
@@ -89,18 +89,29 @@ class AnalysisResult(Base):
     __repr__ = __str__
 
 
+class InFlightSample(Base):
+    """
+    Table tracking whether a specific sample is currently being analysed and by
+    which Peekaboo instance.
+    """
+    __tablename__ = 'in_flight_samples_v4'
+
+    sha256sum = Column(String(64), primary_key=True)
+    instance_id = Column(Integer, nullable=False)
+
+
 class SampleInfo(Base):
     """
     Definition of the sample_info table.
 
     @author: Sebastian Deiss
     """
-    __tablename__ = 'sample_info_v3'
+    __tablename__ = 'sample_info_v4'
 
     id = Column(Integer, primary_key=True)
     sha256sum = Column(String(64), nullable=False)
     file_extension = Column(String(16), nullable=True)
-    result_id = Column(Integer, ForeignKey('analysis_result_v3.id'),
+    result_id = Column(Integer, ForeignKey('analysis_result_v4.id'),
                        nullable=False)
     result = relationship("AnalysisResult")
     reason = Column(Text, nullable=True)
@@ -127,14 +138,14 @@ class AnalysisJournal(Base):
 
     @author: Sebastian Deiss
     """
-    __tablename__ = 'analysis_jobs_v3'
+    __tablename__ = 'analysis_jobs_v4'
 
     id = Column(Integer, primary_key=True)
     job_hash = Column(String(255), nullable=False)
     cuckoo_job_id = Column(Integer, nullable=False)
     filename = Column(String(255), nullable=False)
     analyses_time = Column(DateTime, nullable=False)
-    sample_id = Column(Integer, ForeignKey('sample_info_v3.id'),
+    sample_id = Column(Integer, ForeignKey('sample_info_v4.id'),
                        nullable=False)
     sample = relationship('SampleInfo')
 
@@ -161,24 +172,30 @@ class PeekabooDatabase(object):
 
     @author: Sebastian Deiss
     """
-    def __init__(self, db_url):
+    def __init__(self, db_url, instance_id=0):
         """
         Initialize the Peekaboo database handler.
 
         :param db_url: An RFC 1738 URL that points to the database.
+        :param instance_id: A positive, unique ID differentiating this Peekaboo
+                            instance from any other instance using the same
+                            database for concurrency coordination. Value of 0
+                            means that we're alone and have no other instances
+                            to worry about.
         """
-        self.db_schema_version = 3
+        self.db_schema_version = 4
         self.__engine = create_engine(db_url, pool_recycle=1)
         session_factory = sessionmaker(bind=self.__engine)
         self.__Session = scoped_session(session_factory)
         self.__lock = threading.RLock()
+        self.instance_id = instance_id
         if not self._db_schema_exists():
             self._init_db()
             logger.debug('Database schema created.')
         else:
-            self.clear_in_progress()
+            self.clear_in_flight_samples()
 
-    def analysis2db(self, sample):
+    def analysis_save(self, sample):
         """
         Save an analysis task to the analysis journal in the database.
 
@@ -197,7 +214,6 @@ class PeekabooDatabase(object):
                 AnalysisResult,
                 name=sample.get_result().name
             )
-            # NOTE: We cannot determine if a known sample is inProgress again.
             s = PeekabooDatabase.__get(
                 session,
                 SampleInfo,
@@ -209,7 +225,8 @@ class PeekabooDatabase(object):
                     SampleInfo,
                     sha256sum=sample.sha256sum,
                     file_extension=sample.file_extension,
-                    result=analysis_result
+                    result=analysis_result,
+                    reason=sample.reason
                 )
             analysis.sample = s
             session.add(analysis)
@@ -222,74 +239,6 @@ class PeekabooDatabase(object):
                 )
             finally:
                 session.close()
-
-    def analysis_update(self, sample):
-        """
-        Update an analysis task in the database.
-        This method is called if a sample object was processed by Cuckoo and therefore
-        has a Cuckoo job ID, which we want to store in the database.
-
-        :param sample: The sample object containing the info to update.
-        """
-        with self.__lock:
-            session = self.__Session()
-            analysis = self.__get(
-                session,
-                AnalysisJournal,
-                job_hash=sample.get_job_hash(),
-                filename=sample.get_filename()
-            )
-            if analysis:
-                analysis.cuckoo_job_id = sample.job_id
-                session.add(analysis)
-                try:
-                    session.commit()
-                except SQLAlchemyError as e:
-                    session.rollback()
-                    raise PeekabooDatabaseError(
-                        'Failed to update analysis task in the database: %s' % e
-                    )
-                finally:
-                    session.close()
-
-    def sample_info_update(self, sample):
-        """
-        Update sample information.
-
-        :param sample: The sample object containing the info to update.
-        """
-        with self.__lock:
-            session = self.__Session()
-            sample_info = PeekabooDatabase.__get(
-                session,
-                SampleInfo,
-                sha256sum=sample.sha256sum,
-                file_extension=sample.file_extension
-            )
-            if sample_info is not None:
-                sample_info.result = PeekabooDatabase.__get_or_create(
-                    session,
-                    AnalysisResult,
-                    name=sample.get_result().name
-                )
-                sample_info.reason = sample.reason
-                try:
-                    session.commit()
-                    logger.debug(
-                        'Updated sample info in the database for sample %s.' % sample
-                    )
-                except SQLAlchemyError as e:
-                    session.rollback()
-                    raise PeekabooDatabaseError(
-                        'Failed to update info for sample %s in the database: %s'
-                        % (sample, e)
-                    )
-                finally:
-                    session.close()
-            else:
-                raise PeekabooDatabaseError(
-                    'No info found in the database for sample %s' % sample
-                )
 
     def sample_info_exists(self, sample):
         """
@@ -372,55 +321,136 @@ class PeekabooDatabase(object):
                 file_extension=sample.file_extension
             )
             if sample_info is not None:
-                if sample_info.result.name != 'inProgress':
-                    is_known = True
+                is_known = True
             session.close()
             return is_known
 
-    def in_progress(self, sample):
+    def mark_sample_in_flight(self, sample, instance_id=None):
         """
-        Check if a sample is in progress using its SHA-256 hash.
+        Mark a sample as in flight, i.e. being worked on by an instance.
 
-        :param sample: The Sample object to check.
+        :param sample: The sample to mark as in flight.
+        :param instance_id: (optionally) The ID of the instance that is
+                            handling this sample. Default: Us.
         """
-        with self.__lock:
-            is_in_progress = False
-            session = self.__Session()
-            sample_info = PeekabooDatabase.__get(
-                session,
-                SampleInfo,
-                sha256sum=sample.sha256sum,
-                file_extension=sample.file_extension
-            )
-            if sample_info is not None:
-                if sample_info.result.name == 'inProgress':
-                    is_in_progress = True
-            session.close()
-            return is_in_progress
+        # use our own instance id if none is given
+        if instance_id is None:
+            instance_id = self.instance_id
 
-    def clear_in_progress(self):
-        """ Remove all samples with the result 'inProgress'. """
+        # an instance id of 0 denotes that we're alone and don't need to track
+        # in-flight samples in the database
+        if instance_id == 0:
+            return True
+
         session = self.__Session()
-        in_progress = PeekabooDatabase.__get(
-            session,
-            AnalysisResult,
-            name='inProgress'
-        )
-        in_progress_samples = session.query(SampleInfo).filter_by(
-            result=in_progress
-        ).all()
-        for in_progress_sample in in_progress_samples:
-            session.query(AnalysisJournal).filter_by(
-                sample=in_progress_sample
-            ).delete()
+
+        # try to mark this sample as in flight in an atomic insert operation
+        sha256sum = sample.sha256sum
+        session.add(InFlightSample(sha256sum=sha256sum,
+                                   instance_id=instance_id))
+
+        locked = False
         try:
             session.commit()
-            logger.debug('Cleared the database from "inProgress" entries.')
+            locked = True
+            logger.debug('Marked sample %s as in flight' % sha256sum)
+        # duplicate primary key == entry already exists
+        except IntegrityError as e:
+            session.rollback()
+            logger.debug('Sample %s is already in flight on another instance' %
+                         sha256sum)
         except SQLAlchemyError as e:
             session.rollback()
-            raise PeekabooDatabaseError(
-                'Unable to clear the database from "inProgress" entries: %s' % e
-            )
+            raise PeekabooDatabaseError('Unable to mark sample as in flight' %
+                                        e)
+        finally:
+            session.close()
+
+        return locked
+
+    def clear_sample_in_flight(self, sample, instance_id=None):
+        """
+        Clear the mark that a sample is being processed by an instance.
+
+        :param sample: The sample to clear from in-flight list.
+        :param instance_id: (optionally) The ID of the instance that is
+                            handling this sample. Default: Us.
+        """
+        # use our own instance id if none is given
+        if instance_id is None:
+            instance_id = self.instance_id
+
+        # an instance id of 0 denotes that we're alone and don't need to track
+        # in-flight samples in the database
+        if instance_id == 0:
+            return
+
+        session = self.__Session()
+
+        # clear in-flight marker from database
+        sha256sum = sample.sha256sum
+        cleared = session.query(InFlightSample).filter(
+            InFlightSample.sha256sum == sha256sum).filter(
+                InFlightSample.instance_id == instance_id).delete()
+
+        try:
+            session.commit()
+        except SQLAlchemyError as e:
+            session.rollback()
+            raise PeekabooDatabaseError('Unable to clear in-flight status of '
+                                        'sample: %s' % e)
+        finally:
+            session.close()
+
+        if cleared == 0:
+            raise PeekabooDatabaseError('Unexpected inconsistency: Sample %s '
+                                        'not recoreded as in-flight upon '
+                                        'clearing flag.' % sha256sum)
+        elif cleared > 1:
+            raise PeekabooDatabaseError('Unexpected inconsistency: Multiple '
+                                        'instances of sample %s in-flight '
+                                        'status cleared against database '
+                                        'constraints!?' % sha256sum)
+
+        logger.debug('Cleared sample %s from in-flight list' % sha256sum)
+
+    def clear_in_flight_samples(self, instance_id=None):
+        """
+        Clear all in-flight markers left over by previous runs or other
+        instances by removing them from the lock table.
+
+        @instance_id: Clear our own (None), another instance's (positive
+                      integer), all instances' (negative integer) locks or do
+                      nothing (0).
+        """
+        # use our own instance id if none is given
+        if instance_id is None:
+            instance_id = self.instance_id
+
+        # an instance id of 0 denotes that we're alone and don't need to track
+        # in-flight samples
+        if instance_id == 0:
+            return
+
+        session = self.__Session()
+
+        if instance_id < 0:
+            # delete all locks
+            session.query(InFlightSample).delete()
+            logger.debug('Clearing database of all in-flight samples.')
+        else:
+            # delete only the locks of a specific instance
+            session.query(InFlightSample).filter(
+                InFlightSample.instance_id == instance_id).delete()
+            logger.debug('Clearing database of all in-flight samples of '
+                         'instance %d.' % instance_id)
+
+        try:
+            session.commit()
+        except SQLAlchemyError as e:
+            session.rollback()
+            raise PeekabooDatabaseError('Unable to clear the database of '
+                                        'in-flight samples: %s' % e)
         finally:
             session.close()
 
@@ -439,7 +469,9 @@ class PeekabooDatabase(object):
         else:
             session = self.__Session()
             meta = session.query(PeekabooMetadata)[-1]
-            if meta.db_schema_version < self.db_schema_version:
+            schema_version = meta.db_schema_version
+            session.close()
+            if schema_version < self.db_schema_version:
                 logger.info('Adding new database schema.')
                 return False
             return True
@@ -459,7 +491,6 @@ class PeekabooDatabase(object):
         session.add(meta)
         '''
         session.add_all([
-            AnalysisResult(name='inProgress'),
             AnalysisResult(name='unchecked'),
             AnalysisResult(name='unknown'),
             AnalysisResult(name='ignored'),

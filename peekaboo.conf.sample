@@ -48,6 +48,13 @@ url              :    sqlite:////path/to/database.db
 # PostgreSQL
 # url             :    postgresql://user:password@host:port/database
 
+# if multiple instances are to run in parallel and avoid concurrent analysis of
+# the same sample, set instance_id to a nonzero positive unique integer value
+# on each instance and use the same networked DBMS instance (MySQL or
+# PostgreSQL) for all them. (SQLite is not a good choice for this.) Also, do
+# make really, really sure to provide unique IDs. Two instances using the same
+# ID will corrupt each others' records and there is no mechanism to detect this.
+instance_id: 0
 
 #
 # Cuckoo specific settings
