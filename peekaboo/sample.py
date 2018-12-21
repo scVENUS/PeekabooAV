@@ -155,6 +155,15 @@ class Sample(object):
         self.__report.append(message)
         self.__send_message(message)
 
+        # log some additional info to report to aid debugging
+        if self.has_attr('meta_info_name_declared'):
+            self.__report.append("meta info: name_declared: %s\n" %
+                    self.get_attr('meta_info_name_declared'))
+
+        if self.has_attr('meta_info_type_declared'):
+            self.__report.append("meta info: type_declared: %s\n" %
+                    self.get_attr('meta_info_type_declared'))
+
     def get_attr(self, key):
         """
         Get a sample attribute by a specified key.
