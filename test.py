@@ -37,7 +37,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from peekaboo.sample import SampleFactory
 from peekaboo.ruleset import RuleResult, Result
-from peekaboo.ruleset.rules import file_type_on_whitelist, file_type_on_greylist
+from peekaboo.ruleset.rules import FileTypeOnWhitelistRule, FileTypeOnGreylistRule
 from peekaboo.db import PeekabooDatabase, PeekabooDatabaseError
 
 class PeekabooDummyConfig(object):
@@ -280,9 +280,10 @@ class TestRules(unittest.TestCase):
             [True, ['', 'asdfjkl', '93219843298']],
             [True, []],
         ]
+        rule = FileTypeOnWhitelistRule(self.conf)
         for expected, types in combinations:
             self.sample.set_attr('mimetypes', set(types))
-            r = file_type_on_whitelist(self.conf, self.sample)
+            r = rule.evaluate(self.sample)
             self.assertEqual(r.further_analysis, expected)
 
     def test_rule_file_type_on_greylist(self):
@@ -294,9 +295,10 @@ class TestRules(unittest.TestCase):
             [False, ['', 'asdfjkl', '93219843298']],
             [True, []],
         ]
+        rule = FileTypeOnGreylistRule(self.conf)
         for expected, types in combinations:
             self.sample.set_attr('mimetypes', set(types))
-            r = file_type_on_greylist(self.conf, self.sample)
+            r = rule.evaluate(self.sample)
             self.assertEqual(r.further_analysis, expected)
 
     @classmethod

@@ -30,7 +30,7 @@ import json
 from shutil import copyfile
 from peekaboo.ruleset import Result, RuleResult
 from peekaboo.ruleset.rules import *
-from peekaboo.toolbox.peekabooyar import contains_peekabooyar
+from peekaboo.toolbox.peekabooyar import ContainsPeekabooYarRule
 from peekaboo.exceptions import CuckooReportPendingException
 
 
@@ -45,17 +45,17 @@ class RulesetEngine(object):
     @since: 1.6
     """
     rules = [
-        known,
-        file_larger_than,
-        file_type_on_whitelist,
-        file_type_on_greylist,
-        cuckoo_evil_sig,
-        cuckoo_score,
-        office_macro,
-        requests_evil_domain,
-        cuckoo_analysis_failed,
-        contains_peekabooyar,
-        final_rule
+        KnownRule,
+        FileLargerThanRule,
+        FileTypeOnWhitelistRule,
+        FileTypeOnGreylistRule,
+        CuckooEvilSigRule,
+        CuckooScoreRule,
+        OfficeMacroRule,
+        RequestsEvilDomainRule,
+        CuckooAnalysisFailedRule,
+        ContainsPeekabooYarRule,
+        FinalRule
     ]
 
     def __init__(self, sample, ruleset_config):
@@ -64,7 +64,7 @@ class RulesetEngine(object):
 
     def run(self):
         for rule in RulesetEngine.rules:
-            result = self.__exec_rule(self.config, self.sample, rule)
+            result = self.__exec_rule(self.sample, rule)
             if not result.further_analysis:
                 return
 
@@ -76,25 +76,27 @@ class RulesetEngine(object):
         if self.sample.get_result() == Result.bad:
             dump_processing_info(self.sample)
 
-    def __exec_rule(self, config, sample, rule_function):
+    def __exec_rule(self, sample, rule_class):
         """
         rule wrapper for in/out logging and reporting
         """
-        rule_name = rule_function.func_name
+        rule_name = rule_class.rule_name
         logger.debug("Processing rule '%s' for %s" % (rule_name, sample))
 
         try:
             # skip disabled rules.
-            if config.rule_enabled(rule_name):
+            if self.config.rule_enabled(rule_name):
                 # guaranteed to be a hash, albeit empty if no rule config
                 # exists
-                rule_config = config.rule_config(rule_name)
-                result = rule_function(rule_config, sample)
+                rule_config = self.config.rule_config(rule_name)
+                rule = rule_class(rule_config)
+                result = rule.evaluate(sample)
             else:
                 logger.debug("Rule '%s' is disabled." % rule_name)
                 result = RuleResult(rule_name, result=Result.unchecked,
                                     reason="Regel '%s' ist deaktiviert." % rule_name,
                                     further_analysis=True)
+
             sample.add_rule_result(result)
         except CuckooReportPendingException as e:
             # in case the Sample is requesting the Cuckoo report

@@ -24,44 +24,41 @@
 ###############################################################################
 
 
-import traceback
-from peekaboo.ruleset import Result, RuleResult
+from peekaboo.ruleset import Result
+from peekaboo.ruleset.rules import Rule
 import yara
 
 
-def contains_peekabooyar(config, s):
+class ContainsPeekabooYarRule(Rule):
     """
     Checks the given sample for the PeekabooYar (EICAR like) malicious string.
 
     :param s: sample to check
     :return: RueleResult
     """
-    tb = traceback.extract_stack()
-    tb = tb[-1]
-    position = "%s:%s" % (tb[2], tb[1])
+    rule_name = 'contains_peekabooyar'
 
-    rules = yara.compile(
-        source='''
-        rule peekabooyar
-        {
-             strings:
-                  $peekabooyar1 = "X5O!P%@AP-/_(:)_/-X22x8cz2$PeekabooAV-STD-ANTIVIRUS-TEST-FILE!$H+H*"
-        
-             condition:
-                  $peekabooyar1
-        }'''
-    )
+    def evaluate(self, s):
+        rules = yara.compile(
+            source='''
+            rule peekabooyar
+            {
+                strings:
+                    $peekabooyar1 = "X5O!P%@AP-/_(:)_/-X22x8cz2$PeekabooAV-STD-ANTIVIRUS-TEST-FILE!$H+H*"
 
-    with open(s.get_file_path(), 'rb') as f:
-        matches = rules.match(data=f.read())
+                condition:
+                    $peekabooyar1
+            }'''
+        )
 
-    if matches != []:
-        return RuleResult(position,
-                          result=Result.bad,
-                          reason="Die Datei beinhaltet Peekabooyar.",
-                          further_analysis=False)
+        with open(s.get_file_path(), 'rb') as f:
+            matches = rules.match(data=f.read())
 
-    return RuleResult(position,
-                      result=Result.unknown,
-                      reason="Die Datei beinhaltet kein erkennbares Peekabooyar.",
-                      further_analysis=True)
+        if matches != []:
+            return self.result(Result.bad,
+                               "Die Datei beinhaltet Peekabooyar",
+                               False)
+
+        return self.result(Result.unknown,
+                           "Die Datei beinhaltet kein erkennbares Peekabooyar",
+                           True)
