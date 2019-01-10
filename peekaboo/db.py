@@ -23,7 +23,7 @@
 ###############################################################################
 
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.engine import create_engine
@@ -78,7 +78,7 @@ class AnalysisResult(Base):
 
     @author: Sebastian Deiss
     """
-    __tablename__ = 'analysis_result_v4'
+    __tablename__ = 'analysis_result_v5'
 
     id = Column(Integer, primary_key=True)
     name = Column(String(255), nullable=False)
@@ -94,10 +94,11 @@ class InFlightSample(Base):
     Table tracking whether a specific sample is currently being analysed and by
     which Peekaboo instance.
     """
-    __tablename__ = 'in_flight_samples_v4'
+    __tablename__ = 'in_flight_samples_v5'
 
     sha256sum = Column(String(64), primary_key=True)
     instance_id = Column(Integer, nullable=False)
+    start_time = Column(DateTime, nullable=False)
 
 
 class SampleInfo(Base):
@@ -106,12 +107,12 @@ class SampleInfo(Base):
 
     @author: Sebastian Deiss
     """
-    __tablename__ = 'sample_info_v4'
+    __tablename__ = 'sample_info_v5'
 
     id = Column(Integer, primary_key=True)
     sha256sum = Column(String(64), nullable=False)
     file_extension = Column(String(16), nullable=True)
-    result_id = Column(Integer, ForeignKey('analysis_result_v4.id'),
+    result_id = Column(Integer, ForeignKey('analysis_result_v5.id'),
                        nullable=False)
     result = relationship("AnalysisResult")
     reason = Column(Text, nullable=True)
@@ -138,14 +139,14 @@ class AnalysisJournal(Base):
 
     @author: Sebastian Deiss
     """
-    __tablename__ = 'analysis_jobs_v4'
+    __tablename__ = 'analysis_jobs_v5'
 
     id = Column(Integer, primary_key=True)
     job_hash = Column(String(255), nullable=False)
     cuckoo_job_id = Column(Integer, nullable=False)
     filename = Column(String(255), nullable=False)
     analyses_time = Column(DateTime, nullable=False)
-    sample_id = Column(Integer, ForeignKey('sample_info_v4.id'),
+    sample_id = Column(Integer, ForeignKey('sample_info_v5.id'),
                        nullable=False)
     sample = relationship('SampleInfo')
 
@@ -172,7 +173,8 @@ class PeekabooDatabase(object):
 
     @author: Sebastian Deiss
     """
-    def __init__(self, db_url, instance_id=0):
+    def __init__(self, db_url, instance_id=0,
+                 stale_in_flight_threshold=1*60*60):
         """
         Initialize the Peekaboo database handler.
 
@@ -182,18 +184,19 @@ class PeekabooDatabase(object):
                             database for concurrency coordination. Value of 0
                             means that we're alone and have no other instances
                             to worry about.
+        :param stale_in_flight_threshold: Number of seconds after which a in
+        flight marker is considered stale and deleted or ignored.
         """
-        self.db_schema_version = 4
+        self.db_schema_version = 5
         self.__engine = create_engine(db_url, pool_recycle=1)
         session_factory = sessionmaker(bind=self.__engine)
         self.__Session = scoped_session(session_factory)
         self.__lock = threading.RLock()
         self.instance_id = instance_id
+        self.stale_in_flight_threshold = stale_in_flight_threshold
         if not self._db_schema_exists():
             self._init_db()
             logger.debug('Database schema created.')
-        else:
-            self.clear_in_flight_samples()
 
     def analysis_save(self, sample):
         """
@@ -325,13 +328,15 @@ class PeekabooDatabase(object):
             session.close()
             return is_known
 
-    def mark_sample_in_flight(self, sample, instance_id=None):
+    def mark_sample_in_flight(self, sample, instance_id=None, start_time=None):
         """
         Mark a sample as in flight, i.e. being worked on by an instance.
 
         :param sample: The sample to mark as in flight.
         :param instance_id: (optionally) The ID of the instance that is
                             handling this sample. Default: Us.
+        :param start_time: Override the time the marker was placed for
+                           debugging purposes.
         """
         # use our own instance id if none is given
         if instance_id is None:
@@ -342,12 +347,16 @@ class PeekabooDatabase(object):
         if instance_id == 0:
             return True
 
+        if start_time is None:
+            start_time = datetime.utcnow()
+
         session = self.__Session()
 
         # try to mark this sample as in flight in an atomic insert operation
         sha256sum = sample.sha256sum
         session.add(InFlightSample(sha256sum=sha256sum,
-                                   instance_id=instance_id))
+                                   instance_id=instance_id,
+                                   start_time=start_time))
 
         locked = False
         try:
@@ -453,6 +462,34 @@ class PeekabooDatabase(object):
                                         'in-flight samples: %s' % e)
         finally:
             session.close()
+
+    def clear_stale_in_flight_samples(self):
+        """
+        Clear all in-flight markers that are too old and therefore stale. This
+        detects instances which are locked up, crashed or shut down.
+        """
+        session = self.__Session()
+
+        # delete only the locks of a specific instance
+        cleared = session.query(InFlightSample).filter(
+            InFlightSample.start_time <= datetime.utcnow() - timedelta(
+                seconds=self.stale_in_flight_threshold)).delete()
+        logger.debug(
+            'Clearing database of all stale in-flight samples '
+            '(%d seconds)' % self.stale_in_flight_threshold)
+
+        try:
+            session.commit()
+            if cleared > 0:
+                logger.warn('%d stale in-flight samples cleared.' % cleared)
+        except SQLAlchemyError as e:
+            session.rollback()
+            raise PeekabooDatabaseError('Unable to clear the database of '
+                                        'stale in-flight samples: %s' % e)
+        finally:
+            session.close()
+
+        return cleared > 0
 
     def drop(self):
         """ Drop all tables of the database. """

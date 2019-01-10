@@ -54,6 +54,7 @@ class PeekabooConfig(object):
         self.keep_mail_data = None
         self.db_url = None
         self.instance_id = 0
+        self.stale_in_flight_threshold = 1*60*60
         self.ruleset_config = None
         self.cuckoo_mode = "api"
         self.cuckoo_url = ""
@@ -91,6 +92,8 @@ class PeekabooConfig(object):
             ) == 'yes' else False
             self.db_url = config.get('db', 'url')
             self.instance_id = int(config.get('db', 'instance_id'))
+            self.stale_in_flight_threshold = int(config.get('db',
+                'stale_in_flight_threshold'))
             self.ruleset_config = config.get('ruleset', 'config')
             self.cuckoo_mode = config.get('cuckoo', 'mode')
             self.cuckoo_url = config.get('cuckoo', 'url')

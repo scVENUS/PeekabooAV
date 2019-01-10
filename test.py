@@ -29,6 +29,7 @@ import sys
 import os
 import hashlib
 import unittest
+from datetime import datetime, timedelta
 
 
 # Add Peekaboo to PYTHONPATH
@@ -88,7 +89,8 @@ class TestDatabase(unittest.TestCase):
     def setUpClass(cls):
         cls.test_db = os.path.abspath('./test.db')
         cls.conf = PeekabooDummyConfig()
-        cls.db_con = PeekabooDatabase('sqlite:///' + cls.test_db)
+        cls.db_con = PeekabooDatabase('sqlite:///' + cls.test_db,
+                instance_id=0, stale_in_flight_threshold=10)
         cls.factory = SampleFactory(cuckoo = None,
                 db_con = cls.db_con,
                 connection_map = None,
@@ -176,6 +178,39 @@ class TestDatabase(unittest.TestCase):
 
         # leave as found
         self.assertIsNone(self.db_con.clear_in_flight_samples(-1))
+
+    def test_8_stale_in_flight(self):
+        stale = datetime.utcnow() - timedelta(seconds=20)
+        self.assertTrue(self.db_con.mark_sample_in_flight(
+            self.sample, 1, stale))
+        sample2 = self.factory.make_sample('foo.pyc')
+        sample2.set_attr('sha256sum', hashlib.sha256('foo').hexdigest())
+        self.assertTrue(self.db_con.mark_sample_in_flight(sample2, 1))
+
+        # should clear sample marker because it is stale but not sample2
+        self.assertTrue(self.db_con.clear_stale_in_flight_samples())
+        self.assertTrue(self.db_con.mark_sample_in_flight(self.sample, 1))
+        self.assertFalse(self.db_con.mark_sample_in_flight(sample2, 1))
+
+        # should not clear anything because all markers are fresh
+        self.assertFalse(self.db_con.clear_stale_in_flight_samples())
+        self.assertFalse(self.db_con.mark_sample_in_flight(self.sample, 1))
+        self.assertFalse(self.db_con.mark_sample_in_flight(sample2, 1))
+
+        # set up new constellation
+        self.assertIsNone(self.db_con.clear_in_flight_samples(-1))
+        self.assertTrue(self.db_con.mark_sample_in_flight(
+            self.sample, 1, stale))
+        self.assertTrue(self.db_con.mark_sample_in_flight(sample2, 1, stale))
+
+        # should clear all markers because all are stale
+        self.assertTrue(self.db_con.clear_stale_in_flight_samples())
+        self.assertTrue(self.db_con.mark_sample_in_flight(
+            self.sample, 1, stale))
+        self.assertTrue(self.db_con.mark_sample_in_flight(sample2, 1, stale))
+
+        # leave as found
+        self.assertTrue(self.db_con.clear_stale_in_flight_samples())
 
     @classmethod
     def tearDownClass(cls):

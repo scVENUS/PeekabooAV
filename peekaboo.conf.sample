@@ -56,6 +56,11 @@ url              :    sqlite:////path/to/database.db
 # ID will corrupt each others' records and there is no mechanism to detect this.
 instance_id: 0
 
+# number of seconds after which in-flight markers of samples are to be
+# removed/ignored, assuming that the instance processing them has crashed or
+# been shut down.
+stale_in_flight_threshold: 3600
+
 #
 # Cuckoo specific settings
 #

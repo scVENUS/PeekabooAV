@@ -252,7 +252,9 @@ def run():
 
     # establish a connection to the database
     try:
-        db_con = PeekabooDatabase(config.db_url, config.instance_id)
+        db_con = PeekabooDatabase(db_url=config.db_url,
+                instance_id=config.instance_id,
+                stale_in_flight_threshold=config.stale_in_flight_threshold)
     except PeekabooDatabaseError as e:
         logging.exception(e)
         sys.exit(1)
@@ -287,11 +289,16 @@ def run():
 
     systemd = SystemdNotifier()
 
+    # clear all our in flight samples and all instances' stale in flight
+    # samples
+    db_con.clear_in_flight_samples()
+    db_con.clear_stale_in_flight_samples()
+
     # workers of the job queue need the ruleset configuration to create the
     # ruleset engine with it
     ruleset_config = PeekabooRulesetConfiguration(config.ruleset_config)
     job_queue = JobQueue(worker_count = config.worker_count,
-            ruleset_config = ruleset_config)
+            ruleset_config=ruleset_config, db_con=db_con)
     connection_map = ConnectionMap()
 
     if config.cuckoo_mode == "embed":
@@ -351,6 +358,7 @@ def run():
         server.server_close()
         job_queue.shut_down()
         db_con.clear_in_flight_samples()
+        db_con.clear_stale_in_flight_samples()
         if debugger is not None:
             debugger.shut_down()
 

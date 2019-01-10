@@ -40,14 +40,17 @@ class JobQueue:
 
     @author: Sebastian Deiss
     """
-    def __init__(self, ruleset_config, worker_count = 4, queue_timeout = 300,
-            dequeue_timeout = 5, shutdown_timeout = 600,
+    def __init__(self, ruleset_config, db_con, worker_count = 4,
+            queue_timeout = 300, dequeue_timeout = 5, shutdown_timeout = 600,
             cluster_duplicate_interval = 5):
         """ Initialise job queue by creating n Peekaboo worker threads to
         process samples.
 
+        :param db_con: Database connection object for cluster instance
+                       coordination, i.e. saving sample info.
         :param worker_count: The amount of worker threads to create. Defaults to 4.
         """
+        self.db_con = db_con
         self.jobs = Queue()
         self.workers = []
         self.worker_count = worker_count
@@ -182,6 +185,9 @@ class JobQueue:
                     "their duplicates) from backlog: %s" %
                     submitted_cluster_duplicates)
 
+    def clear_stale_in_flight_samples(self):
+        return self.db_con.clear_stale_in_flight_samples()
+
     def done(self, sample_hash):
         submitted_duplicates = []
         with self.duplock:
@@ -250,6 +256,7 @@ class ClusterDuplicateHandler(Thread):
         while not self.shutdown_requested.wait(self.interval):
             logger.debug("Checking for samples in processing by other "
                          "instances to submit")
+            self.job_queue.clear_stale_in_flight_samples()
             self.job_queue.submit_cluster_duplicates()
 
         logger.debug("Cluster duplicate handler shut down.")
