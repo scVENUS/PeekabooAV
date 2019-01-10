@@ -300,12 +300,6 @@ class Sample(object):
     # a sample is known, its previous classification (result, reason) without
     # updating its internal state (attribute)? Why is the sample interacting
     # with the database in the first place?
-    def mark_as_in_flight(self):
-        return self.__db_con.mark_sample_in_flight(self)
-
-    def clear_in_flight(self):
-        return self.__db_con.clear_sample_in_flight(self)
-
     @property
     def known_to_db(self):
         return self.__db_con.known(self)

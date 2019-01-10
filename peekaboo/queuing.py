@@ -118,7 +118,7 @@ class JobQueue:
             else:
                 # are we the first of potentially multiple instances working on
                 # this sample?
-                if sample.mark_as_in_flight():
+                if self.db_con.mark_sample_in_flight(sample):
                     # initialise a per-duplicate backlog for this sample which
                     # also serves as in-flight marker and submit to queue
                     self.duplicates[sample_hash] = {
@@ -158,7 +158,7 @@ class JobQueue:
             # processed by another instance concurrently
             for sample_hash, sample_duplicates in self.cluster_duplicates.items():
                 # try to mark as in-flight
-                if sample_duplicates[0].mark_as_in_flight():
+                if self.db_con.mark_sample_in_flight(sample_duplicates[0]):
                     sample_str = str(sample_duplicates[0])
                     if self.duplicates.get(sample_hash) is not None:
                         logger.error("Possible backlog corruption for sample "
@@ -205,7 +205,7 @@ class JobQueue:
                 self.jobs.put(s, True, self.queue_timeout)
 
             sample = self.duplicates[sample_hash]['master']
-            sample.clear_in_flight()
+            self.db_con.clear_sample_in_flight(sample)
             sample_str = str(sample)
             del self.duplicates[sample_hash]
 
