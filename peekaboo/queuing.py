@@ -72,7 +72,7 @@ class JobQueue:
 
         for i in range(0, self.worker_count):
             logger.debug("Create Worker %d" % i)
-            w = Worker(i, self, ruleset_config)
+            w = Worker(i, self, ruleset_config, db_con)
             self.workers.append(w)
             w.start()
 
@@ -271,7 +271,7 @@ class Worker(Thread):
 
     @author: Sebastian Deiss
     """
-    def __init__(self, wid, job_queue, ruleset_config, dequeue_timeout = 5):
+    def __init__(self, wid, job_queue, ruleset_config, db_con, dequeue_timeout = 5):
         # whether we should run
         self.shutdown_requested = Event()
         self.shutdown_requested.clear()
@@ -281,6 +281,7 @@ class Worker(Thread):
         self.worker_id = wid
         self.job_queue = job_queue
         self.ruleset_config = ruleset_config
+        self.db_con = db_con
         self.dequeue_timeout = dequeue_timeout
         Thread.__init__(self)
 
@@ -300,6 +301,18 @@ class Worker(Thread):
                 engine = RulesetEngine(sample, self.ruleset_config)
                 engine.run()
                 engine.report()
+
+                # save analysis result to database if not known already
+                # FIXME: If check for known samples is an optional rule, should
+                # persisting the analysis result be optional as well?
+                if not self.db_con.known(sample):
+                    logger.debug('Saving results to database')
+                    self.db_con.analysis_save(sample)
+                else:
+                    logger.debug('Known sample info not logged to database')
+
+                sample.remove_from_connection_map()
+
                 self.job_queue.done(sample.sha256sum)
             except CuckooReportPendingException:
                 logger.debug("Report for sample %s still pending" % sample)

@@ -228,13 +228,7 @@ class Sample(object):
         logger.debug("Job hash for this sample: %s" % job_hash)
         return job_hash
 
-    def save_result(self):
-        if self.known_to_db:
-            logger.debug('Known sample info not logged to database')
-        else:
-            logger.debug('Saving results to database')
-            self.__db_con.analysis_save(self)
-
+    def remove_from_connection_map(self):
         if self.__connection_map is not None:
             # de-register ourselves from the connection map
             if self.__socket is not None:

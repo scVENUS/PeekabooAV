@@ -75,7 +75,6 @@ class RulesetEngine(object):
         self.sample.report()
         if self.sample.get_result() == Result.bad:
             dump_processing_info(self.sample)
-        self.sample.save_result()
 
     def __exec_rule(self, config, sample, rule_function):
         """
