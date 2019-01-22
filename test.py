@@ -86,14 +86,10 @@ class TestDatabase(unittest.TestCase):
         sample_info = self.db_con.sample_info_fetch(self.sample)
         self.assertEqual(self.sample.sha256sum, sample_info.sha256sum)
 
-    def test_3_fetch_rule_result(self):
-        rule_result = self.db_con.fetch_rule_result(self.sample)
-        # RuleResults from the DB have 'db' as rule name
-        self.assertEqual(rule_result.rule, 'db')
-        self.assertEqual(rule_result.result, Result.checked)
-        self.assertEqual(rule_result.reason, 'This is just a test case.')
-        # We assert True since the DB rule result always sets further_analysis to True
-        self.assertTrue(rule_result.further_analysis)
+    def test_3_fetch_result(self):
+        sample_info = self.db_con.sample_info_fetch(self.sample)
+        self.assertEqual(sample_info.result, Result.checked)
+        self.assertEqual(sample_info.reason, 'This is just a test case.')
 
     def test_4_known(self):
         self.assertTrue(self.db_con.known(self.sample))
@@ -233,8 +229,7 @@ class TestSample(unittest.TestCase):
         self.assertIsNotNone(self.sample.sha256sum)
         self.assertEqual(self.sample.job_id, -1)
         self.assertEqual(self.sample.get_result(), Result.unchecked)
-        self.assertEqual(self.sample.reason,
-                         'Ausschlaggebendes Ergebnis laut Datenbank: Datei ist dem System noch nicht bekannt')
+        self.assertEqual(self.sample.get_reason(), None)
         self.assertFalse(self.sample.office_macros)
         self.assertFalse(self.sample.known)
 

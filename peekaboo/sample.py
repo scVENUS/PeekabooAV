@@ -90,6 +90,7 @@ class Sample(object):
         # sha256sum.suffix
         self.__submit_path = None
         self.__result = ruleset.Result.unchecked
+        self.__reason = None
         self.__report = []  # Peekaboo's own report
         self.__connection_map = connection_map
         self.__socket = socket
@@ -212,6 +213,9 @@ class Sample(object):
     def get_result(self):
         return self.__result
 
+    def get_reason(self):
+        return self.__reason
+
     def get_peekaboo_report(self):
         return ''.join(self.__report)
 
@@ -253,7 +257,7 @@ class Sample(object):
             # check if result of this rule is worse than what we know so far
             if rule_result.result >= self.__result:
                 self.__result = rule_result.result
-                self.set_attr('reason', rule_result.reason)
+                self.__reason = rule_result.reason
 
     def report(self):
         """
@@ -378,20 +382,6 @@ class Sample(object):
         if self.has_attr('job_id'):
             return self.get_attr('job_id')
         return -1
-
-    @property
-    def reason(self):
-        # TODO: Cover all possible cases.
-        # if reason exists and sample is not known?
-        if not self.has_attr('reason'):
-            if not self.has_attr('known'):
-                rr = self.__db_con.fetch_rule_result(self)
-                self.__result = rr.result
-                self.set_attr('known', True)
-                self.set_attr('reason',
-                              'Ausschlaggebendes Ergebnis laut Datenbank: %s'
-                              % rr.reason)
-        return self.get_attr('reason')
 
     @property
     def office_macros(self):

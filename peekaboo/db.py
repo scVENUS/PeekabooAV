@@ -30,7 +30,7 @@ from sqlalchemy.engine import create_engine
 from sqlalchemy.orm import sessionmaker, scoped_session, relationship
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from peekaboo import __version__
-from peekaboo.ruleset import Result, RuleResult
+from peekaboo.ruleset import Result
 from peekaboo.exceptions import PeekabooDatabaseError
 import threading
 import logging
@@ -191,7 +191,7 @@ class PeekabooDatabase(object):
                 sha256sum=sample.sha256sum,
                 file_extension=sample.file_extension,
                 result=sample.get_result(),
-                reason=sample.reason)
+                reason=sample.get_reason())
 
         analysis.sample = sample_info
 
@@ -222,30 +222,6 @@ class PeekabooDatabase(object):
                 file_extension=sample.file_extension).first()
             session.close()
         return sample_info
-
-    def fetch_rule_result(self, sample):
-        """
-        Gets the sample information from the database as a RuleResult object.
-
-        :param sample: The Sample object to get the rule result from.
-        :return: Returns a RuleResult object containing the sample information.
-        """
-        sample_info = self.sample_info_fetch(sample)
-        if sample_info:
-            result = RuleResult(
-                'db',
-                result=sample_info.result,
-                reason=sample_info.reason,
-                further_analysis=True
-            )
-        else:
-            result = RuleResult(
-                'db',
-                result=Result.unknown,
-                reason="Datei ist dem System noch nicht bekannt",
-                further_analysis=True
-            )
-        return result
 
     def known(self, sample):
         """
