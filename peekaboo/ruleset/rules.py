@@ -96,11 +96,11 @@ class FileTypeOnWhitelistRule(Rule):
         """ Ignore the file only if *all* of its mime types are on the
         whitelist and we could determine at least one. """
         whitelist = self.config.get('whitelist', ())
-        if len(whitelist) == 0:
+        if not whitelist:
             logger.warn("Empty whitelist, check ruleset config.")
             return self.result(Result.unknown, "Whitelist ist leer", True)
 
-        if len(s.mimetypes) > 0 and s.mimetypes.issubset(set(whitelist)):
+        if s.mimetypes and s.mimetypes.issubset(set(whitelist)):
             return self.result(Result.ignored,
                                "Dateityp ist auf Whitelist",
                                False)
@@ -119,11 +119,11 @@ class FileTypeOnGreylistRule(Rule):
         """ Continue analysis if any of the sample's MIME types are on the
         greylist or in case we don't have one. """
         greylist = self.config.get('greylist', ())
-        if len(greylist) == 0:
+        if not greylist:
             logger.warn("Empty greylist, check ruleset config.")
             return self.result(Result.unknown, "Greylist is leer", False)
 
-        if len(s.mimetypes.intersection(set(greylist))) > 0 or len(s.mimetypes) == 0:
+        if not s.mimetypes or s.mimetypes.intersection(set(greylist)):
             return self.result(Result.unknown,
                                "Dateityp ist auf der Liste der zu "
                                "analysiserenden Typen",
@@ -146,7 +146,7 @@ class CuckooEvilSigRule(Rule):
         # list all installed signatures
         # grep -o "description.*" -R . ~/cuckoo2.0/modules/signatures/
         bad_sigs = self.config.get('signature', ())
-        if len(bad_sigs) == 0:
+        if not bad_sigs:
             logger.warn("Empty bad signature list, check ruleset config.")
             return self.result(Result.unknown,
                                "Leere Liste schaedlicher Signaturen",
@@ -166,7 +166,7 @@ class CuckooEvilSigRule(Rule):
             if match:
                 matched_bad_sigs.append(sig)
 
-        if len(matched_bad_sigs) == 0:
+        if not matched_bad_sigs:
             return self.result(Result.unknown,
                                "Keine Signatur erkannt die auf Schadcode "
                                "hindeutet",
@@ -226,7 +226,7 @@ class RequestsEvilDomainRule(Rule):
         """ Report the sample as bad if one of the requested domains is on our
         list of evil domains. """
         evil_domains = self.config.get('domain', ())
-        if len(evil_domains) == 0:
+        if not evil_domains:
             logger.warn("Empty evil domain list, check ruleset config.")
             return self.result(Result.unknown, "Leere Domainliste", True)
 
