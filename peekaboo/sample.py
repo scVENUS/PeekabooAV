@@ -251,7 +251,7 @@ class Sample(object):
             logger.debug("Current result: %s, Rule result: %s"
                          % (self.__result, rule_result.result))
             # check if result of this rule is worse than what we know so far
-            if rule_result.result > self.__result:
+            if rule_result.result >= self.__result:
                 self.__result = rule_result.result
                 self.set_attr('reason', rule_result.reason)
 

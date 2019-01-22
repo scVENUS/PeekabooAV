@@ -39,18 +39,15 @@ class Result(Enum):
     good = 5
     bad = 6
 
-    @staticmethod
-    def from_string(result_str):
-        for i in Result:
-            if i.name == result_str:
-                return i
-        raise ValueError('%s: Element not found' % result_str)
+    def __ge__(self, other):
+        if self.__class__ is other.__class__:
+            return self.value >= other.value
+        return NotImplemented
 
-    def __gt__(self, other):
-        return self.value >= other.value
-
-    def __lt__(self, other):
-        return other.value >= self.value
+    def __le__(self, other):
+        if self.__class__ is other.__class__:
+            return self.value <= other.value
+        return NotImplemented
 
 
 class RuleResult:
