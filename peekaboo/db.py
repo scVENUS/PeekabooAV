@@ -187,21 +187,17 @@ class PeekabooDatabase(object):
             analysis.filename = sample.get_filename()
             analysis.analyses_time = datetime.strptime(sample.analyses_time,
                                                        "%Y%m%dT%H%M%S")
-            s = PeekabooDatabase.__get(
-                session,
-                SampleInfo,
+            sample_info = session.query(SampleInfo).filter_by(
                 sha256sum=sample.sha256sum,
-                file_extension=sample.file_extension,
-            )
-            if s is None:
-                s = PeekabooDatabase.__create(
-                    SampleInfo,
+                file_extension=sample.file_extension).first()
+            if sample_info is None:
+                sample_info = SampleInfo(
                     sha256sum=sample.sha256sum,
                     file_extension=sample.file_extension,
                     result=sample.get_result(),
-                    reason=sample.reason
-                )
-            analysis.sample = s
+                    reason=sample.reason)
+
+            analysis.sample = sample_info
             session.add(analysis)
             try:
                 session.commit()
@@ -222,12 +218,9 @@ class PeekabooDatabase(object):
         """
         with self.__lock:
             session = self.__Session()
-            sample_info = PeekabooDatabase.__get(
-                session,
-                SampleInfo,
+            sample_info = session.query(SampleInfo).filter_by(
                 sha256sum=sample.sha256sum,
-                file_extension=sample.file_extension
-            )
+                file_extension=sample.file_extension).first()
             session.close()
         return sample_info
 
@@ -240,12 +233,9 @@ class PeekabooDatabase(object):
         """
         with self.__lock:
             session = self.__Session()
-            sample_info = PeekabooDatabase.__get(
-                session,
-                SampleInfo,
+            sample_info = session.query(SampleInfo).filter_by(
                 sha256sum=sample.sha256sum,
-                file_extension=sample.file_extension
-            )
+                file_extension=sample.file_extension).first()
             if sample_info:
                 result = RuleResult(
                     'db',
@@ -272,12 +262,9 @@ class PeekabooDatabase(object):
         with self.__lock:
             is_known = False
             session = self.__Session()
-            sample_info = PeekabooDatabase.__get(
-                session,
-                SampleInfo,
+            sample_info = session.query(SampleInfo).filter_by(
                 sha256sum=sample.sha256sum,
-                file_extension=sample.file_extension
-            )
+                file_extension=sample.file_extension).first()
             if sample_info is not None:
                 is_known = True
             session.close()
@@ -490,39 +477,6 @@ class PeekabooDatabase(object):
             )
         finally:
             session.close()
-
-    @staticmethod
-    def __get_or_create(session, model, **kwargs):
-        """
-        Get an ORM instance or create it if does not exist.
-
-        :param session: An SQLAlchemy session object.
-        :param model: The model to query.
-        :return: A row instance.
-        """
-        instance = PeekabooDatabase.__get(session, model, **kwargs)
-        return instance or model(**kwargs)
-
-    @staticmethod
-    def __get(session, model, **kwargs):
-        """
-        Get an ORM instance.
-
-        :param session: An SQLAlchemy session object.
-        :param model: The model to query.
-        :return: An ORM instance or None.
-        """
-        return session.query(model).filter_by(**kwargs).first()
-
-    @staticmethod
-    def __create(model, **kwargs):
-        """
-        Create an ORM instance.
-
-        :param model: The model to create.
-        :return: An ORM instance of the given model.
-        """
-        return model(**kwargs)
 
     def __del__(self):
         self.__engine.dispose()
