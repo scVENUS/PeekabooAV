@@ -24,7 +24,7 @@
 
 
 from datetime import datetime, timedelta
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.engine import create_engine
 from sqlalchemy.orm import sessionmaker, scoped_session, relationship
@@ -35,7 +35,7 @@ from peekaboo.exceptions import PeekabooDatabaseError
 import threading
 import logging
 
-DB_SCHEMA_VERSION = 5
+DB_SCHEMA_VERSION = 6
 
 logger = logging.getLogger(__name__)
 Base = declarative_base()
@@ -73,23 +73,6 @@ class PeekabooMetadata(Base):
     __repr__ = __str__
 
 
-class AnalysisResult(Base):
-    """
-    Definition of the analysis_result table.
-
-    @author: Sebastian Deiss
-    """
-    __tablename__ = 'analysis_result_v%d' % DB_SCHEMA_VERSION
-
-    id = Column(Integer, primary_key=True)
-    name = Column(String(255), nullable=False)
-
-    def __str__(self):
-        return '<AnalysisResult(name="%s")>' % self.name
-
-    __repr__ = __str__
-
-
 class InFlightSample(Base):
     """
     Table tracking whether a specific sample is currently being analysed and by
@@ -113,16 +96,8 @@ class SampleInfo(Base):
     id = Column(Integer, primary_key=True)
     sha256sum = Column(String(64), nullable=False)
     file_extension = Column(String(16), nullable=True)
-    result_id = Column(Integer, ForeignKey(AnalysisResult.id),
-                       nullable=False)
-    result = relationship("AnalysisResult")
+    result = Column(Enum(Result), nullable=False)
     reason = Column(Text, nullable=True)
-
-    def set_result(self, result):
-        self.__result = result
-
-    def get_result(self):
-        return self.__result
 
     def __str__(self):
         return ('<SampleInfo(sample_sha256_hash="%s", file_extension="%s", '
@@ -212,11 +187,6 @@ class PeekabooDatabase(object):
             analysis.filename = sample.get_filename()
             analysis.analyses_time = datetime.strptime(sample.analyses_time,
                                                        "%Y%m%dT%H%M%S")
-            analysis_result = PeekabooDatabase.__get_or_create(
-                session,
-                AnalysisResult,
-                name=sample.get_result().name
-            )
             s = PeekabooDatabase.__get(
                 session,
                 SampleInfo,
@@ -228,7 +198,7 @@ class PeekabooDatabase(object):
                     SampleInfo,
                     sha256sum=sample.sha256sum,
                     file_extension=sample.file_extension,
-                    result=analysis_result,
+                    result=sample.get_result(),
                     reason=sample.reason
                 )
             analysis.sample = s
@@ -271,8 +241,6 @@ class PeekabooDatabase(object):
                 sha256sum=sample.sha256sum,
                 file_extension=sample.file_extension
             )
-            if sample_info:
-                sample_info.set_result(Result.from_string(sample_info.result.name))
             session.close()
         return sample_info
 
@@ -294,7 +262,7 @@ class PeekabooDatabase(object):
             if sample_info:
                 result = RuleResult(
                     'db',
-                    result=Result.from_string(sample_info.result.name),
+                    result=sample_info.result,
                     reason=sample_info.reason,
                     further_analysis=True
                 )
@@ -526,16 +494,6 @@ class PeekabooDatabase(object):
         meta.cuckoo_version = '2.0'
         session = self.__Session()
         session.add(meta)
-        '''
-        session.add_all([
-            AnalysisResult(name='unchecked'),
-            AnalysisResult(name='unknown'),
-            AnalysisResult(name='ignored'),
-            AnalysisResult(name='checked'),
-            AnalysisResult(name='good'),
-            AnalysisResult(name='bad'),
-        ])
-        '''
         try:
             session.commit()
         except SQLAlchemyError as e:

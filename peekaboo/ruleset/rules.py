@@ -41,7 +41,7 @@ def known(config, s):
     if s.known_to_db:
         sample_info = s.info_from_db
         return RuleResult(position,
-                          result=sample_info.get_result(),
+                          result=sample_info.result,
                           reason=sample_info.reason,
                           further_analysis=False)
 
