@@ -179,25 +179,24 @@ class PeekabooDatabase(object):
 
         :param sample: The sample object for this analysis task.
         """
+        analysis = AnalysisJournal()
+        analysis.job_hash = sample.get_job_hash()
+        analysis.cuckoo_job_id = sample.job_id
+        analysis.filename = sample.get_filename()
+        analysis.analyses_time = datetime.strptime(sample.analyses_time,
+                                                   "%Y%m%dT%H%M%S")
+        sample_info = self.sample_info_fetch(sample)
+        if sample_info is None:
+            sample_info = SampleInfo(
+                sha256sum=sample.sha256sum,
+                file_extension=sample.file_extension,
+                result=sample.get_result(),
+                reason=sample.reason)
+
+        analysis.sample = sample_info
+
         with self.__lock:
             session = self.__Session()
-            analysis = AnalysisJournal()
-            analysis.job_hash = sample.get_job_hash()
-            analysis.cuckoo_job_id = sample.job_id
-            analysis.filename = sample.get_filename()
-            analysis.analyses_time = datetime.strptime(sample.analyses_time,
-                                                       "%Y%m%dT%H%M%S")
-            sample_info = session.query(SampleInfo).filter_by(
-                sha256sum=sample.sha256sum,
-                file_extension=sample.file_extension).first()
-            if sample_info is None:
-                sample_info = SampleInfo(
-                    sha256sum=sample.sha256sum,
-                    file_extension=sample.file_extension,
-                    result=sample.get_result(),
-                    reason=sample.reason)
-
-            analysis.sample = sample_info
             session.add(analysis)
             try:
                 session.commit()
@@ -231,26 +230,21 @@ class PeekabooDatabase(object):
         :param sample: The Sample object to get the rule result from.
         :return: Returns a RuleResult object containing the sample information.
         """
-        with self.__lock:
-            session = self.__Session()
-            sample_info = session.query(SampleInfo).filter_by(
-                sha256sum=sample.sha256sum,
-                file_extension=sample.file_extension).first()
-            if sample_info:
-                result = RuleResult(
-                    'db',
-                    result=sample_info.result,
-                    reason=sample_info.reason,
-                    further_analysis=True
-                )
-            else:
-                result = RuleResult(
-                    'db',
-                    result=Result.unknown,
-                    reason="Datei ist dem System noch nicht bekannt",
-                    further_analysis=True
-                )
-            session.close()
+        sample_info = self.sample_info_fetch(sample)
+        if sample_info:
+            result = RuleResult(
+                'db',
+                result=sample_info.result,
+                reason=sample_info.reason,
+                further_analysis=True
+            )
+        else:
+            result = RuleResult(
+                'db',
+                result=Result.unknown,
+                reason="Datei ist dem System noch nicht bekannt",
+                further_analysis=True
+            )
         return result
 
     def known(self, sample):
@@ -259,16 +253,9 @@ class PeekabooDatabase(object):
 
         :param sample: The Sample object to check.
         """
-        with self.__lock:
-            is_known = False
-            session = self.__Session()
-            sample_info = session.query(SampleInfo).filter_by(
-                sha256sum=sample.sha256sum,
-                file_extension=sample.file_extension).first()
-            if sample_info is not None:
-                is_known = True
-            session.close()
-            return is_known
+        sample_info = self.sample_info_fetch(sample)
+        is_known = sample_info is not None
+        return is_known
 
     def mark_sample_in_flight(self, sample, instance_id=None, start_time=None):
         """
