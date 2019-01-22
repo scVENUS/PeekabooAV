@@ -53,11 +53,11 @@ class KnownRule(Rule):
     a previous record of an identical sample sample. """
     rule_name = 'known'
 
-    def evaluate(self, s):
+    def evaluate(self, sample):
         """ Try to get information about the sample from the database. Return
         the old result and reason if found and advise the engine to stop
         processing. """
-        sample_info = self.db_con.sample_info_fetch(s)
+        sample_info = self.db_con.sample_info_fetch(sample)
         if sample_info:
             return self.result(sample_info.result, sample_info.reason, False)
 
@@ -71,19 +71,19 @@ class FileLargerThanRule(Rule):
     """
     rule_name = 'file_larger_than'
 
-    def evaluate(self, s):
+    def evaluate(self, sample):
         """ Evaluate whether the sample is larger than a certain threshold.
         Advise the engine to stop processing if the size is below the
         threshold. """
         size = int(self.config.get('bytes', 5))
 
-        if s.file_size > size:
+        if sample.file_size > size:
             return self.result(Result.unknown,
                                "Datei hat mehr als %d bytes" % size,
                                True)
 
         return self.result(Result.ignored,
-                           "Datei ist nur %d bytes lang" % s.file_size,
+                           "Datei ist nur %d bytes lang" % sample.file_size,
                            False)
 
 
@@ -92,7 +92,7 @@ class FileTypeOnWhitelistRule(Rule):
     whitelist. """
     rule_name = 'file_type_on_whitelist'
 
-    def evaluate(self, s):
+    def evaluate(self, sample):
         """ Ignore the file only if *all* of its mime types are on the
         whitelist and we could determine at least one. """
         whitelist = self.config.get('whitelist', ())
@@ -100,7 +100,7 @@ class FileTypeOnWhitelistRule(Rule):
             logger.warn("Empty whitelist, check ruleset config.")
             return self.result(Result.unknown, "Whitelist ist leer", True)
 
-        if s.mimetypes and s.mimetypes.issubset(set(whitelist)):
+        if sample.mimetypes and sample.mimetypes.issubset(set(whitelist)):
             return self.result(Result.ignored,
                                "Dateityp ist auf Whitelist",
                                False)
@@ -115,7 +115,7 @@ class FileTypeOnGreylistRule(Rule):
     greylist, i.e. enabled for analysis. """
     rule_name = 'file_type_on_greylist'
 
-    def evaluate(self, s):
+    def evaluate(self, sample):
         """ Continue analysis if any of the sample's MIME types are on the
         greylist or in case we don't have one. """
         greylist = self.config.get('greylist', ())
@@ -123,7 +123,7 @@ class FileTypeOnGreylistRule(Rule):
             logger.warn("Empty greylist, check ruleset config.")
             return self.result(Result.unknown, "Greylist is leer", False)
 
-        if not s.mimetypes or s.mimetypes.intersection(set(greylist)):
+        if not sample.mimetypes or sample.mimetypes.intersection(set(greylist)):
             return self.result(Result.unknown,
                                "Dateityp ist auf der Liste der zu "
                                "analysiserenden Typen",
@@ -131,7 +131,8 @@ class FileTypeOnGreylistRule(Rule):
 
         return self.result(Result.unknown,
                            "Dateityp ist nicht auf der Liste der zu "
-                           "analysierenden Typen (%s)" % (str(s.mimetypes)),
+                           "analysierenden Typen (%s)" %
+                           (str(sample.mimetypes)),
                            False)
 
 
@@ -140,7 +141,7 @@ class CuckooEvilSigRule(Rule):
     of signatures considered bad. """
     rule_name = 'cuckoo_evil_sig'
 
-    def evaluate(self, s):
+    def evaluate(self, sample):
         """ Evaluate the sample against signatures that if matched mark a
         sample as bad. """
         # list all installed signatures
@@ -155,7 +156,7 @@ class CuckooEvilSigRule(Rule):
         sigs = []
 
         # look through matched signatures
-        for descr in s.cuckoo_report.signatures:
+        for descr in sample.cuckoo_report.signatures:
             logger.debug(descr['description'])
             sigs.append(descr['description'])
 
@@ -183,20 +184,20 @@ class CuckooScoreRule(Rule):
     threshold. """
     rule_name = 'cuckoo_score'
 
-    def evaluate(self, s):
+    def evaluate(self, sample):
         """ Evaluate the score reported by Cuckoo against the threshold from
         the configuration and report sample as bad if above. """
         threshold = float(self.config.get('higher_than', 4.0))
 
-        if s.cuckoo_report.score >= threshold:
+        if sample.cuckoo_report.score >= threshold:
             return self.result(Result.bad,
                                "Cuckoo score >= %s: %s" %
-                               (threshold, s.cuckoo_report.score),
+                               (threshold, sample.cuckoo_report.score),
                                False)
 
         return self.result(Result.unknown,
                            "Cuckoo score < %s: %s" %
-                           (threshold, s.cuckoo_report.score),
+                           (threshold, sample.cuckoo_report.score),
                            True)
 
 
@@ -204,9 +205,9 @@ class OfficeMacroRule(Rule):
     """ A rule checking the sample for Office macros. """
     rule_name = 'office_macro'
 
-    def evaluate(self, s):
+    def evaluate(self, sample):
         """ Report the sample as bad if it contains a macro. """
-        if s.office_macros:
+        if sample.office_macros:
             return self.result(Result.bad,
                                "Die Datei beinhaltet ein Office-Makro",
                                False)
@@ -222,7 +223,7 @@ class RequestsEvilDomainRule(Rule):
     Cuckoo against a blacklist. """
     rule_name = 'requests_evil_domain'
 
-    def evaluate(self, s):
+    def evaluate(self, sample):
         """ Report the sample as bad if one of the requested domains is on our
         list of evil domains. """
         evil_domains = self.config.get('domain', ())
@@ -230,12 +231,12 @@ class RequestsEvilDomainRule(Rule):
             logger.warn("Empty evil domain list, check ruleset config.")
             return self.result(Result.unknown, "Leere Domainliste", True)
 
-        for d in s.cuckoo_report.requested_domains:
-            if d in evil_domains:
+        for domain in sample.cuckoo_report.requested_domains:
+            if domain in evil_domains:
                 return self.result(Result.bad,
                                    "Die Datei versucht mindestens eine Domain "
                                    "aus der Blacklist zu kontaktieren "
-                                   "(%s)" % d,
+                                   "(%s)" % domain,
                                    False)
 
         return self.result(Result.unknown,
@@ -248,10 +249,10 @@ class CuckooAnalysisFailedRule(Rule):
     """ A rule checking the final status reported by Cuckoo for success. """
     rule_name = 'cuckoo_analysis_failed'
 
-    def evaluate(self, s):
+    def evaluate(self, sample):
         """ Report the sample as bad if the Cuckoo indicates that the analysis
         has failed. """
-        if s.cuckoo_report.analysis_failed:
+        if sample.cuckoo_report.analysis_failed:
             return self.result(Result.bad,
                                "Die Verhaltensanalyse durch Cuckoo hat einen "
                                "Fehler produziert und konnte nicht erfolgreich "
@@ -268,7 +269,7 @@ class FinalRule(Rule):
     """ A catch-all rule. """
     rule_name = 'final_rule'
 
-    def evaluate(self, s):
+    def evaluate(self, sample):
         """ Report an unknown analysis result indicating that nothing much can
         be said about the sample. """
         return self.result(Result.unknown,
