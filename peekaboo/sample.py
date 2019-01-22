@@ -288,21 +288,6 @@ class Sample(object):
         return self.get_attr('sha256sum')
 
     @property
-    def known(self):
-        if self.known_to_db:
-            self.set_attr('known', True)
-            return True
-        return False
-
-    # These hint at architectural breakage: Why do we sometimes want to know if
-    # a sample is known, its previous classification (result, reason) without
-    # updating its internal state (attribute)? Why is the sample interacting
-    # with the database in the first place?
-    @property
-    def known_to_db(self):
-        return self.__db_con.known(self)
-
-    @property
     def info_from_db(self):
         return self.__db_con.sample_info_fetch(self)
 
@@ -469,10 +454,9 @@ class Sample(object):
         if self.has_attr('job_id'):
             job_id = self.get_attr('job_id')
 
-        return ("<Sample(filename='%s', known='%s', job_id='%d',"
+        return ("<Sample(filename='%s', job_id='%d',"
                 " result='%s', sha256sum='%s')>"
                 % (self.__filename,
-                   'yes' if self.known else 'no',
                    job_id,
                    self.__result,
                    self.sha256sum))

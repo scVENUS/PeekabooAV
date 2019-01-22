@@ -223,16 +223,6 @@ class PeekabooDatabase(object):
             session.close()
         return sample_info
 
-    def known(self, sample):
-        """
-        Check if we already have a sample in the database by its SHA-256 hash.
-
-        :param sample: The Sample object to check.
-        """
-        sample_info = self.sample_info_fetch(sample)
-        is_known = sample_info is not None
-        return is_known
-
     def mark_sample_in_flight(self, sample, instance_id=None, start_time=None):
         """
         Mark a sample as in flight, i.e. being worked on by an instance.

@@ -91,9 +91,6 @@ class TestDatabase(unittest.TestCase):
         self.assertEqual(sample_info.result, Result.checked)
         self.assertEqual(sample_info.reason, 'This is just a test case.')
 
-    def test_4_known(self):
-        self.assertTrue(self.db_con.known(self.sample))
-
     def test_5_in_flight_no_cluster(self):
         # should all behave as no-ops
         self.assertTrue(self.db_con.mark_sample_in_flight(self.sample, 0))
@@ -231,7 +228,6 @@ class TestSample(unittest.TestCase):
         self.assertEqual(self.sample.get_result(), Result.unchecked)
         self.assertEqual(self.sample.get_reason(), None)
         self.assertFalse(self.sample.office_macros)
-        self.assertFalse(self.sample.known)
 
     def test_sample_attributes_with_meta_info(self):
         sample = self.factory.make_sample('test.pyc', {
