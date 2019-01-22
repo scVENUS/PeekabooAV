@@ -35,6 +35,7 @@ from peekaboo.exceptions import PeekabooDatabaseError
 import threading
 import logging
 
+DB_SCHEMA_VERSION = 5
 
 logger = logging.getLogger(__name__)
 Base = declarative_base()
@@ -78,7 +79,7 @@ class AnalysisResult(Base):
 
     @author: Sebastian Deiss
     """
-    __tablename__ = 'analysis_result_v5'
+    __tablename__ = 'analysis_result_v%d' % DB_SCHEMA_VERSION
 
     id = Column(Integer, primary_key=True)
     name = Column(String(255), nullable=False)
@@ -94,7 +95,7 @@ class InFlightSample(Base):
     Table tracking whether a specific sample is currently being analysed and by
     which Peekaboo instance.
     """
-    __tablename__ = 'in_flight_samples_v5'
+    __tablename__ = 'in_flight_samples_v%d' % DB_SCHEMA_VERSION
 
     sha256sum = Column(String(64), primary_key=True)
     instance_id = Column(Integer, nullable=False)
@@ -107,12 +108,12 @@ class SampleInfo(Base):
 
     @author: Sebastian Deiss
     """
-    __tablename__ = 'sample_info_v5'
+    __tablename__ = 'sample_info_v%d' % DB_SCHEMA_VERSION
 
     id = Column(Integer, primary_key=True)
     sha256sum = Column(String(64), nullable=False)
     file_extension = Column(String(16), nullable=True)
-    result_id = Column(Integer, ForeignKey('analysis_result_v5.id'),
+    result_id = Column(Integer, ForeignKey(AnalysisResult.id),
                        nullable=False)
     result = relationship("AnalysisResult")
     reason = Column(Text, nullable=True)
@@ -139,14 +140,14 @@ class AnalysisJournal(Base):
 
     @author: Sebastian Deiss
     """
-    __tablename__ = 'analysis_jobs_v5'
+    __tablename__ = 'analysis_jobs_v%d' % DB_SCHEMA_VERSION
 
     id = Column(Integer, primary_key=True)
     job_hash = Column(String(255), nullable=False)
     cuckoo_job_id = Column(Integer, nullable=False)
     filename = Column(String(255), nullable=False)
     analyses_time = Column(DateTime, nullable=False)
-    sample_id = Column(Integer, ForeignKey('sample_info_v5.id'),
+    sample_id = Column(Integer, ForeignKey(SampleInfo.id),
                        nullable=False)
     sample = relationship('SampleInfo')
 
@@ -187,7 +188,6 @@ class PeekabooDatabase(object):
         :param stale_in_flight_threshold: Number of seconds after which a in
         flight marker is considered stale and deleted or ignored.
         """
-        self.db_schema_version = 5
         self.__engine = create_engine(db_url, pool_recycle=1)
         session_factory = sessionmaker(bind=self.__engine)
         self.__Session = scoped_session(session_factory)
@@ -508,7 +508,7 @@ class PeekabooDatabase(object):
             meta = session.query(PeekabooMetadata)[-1]
             schema_version = meta.db_schema_version
             session.close()
-            if schema_version < self.db_schema_version:
+            if schema_version < DB_SCHEMA_VERSION:
                 logger.info('Adding new database schema.')
                 return False
             return True
@@ -521,7 +521,7 @@ class PeekabooDatabase(object):
         Base.metadata.create_all(self.__engine)
         meta = PeekabooMetadata()
         meta.peekaboo_version = __version__
-        meta.db_schema_version = self.db_schema_version
+        meta.db_schema_version = DB_SCHEMA_VERSION
         # TODO: Get Cuckoo version.
         meta.cuckoo_version = '2.0'
         session = self.__Session()
