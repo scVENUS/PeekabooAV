@@ -302,15 +302,8 @@ class Worker(Thread):
                 engine.run()
                 engine.report()
 
-                # save analysis result to database if not known already
-                # FIXME: If check for known samples is an optional rule, should
-                # persisting the analysis result be optional as well?
-                if not self.db_con.known(sample):
-                    logger.debug('Saving results to database')
-                    self.db_con.analysis_save(sample)
-                else:
-                    logger.debug('Known sample info not logged to database')
-
+                logger.debug('Saving results to database')
+                self.db_con.analysis_save(sample)
                 sample.remove_from_connection_map()
 
                 self.job_queue.done(sample.sha256sum)
