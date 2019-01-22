@@ -298,7 +298,7 @@ class Worker(Thread):
             sample.init()
 
             try:
-                engine = RulesetEngine(sample, self.ruleset_config)
+                engine = RulesetEngine(sample, self.ruleset_config, self.db_con)
                 engine.run()
                 engine.report()
 

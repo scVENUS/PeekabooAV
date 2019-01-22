@@ -33,8 +33,9 @@ logger = logging.getLogger(__name__)
 
 
 class Rule(object):
-    def __init__(self, config):
+    def __init__(self, config=None, db_con=None):
         self.config = config
+        self.db_con = db_con
 
     def result(self, result, reason, further_analysis):
         return RuleResult(self.rule_name, result=result, reason=reason,
@@ -44,7 +45,7 @@ class KnownRule(Rule):
     rule_name = 'known'
 
     def evaluate(self, s):
-        sample_info = s.info_from_db
+        sample_info = self.db_con.sample_info_fetch(s)
         if sample_info:
             return self.result(sample_info.result, sample_info.reason, False)
 

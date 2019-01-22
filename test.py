@@ -66,7 +66,6 @@ class TestDatabase(unittest.TestCase):
         cls.db_con = PeekabooDatabase('sqlite:///' + cls.test_db,
                 instance_id=0, stale_in_flight_threshold=10)
         cls.factory = SampleFactory(cuckoo = None,
-                db_con = cls.db_con,
                 connection_map = None,
                 base_dir = cls.conf.sample_base_dir,
                 job_hash_regex = cls.conf.job_hash_regex,
@@ -196,7 +195,6 @@ class TestSample(unittest.TestCase):
         cls.conf = PeekabooDummyConfig()
         cls.db_con = PeekabooDatabase('sqlite:///' + cls.test_db)
         cls.factory = SampleFactory(cuckoo = None,
-                db_con = cls.db_con,
                 connection_map = None,
                 base_dir = cls.conf.sample_base_dir,
                 job_hash_regex = cls.conf.job_hash_regex,
@@ -264,7 +262,6 @@ class TestRules(unittest.TestCase):
     def setUpClass(cls):
         cls.conf = PeekabooDummyConfig()
         cls.factory = SampleFactory(cuckoo = None,
-                db_con = None,
                 connection_map = None,
                 base_dir = cls.conf.sample_base_dir,
                 job_hash_regex = cls.conf.job_hash_regex,

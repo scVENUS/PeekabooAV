@@ -47,11 +47,10 @@ class SampleFactory(object):
     Contains all the global configuration data and object references each
     sample needs and thus serves as a registry of potential API breakage
     perhaps deserving looking into. """
-    def __init__(self, cuckoo, db_con, connection_map, base_dir, job_hash_regex,
+    def __init__(self, cuckoo, connection_map, base_dir, job_hash_regex,
             keep_mail_data):
         # object references for interaction
         self.cuckoo = cuckoo
-        self.db_con = db_con
         self.connection_map = connection_map
 
         # configuration
@@ -60,7 +59,7 @@ class SampleFactory(object):
         self.keep_mail_data = keep_mail_data
 
     def make_sample(self, file_path, metainfo = {}, socket = None):
-        return Sample(file_path, self.cuckoo, self.db_con, metainfo,
+        return Sample(file_path, self.cuckoo, metainfo,
                 self.connection_map, socket, self.base_dir, self.job_hash_regex,
                 self.keep_mail_data)
 
@@ -78,12 +77,11 @@ class Sample(object):
     @author: Felix Bauer
     @author: Sebastian Deiss
     """
-    def __init__(self, file_path, cuckoo = None, db_con = None, metainfo = {},
+    def __init__(self, file_path, cuckoo = None, metainfo = {},
             connection_map = None, socket = None, base_dir = None,
             job_hash_regex = None, keep_mail_data = False):
         self.__path = file_path
         self.__cuckoo = cuckoo
-        self.__db_con = db_con
         self.__wd = None
         self.__filename = os.path.basename(self.__path)
         # A symlink that points to the actual file named
@@ -286,10 +284,6 @@ class Sample(object):
                 self.set_attr('sha256sum', checksum)
                 return checksum
         return self.get_attr('sha256sum')
-
-    @property
-    def info_from_db(self):
-        return self.__db_con.sample_info_fetch(self)
 
     @property
     def file_extension(self):

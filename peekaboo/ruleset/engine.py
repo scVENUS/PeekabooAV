@@ -58,9 +58,10 @@ class RulesetEngine(object):
         FinalRule
     ]
 
-    def __init__(self, sample, ruleset_config):
+    def __init__(self, sample, ruleset_config, db_con):
         self.sample = sample
         self.config = ruleset_config
+        self.db_con = db_con
 
     def run(self):
         for rule in RulesetEngine.rules:
@@ -89,7 +90,7 @@ class RulesetEngine(object):
                 # guaranteed to be a hash, albeit empty if no rule config
                 # exists
                 rule_config = self.config.rule_config(rule_name)
-                rule = rule_class(rule_config)
+                rule = rule_class(config=rule_config, db_con=self.db_con)
                 result = rule.evaluate(sample)
             else:
                 logger.debug("Rule '%s' is disabled." % rule_name)

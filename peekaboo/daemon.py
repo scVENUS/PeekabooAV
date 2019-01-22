@@ -316,7 +316,7 @@ def run():
     # Factory producing almost identical samples providing them with global
     # config values and references to other objects they need, such as cuckoo,
     # database connection and connection map.
-    sample_factory = SampleFactory(cuckoo, db_con, connection_map,
+    sample_factory = SampleFactory(cuckoo, connection_map,
                 config.sample_base_dir, config.job_hash_regex,
                 config.keep_mail_data)
 
