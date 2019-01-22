@@ -53,32 +53,6 @@ class PeekabooDummyConfig(object):
         return config[option]
 
 
-class PeekabooDummyDB(object):
-    def sample_info2db(self, sample):
-        pass
-
-    def sample_info_fetch(self, sha256):
-        pass
-
-    def fetch_rule_result(self, sha256):
-        return RuleResult('fake_db',
-                          result=Result.checked,
-                          reason='Test Case',
-                          further_analysis=True)
-
-    def sample_info_update(self, sample):
-        pass
-
-    def known(self, sha256):
-        return False
-
-    def in_progress(self, sha256):
-        return True
-
-    def _clear_in_progress(self):
-        pass
-
-
 class TestDatabase(unittest.TestCase):
     """
     Unittests for Peekaboo's database module.
