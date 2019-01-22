@@ -213,19 +213,6 @@ class PeekabooDatabase(object):
             finally:
                 session.close()
 
-    def sample_info_exists(self, sample):
-        """
-        Check if a log for a given sample exists.
-
-        :param sample: The Sample object to check.
-        """
-        with self.__lock:
-            return self.__exists(
-                SampleInfo,
-                sha256sum=sample.sha256sum,
-                file_extension=sample.file_extension
-            )
-
     def sample_info_fetch(self, sample):
         """
         Fetch information stored in the database about a given sample object.
@@ -503,21 +490,6 @@ class PeekabooDatabase(object):
             )
         finally:
             session.close()
-
-    def __exists(self, model, **kwargs):
-        """
-        Check whether an ORM instance exists.
-
-        :param session: An SQLAlchemy session object.
-        :param model: The model to query.
-        :return: True if the ORM instance exists otherwise False.
-        """
-        session = self.__Session()
-        instance = PeekabooDatabase.__get(session, model, **kwargs)
-        session.close()
-        if instance is not None:
-            return True
-        return False
 
     @staticmethod
     def __get_or_create(session, model, **kwargs):
