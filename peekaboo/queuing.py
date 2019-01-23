@@ -42,7 +42,7 @@ class JobQueue:
     """
     def __init__(self, ruleset_config, db_con, worker_count = 4,
             queue_timeout = 300, dequeue_timeout = 5, shutdown_timeout = 600,
-            cluster_duplicate_interval = 5):
+            cluster_duplicate_check_interval = 5):
         """ Initialise job queue by creating n Peekaboo worker threads to
         process samples.
 
@@ -78,9 +78,15 @@ class JobQueue:
 
         logger.info('Created %d Workers.' % self.worker_count)
 
-        self.cluster_duplicate_handler = ClusterDuplicateHandler(
-                self, cluster_duplicate_interval)
-        self.cluster_duplicate_handler.start();
+        self.cluster_duplicate_handler = None
+        if cluster_duplicate_check_interval:
+            logger.debug("Starting cluster duplicate handler thread with "
+                         "check interval %d.", cluster_duplicate_check_interval)
+            self.cluster_duplicate_handler = ClusterDuplicateHandler(
+                self, cluster_duplicate_check_interval)
+            self.cluster_duplicate_handler.start();
+        else:
+            logger.debug("Disabling cluster duplicate handler thread.")
 
     def submit(self, sample, submitter):
         """
@@ -222,7 +228,9 @@ class JobQueue:
 
         logger.info("Shutting down. Giving workers %d seconds to stop" % timeout)
 
-        self.cluster_duplicate_handler.shut_down()
+        if self.cluster_duplicate_handler:
+            self.cluster_duplicate_handler.shut_down()
+
         for w in self.workers:
             w.shut_down()
 

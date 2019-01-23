@@ -53,8 +53,6 @@ class PeekabooConfig(object):
         self.use_debug_module = None
         self.keep_mail_data = None
         self.db_url = None
-        self.instance_id = 0
-        self.stale_in_flight_threshold = 1*60*60
         self.ruleset_config = None
         self.cuckoo_mode = "api"
         self.cuckoo_url = ""
@@ -62,6 +60,9 @@ class PeekabooConfig(object):
         self.cuckoo_storage = None
         self.cuckoo_exec = None
         self.cuckoo_submit = None
+        self.cluster_instance_id = 0
+        self.cluster_stale_in_flight_threshold = 1*60*60
+        self.cluster_duplicate_check_interval = 60
         ##############################################
         # setup default logging to log any errors during the
         # parsing of the config file.
@@ -91,9 +92,6 @@ class PeekabooConfig(object):
                 'global', 'keep_mail_data'
             ) == 'yes' else False
             self.db_url = config.get('db', 'url')
-            self.instance_id = int(config.get('db', 'instance_id'))
-            self.stale_in_flight_threshold = int(config.get('db',
-                'stale_in_flight_threshold'))
             self.ruleset_config = config.get('ruleset', 'config')
             self.cuckoo_mode = config.get('cuckoo', 'mode')
             self.cuckoo_url = config.get('cuckoo', 'url')
@@ -101,6 +99,11 @@ class PeekabooConfig(object):
             self.cuckoo_storage = config.get('cuckoo', 'storage_path')
             self.cuckoo_exec = config.get('cuckoo', 'exec')
             self.cuckoo_submit = config.get('cuckoo', 'submit').split(' ')
+            self.cluster_instance_id = config.getint('cluster', 'instance_id')
+            self.cluster_stale_in_flight_threshold = config.getint(
+                'cluster', 'stale_in_flight_threshold')
+            self.cluster_duplicate_check_interval = config.getint(
+                'cluster', 'duplicate_check_interval')
             # Update logging with what we just parsed from the config
             self.__setup_logging()
         except NoSectionError as e:
