@@ -400,7 +400,14 @@ class PeekabooDatabase(object):
             return False
         else:
             session = self.__Session()
-            meta = session.query(PeekabooMetadata)[-1]
+            # get the first of potentially multiple metadata entries ordered by
+            # descending schema version to get the newest currently configured
+            # schema
+            meta = session.query(PeekabooMetadata).order_by(
+                PeekabooMetadata.db_schema_version.desc()).first()
+            if not meta:
+                return False
+
             schema_version = meta.db_schema_version
             session.close()
             if schema_version < DB_SCHEMA_VERSION:
