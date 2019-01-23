@@ -64,7 +64,9 @@ class TestDatabase(unittest.TestCase):
         cls.test_db = os.path.abspath('./test.db')
         cls.conf = PeekabooDummyConfig()
         cls.db_con = PeekabooDatabase('sqlite:///' + cls.test_db,
-                instance_id=0, stale_in_flight_threshold=10)
+                instance_id=1, stale_in_flight_threshold=10)
+        cls.no_cluster_db = PeekabooDatabase(
+            'sqlite:///' + cls.test_db, instance_id=0)
         cls.factory = SampleFactory(cuckoo = None,
                 connection_map = None,
                 base_dir = cls.conf.sample_base_dir,
@@ -92,10 +94,11 @@ class TestDatabase(unittest.TestCase):
 
     def test_5_in_flight_no_cluster(self):
         # should all behave as no-ops
-        self.assertTrue(self.db_con.mark_sample_in_flight(self.sample, 0))
-        self.assertTrue(self.db_con.mark_sample_in_flight(self.sample, 0))
-        self.assertIsNone(self.db_con.clear_sample_in_flight(self.sample, 0))
-        self.assertIsNone(self.db_con.clear_sample_in_flight(self.sample, 0))
+        self.assertTrue(self.no_cluster_db.mark_sample_in_flight(self.sample))
+        self.assertTrue(self.no_cluster_db.mark_sample_in_flight(self.sample))
+        self.assertIsNone(self.no_cluster_db.clear_sample_in_flight(self.sample))
+        self.assertIsNone(self.no_cluster_db.clear_sample_in_flight(self.sample))
+        self.assertIsNone(self.no_cluster_db.clear_in_flight_samples())
 
     def test_6_in_flight_cluster(self):
         self.assertTrue(self.db_con.mark_sample_in_flight(self.sample, 1))
@@ -136,8 +139,15 @@ class TestDatabase(unittest.TestCase):
         self.assertTrue(self.db_con.mark_sample_in_flight(sample2, 1))
         self.assertTrue(self.db_con.mark_sample_in_flight(sample3, 2))
 
-        # should be a no-op
+        # should be a no-op because there will never be any entries of instance
+        # 0
         self.assertIsNone(self.db_con.clear_in_flight_samples(0))
+        self.assertFalse(self.db_con.mark_sample_in_flight(self.sample, 1))
+        self.assertFalse(self.db_con.mark_sample_in_flight(sample2, 1))
+        self.assertFalse(self.db_con.mark_sample_in_flight(sample3, 2))
+
+        # should be a no-op because this database is not cluster-enabled
+        self.assertIsNone(self.no_cluster_db.clear_in_flight_samples())
         self.assertFalse(self.db_con.mark_sample_in_flight(self.sample, 1))
         self.assertFalse(self.db_con.mark_sample_in_flight(sample2, 1))
         self.assertFalse(self.db_con.mark_sample_in_flight(sample3, 2))
@@ -152,6 +162,11 @@ class TestDatabase(unittest.TestCase):
         sample2 = self.factory.make_sample('foo.pyc')
         sample2.set_attr('sha256sum', hashlib.sha256('foo').hexdigest())
         self.assertTrue(self.db_con.mark_sample_in_flight(sample2, 1))
+
+        # should not clear anything because the database is not cluster-enabled
+        self.assertTrue(self.no_cluster_db.clear_stale_in_flight_samples())
+        self.assertFalse(self.db_con.mark_sample_in_flight(self.sample, 1))
+        self.assertFalse(self.db_con.mark_sample_in_flight(sample2, 1))
 
         # should clear sample marker because it is stale but not sample2
         self.assertTrue(self.db_con.clear_stale_in_flight_samples())

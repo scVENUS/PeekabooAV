@@ -233,14 +233,14 @@ class PeekabooDatabase(object):
         :param start_time: Override the time the marker was placed for
                            debugging purposes.
         """
+        # an instance id of 0 denotes that we're alone and don't need to track
+        # in-flight samples in the database
+        if self.instance_id == 0:
+            return True
+
         # use our own instance id if none is given
         if instance_id is None:
             instance_id = self.instance_id
-
-        # an instance id of 0 denotes that we're alone and don't need to track
-        # in-flight samples in the database
-        if instance_id == 0:
-            return True
 
         if start_time is None:
             start_time = datetime.utcnow()
@@ -280,14 +280,14 @@ class PeekabooDatabase(object):
         :param instance_id: (optionally) The ID of the instance that is
                             handling this sample. Default: Us.
         """
+        # an instance id of 0 denotes that we're alone and don't need to track
+        # in-flight samples in the database
+        if self.instance_id == 0:
+            return
+
         # use our own instance id if none is given
         if instance_id is None:
             instance_id = self.instance_id
-
-        # an instance id of 0 denotes that we're alone and don't need to track
-        # in-flight samples in the database
-        if instance_id == 0:
-            return
 
         session = self.__Session()
 
@@ -323,18 +323,18 @@ class PeekabooDatabase(object):
         Clear all in-flight markers left over by previous runs or other
         instances by removing them from the lock table.
 
-        @instance_id: Clear our own (None), another instance's (positive
-                      integer), all instances' (negative integer) locks or do
-                      nothing (0).
+        :param instance_id: Clear our own (None), another instance's (positive
+                            integer), all instances' (negative integer) locks
+                            or do nothing (0).
         """
+        # an instance id of 0 denotes that we're alone and don't need to track
+        # in-flight samples
+        if self.instance_id == 0:
+            return
+
         # use our own instance id if none is given
         if instance_id is None:
             instance_id = self.instance_id
-
-        # an instance id of 0 denotes that we're alone and don't need to track
-        # in-flight samples
-        if instance_id == 0:
-            return
 
         session = self.__Session()
 
@@ -363,6 +363,11 @@ class PeekabooDatabase(object):
         Clear all in-flight markers that are too old and therefore stale. This
         detects instances which are locked up, crashed or shut down.
         """
+        # an instance id of 0 denotes that we're alone and don't need to track
+        # in-flight samples in the database
+        if self.instance_id == 0:
+            return True
+
         session = self.__Session()
 
         # delete only the locks of a specific instance
