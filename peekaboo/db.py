@@ -22,7 +22,11 @@
 #                                                                             #
 ###############################################################################
 
+""" A class wrapping database operations needed by Peekaboo based on
+SQLAlchemy. """
 
+import threading
+import logging
 from datetime import datetime, timedelta
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum
 from sqlalchemy.ext.declarative import declarative_base
@@ -32,8 +36,6 @@ from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from peekaboo import __version__
 from peekaboo.ruleset import Result
 from peekaboo.exceptions import PeekabooDatabaseError
-import threading
-import logging
 
 DB_SCHEMA_VERSION = 6
 
@@ -128,7 +130,8 @@ class AnalysisJournal(Base):
 
     def __str__(self):
         return (
-            '<AnalysisJournal(job_hash="%s", cuckoo_job_id="%s", filename="%s", analysis_time="%s")>'
+            '<AnalysisJournal(job_hash="%s", cuckoo_job_id="%s", '
+            'filename="%s", analysis_time="%s")>'
             % (self.job_hash,
                self.cuckoo_job_id,
                self.filename,
@@ -165,7 +168,7 @@ class PeekabooDatabase(object):
         """
         self.__engine = create_engine(db_url, pool_recycle=1)
         session_factory = sessionmaker(bind=self.__engine)
-        self.__Session = scoped_session(session_factory)
+        self.__session = scoped_session(session_factory)
         self.__lock = threading.RLock()
         self.instance_id = instance_id
         self.stale_in_flight_threshold = stale_in_flight_threshold
@@ -196,14 +199,14 @@ class PeekabooDatabase(object):
         analysis.sample = sample_info
 
         with self.__lock:
-            session = self.__Session()
+            session = self.__session()
             session.add(analysis)
             try:
                 session.commit()
-            except SQLAlchemyError as e:
+            except SQLAlchemyError as error:
                 session.rollback()
                 raise PeekabooDatabaseError(
-                    'Failed to add analysis task to the database: %s' % e
+                    'Failed to add analysis task to the database: %s' % error
                 )
             finally:
                 session.close()
@@ -212,11 +215,13 @@ class PeekabooDatabase(object):
         """
         Fetch information stored in the database about a given sample object.
 
-        :param sample: The sample object of which the information shall be fetched from the database.
-        :return: A SampleInfo object containing the information stored in teh database about the sample.
+        :param sample: The sample object of which the information shall be
+                       fetched from the database.
+        :return: A SampleInfo object containing the information stored in teh
+                 database about the sample.
         """
         with self.__lock:
-            session = self.__Session()
+            session = self.__session()
             sample_info = session.query(SampleInfo).filter_by(
                 sha256sum=sample.sha256sum,
                 file_extension=sample.file_extension).first()
@@ -245,7 +250,7 @@ class PeekabooDatabase(object):
         if start_time is None:
             start_time = datetime.utcnow()
 
-        session = self.__Session()
+        session = self.__session()
 
         # try to mark this sample as in flight in an atomic insert operation
         sha256sum = sample.sha256sum
@@ -257,16 +262,16 @@ class PeekabooDatabase(object):
         try:
             session.commit()
             locked = True
-            logger.debug('Marked sample %s as in flight' % sha256sum)
+            logger.debug('Marked sample %s as in flight', sha256sum)
         # duplicate primary key == entry already exists
-        except IntegrityError as e:
+        except IntegrityError:
             session.rollback()
-            logger.debug('Sample %s is already in flight on another instance' %
+            logger.debug('Sample %s is already in flight on another instance',
                          sha256sum)
-        except SQLAlchemyError as e:
+        except SQLAlchemyError as error:
             session.rollback()
             raise PeekabooDatabaseError('Unable to mark sample as in flight' %
-                                        e)
+                                        error)
         finally:
             session.close()
 
@@ -289,7 +294,7 @@ class PeekabooDatabase(object):
         if instance_id is None:
             instance_id = self.instance_id
 
-        session = self.__Session()
+        session = self.__session()
 
         # clear in-flight marker from database
         sha256sum = sample.sha256sum
@@ -299,10 +304,10 @@ class PeekabooDatabase(object):
 
         try:
             session.commit()
-        except SQLAlchemyError as e:
+        except SQLAlchemyError as error:
             session.rollback()
             raise PeekabooDatabaseError('Unable to clear in-flight status of '
-                                        'sample: %s' % e)
+                                        'sample: %s' % error)
         finally:
             session.close()
 
@@ -316,7 +321,7 @@ class PeekabooDatabase(object):
                                         'status cleared against database '
                                         'constraints!?' % sha256sum)
 
-        logger.debug('Cleared sample %s from in-flight list' % sha256sum)
+        logger.debug('Cleared sample %s from in-flight list', sha256sum)
 
     def clear_in_flight_samples(self, instance_id=None):
         """
@@ -324,8 +329,11 @@ class PeekabooDatabase(object):
         instances by removing them from the lock table.
 
         :param instance_id: Clear our own (None), another instance's (positive
-                            integer), all instances' (negative integer) locks
-                            or do nothing (0).
+                            integer) or all instances' (negative integer) locks.
+                            Since an instance_id of 0 disables in-flight sample
+                            tracking, no instance will ever set a marker with
+                            that ID so that specifying 0 here will amount to a
+                            no-op or rather clean-up of invalid entries.
         """
         # an instance id of 0 denotes that we're alone and don't need to track
         # in-flight samples
@@ -336,7 +344,7 @@ class PeekabooDatabase(object):
         if instance_id is None:
             instance_id = self.instance_id
 
-        session = self.__Session()
+        session = self.__session()
 
         if instance_id < 0:
             # delete all locks
@@ -347,14 +355,14 @@ class PeekabooDatabase(object):
             session.query(InFlightSample).filter(
                 InFlightSample.instance_id == instance_id).delete()
             logger.debug('Clearing database of all in-flight samples of '
-                         'instance %d.' % instance_id)
+                         'instance %d.', instance_id)
 
         try:
             session.commit()
-        except SQLAlchemyError as e:
+        except SQLAlchemyError as error:
             session.rollback()
             raise PeekabooDatabaseError('Unable to clear the database of '
-                                        'in-flight samples: %s' % e)
+                                        'in-flight samples: %s' % error)
         finally:
             session.close()
 
@@ -368,7 +376,7 @@ class PeekabooDatabase(object):
         if self.instance_id == 0:
             return True
 
-        session = self.__Session()
+        session = self.__session()
 
         # delete only the locks of a specific instance
         cleared = session.query(InFlightSample).filter(
@@ -376,16 +384,16 @@ class PeekabooDatabase(object):
                 seconds=self.stale_in_flight_threshold)).delete()
         logger.debug(
             'Clearing database of all stale in-flight samples '
-            '(%d seconds)' % self.stale_in_flight_threshold)
+            '(%d seconds)', self.stale_in_flight_threshold)
 
         try:
             session.commit()
             if cleared > 0:
-                logger.warn('%d stale in-flight samples cleared.' % cleared)
-        except SQLAlchemyError as e:
+                logger.warn('%d stale in-flight samples cleared.', cleared)
+        except SQLAlchemyError as error:
             session.rollback()
             raise PeekabooDatabaseError('Unable to clear the database of '
-                                        'stale in-flight samples: %s' % e)
+                                        'stale in-flight samples: %s' % error)
         finally:
             session.close()
 
@@ -395,16 +403,15 @@ class PeekabooDatabase(object):
         """ Drop all tables of the database. """
         try:
             Base.metadata.drop_all(self.__engine)
-        except SQLAlchemyError as e:
+        except SQLAlchemyError as error:
             raise PeekabooDatabaseError(
-                'Unable to drop all tables of the database: %s' % e
-            )
+                'Unable to drop all tables of the database: %s' % error)
 
     def _db_schema_exists(self):
         if not self.__engine.dialect.has_table(self.__engine, '_meta'):
             return False
         else:
-            session = self.__Session()
+            session = self.__session()
             # get the first of potentially multiple metadata entries ordered by
             # descending schema version to get the newest currently configured
             # schema
@@ -431,15 +438,14 @@ class PeekabooDatabase(object):
         meta.db_schema_version = DB_SCHEMA_VERSION
         # TODO: Get Cuckoo version.
         meta.cuckoo_version = '2.0'
-        session = self.__Session()
+        session = self.__session()
         session.add(meta)
         try:
             session.commit()
-        except SQLAlchemyError as e:
+        except SQLAlchemyError as error:
             session.rollback()
             raise PeekabooDatabaseError(
-                'Cannot initialize the database: %s' % e
-            )
+                'Cannot initialize the database: %s' % error)
         finally:
             session.close()
 
