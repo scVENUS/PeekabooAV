@@ -22,7 +22,6 @@
 #                                                                             #
 ###############################################################################
 
-
 import os
 import sys
 import grp
@@ -43,7 +42,7 @@ from peekaboo.db import PeekabooDatabase
 from peekaboo.toolbox.sampletools import ConnectionMap
 from peekaboo.queuing import JobQueue
 from peekaboo.sample import SampleFactory
-from peekaboo.exceptions import PeekabooDatabaseError
+from peekaboo.exceptions import PeekabooDatabaseError, PeekabooConfigException
 from peekaboo.toolbox.cuckoo import Cuckoo, CuckooEmbed, CuckooApi
 
 
@@ -203,22 +202,16 @@ def run():
     arg_parser.add_argument(
         '-c', '--config',
         action='store',
-        required=False,
-        default=os.path.join('./peekaboo.conf'),
         help='The configuration file for Peekaboo.'
     )
     arg_parser.add_argument(
         '-d', '--debug',
         action='store_true',
-        required=False,
-        default=False,
         help="Run Peekaboo in debug mode regardless of what's specified in the configuration."
     )
     arg_parser.add_argument(
         '-D', '--daemon',
         action='store_true',
-        required=False,
-        default=False,
         help='Run Peekaboo in daemon mode (suppresses the logo to be written to STDOUT).'
     )
     args = arg_parser.parse_args()
@@ -228,39 +221,28 @@ def run():
     else:
         print('Starting Peekaboo %s.' % __version__)
 
-    # read configuration
-    if not os.path.isfile(args.config):
-        # logger doesn't exist here
-        print('Configuration file "%s" does not exist or is not a file.' %
-                args.config)
-        sys.exit(1)
-
-    if not os.access(args.config, os.R_OK):
-        print('Configuration file "%s" is not accessible for reading.' %
-                args.config)
-        sys.exit(1)
-
-    config = PeekabooConfig(args.config)
-
     # Check if CLI arguments override the configuration
+    log_level = None
     if args.debug:
-        config.change_log_level('DEBUG')
+        log_level = logging.DEBUG
 
-    # Log the configuration options if we are in debug mode
-    if config.log_level == logging.DEBUG:
-        logger.debug(config.__str__())
+    try:
+        config = PeekabooConfig(config_file=args.config, log_level=log_level)
+    except PeekabooConfigException as error:
+        logging.critical(error)
+        sys.exit(1)
 
     # establish a connection to the database
     try:
-        db_con = PeekabooDatabase(db_url=config.db_url,
-                instance_id=config.cluster_instance_id,
-                stale_in_flight_threshold=config.cluster_stale_in_flight_threshold)
-    except PeekabooDatabaseError as e:
-        logging.exception(e)
+        db_con = PeekabooDatabase(
+            db_url=config.db_url, instance_id=config.cluster_instance_id,
+            stale_in_flight_threshold=config.cluster_stale_in_flight_threshold)
+    except PeekabooDatabaseError as error:
+        logging.critical(error)
         sys.exit(1)
-    except Exception as e:
-        logger.critical('Failed to establish a connection to the database.')
-        logger.exception(e)
+    except Exception as error:
+        logger.critical('Failed to establish a connection to the database '
+                        'at %s: %s', config.db_url, error)
         sys.exit(1)
 
     # Import debug module if we are in debug mode
@@ -271,16 +253,21 @@ def run():
         debugger.start()
 
     if os.getuid() == 0:
-        logger.warning('Peekaboo should not run as root.')
-        # drop privileges to user
-        os.setgid(grp.getgrnam(config.group)[2])
-        os.setuid(pwd.getpwnam(config.user)[2])
-        # set $HOME to the users home directory
-        # (VirtualBox must access the configs)
-        os.environ['HOME'] = pwd.getpwnam(config.user)[5]
-        logger.info("Dropped privileges to user %s and group %s"
-                    % (config.user, config.group))
-        logger.debug('$HOME is ' + os.environ['HOME'])
+        if config.user and config.group:
+            # drop privileges to user
+            os.setgid(grp.getgrnam(config.group)[2])
+            os.setuid(pwd.getpwnam(config.user)[2])
+            logger.info("Dropped privileges to user %s and group %s"
+                        % (config.user, config.group))
+
+            # set $HOME to the users home directory
+            # (VirtualBox must access the configs)
+            os.environ['HOME'] = pwd.getpwnam(config.user)[5]
+            logger.debug('$HOME is ' + os.environ['HOME'])
+        else:
+            logger.warning('Peekaboo should not run as root. Please '
+                           'configure a user and group to run as.')
+            sys.exit(0)
 
     # write PID file
     pid = str(os.getpid())
@@ -315,9 +302,9 @@ def run():
     connection_map = ConnectionMap()
 
     if config.cuckoo_mode == "embed":
-        cuckoo = CuckooEmbed(job_queue, connection_map, config.interpreter,
-                config.cuckoo_exec, config.cuckoo_submit,
-                config.cuckoo_storage)
+        cuckoo = CuckooEmbed(job_queue, connection_map, config.cuckoo_exec,
+                             config.cuckoo_submit, config.cuckoo_storage,
+                             config.interpreter)
     # otherwise it's the new API method and default
     else:
         cuckoo = CuckooApi(job_queue, connection_map, config.cuckoo_url,
@@ -364,8 +351,8 @@ def run():
         systemd.notify("READY=1")
         # If this dies Peekaboo dies, since this is the main thread. (legacy)
         rc = cuckoo.do()
-    except Exception as e:
-        logger.exception(e)
+    except Exception as error:
+        logger.critical('Main thread aborted: %s' % error)
     finally:
         server.shutdown()
         server.server_close()

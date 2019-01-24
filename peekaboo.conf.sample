@@ -4,35 +4,35 @@
 #
 
 
-[global]
-user             :    peekaboo
-group            :    peekaboo
-socket_file      :    /opt/peekaboo/peekaboo.sock
-pid_file         :    /opt/peekaboo/peekaboo.pid
-interpreter      :    /usr/bin/python
-worker_count     :    3
-sample_base_dir  :    /tmp
-job_hash_regex   :    /var/lib/amavis/tmp/([^/]+)/parts.*
+#[global]
+#user             :    peekaboo
+#group            :    peekaboo
+#socket_file      :    /var/run/peekaboo/peekaboo.sock
+#pid_file         :    /var/run/peekaboo/peekaboo.pid
+#interpreter      :    /usr/bin/python -u
+#worker_count     :    3
+#sample_base_dir  :    /tmp
+#job_hash_regex   :    /var/lib/amavis/tmp/([^/]+)/parts.*
 # 'yes' or 'no'  to use Peekaboo's debug module, which allows
 # additional code execution at runtime.
-use_debug_module :    no
+#use_debug_module :    no
 # Whether or not to cleanup temporary files under /tmp
-keep_mail_data   :    no
+#keep_mail_data   :    no
 
 
-[ruleset]
-config           :    /path/to/ruleset.conf
+#[ruleset]
+#config           :    /opt/peekaboo/etc/ruleset.conf
 
 
 #
 # Logging configuration
 #
-[logging]
+#[logging]
 # log_level
 # possible values: CRITICAL | ERROR | WARNING | INFO | DEBUG
-log_level        :    DEBUG
+#log_level        :    INFO
 # note that any % must be escaped with another %.
-log_format       :    %%(asctime)s - %%(name)s - (%%(threadName)s) - %%(levelname)s - %%(message)s
+#log_format       :    %%(asctime)s - %%(name)s - (%%(threadName)s) - %%(levelname)s - %%(message)s
 # if you use systemd you don't want the timestamp
 # log_format       :    %%(name)s - (%%(threadName)s) - %%(levelname)s - %%(message)s
 
@@ -40,9 +40,9 @@ log_format       :    %%(asctime)s - %%(name)s - (%%(threadName)s) - %%(levelnam
 #
 # Database configuration
 #
-[db]
+#[db]
 # SQLite
-url              :    sqlite:////path/to/database.db
+#url              :    sqlite:////var/lib/peekaboo/peekaboo.db
 # MySQL (recommended)
 # url             :    mysql+mysqldb://user:password@host/database
 # PostgreSQL
@@ -51,36 +51,35 @@ url              :    sqlite:////path/to/database.db
 #
 # Cuckoo specific settings
 #
-[cuckoo]
+#[cuckoo]
 # mode has two options:
 #  embed   : for legacy embeded mode
 #  api     : to access cuckoo via the REST api
-mode             :    api
+#mode             :    api
 
 # embed mode
-exec             :    /usr/local/bin/cuckoo
-submit           :    /usr/local/bin/cuckoo submit
+#exec             :    /opt/cuckoo/bin/cuckoo
+#submit           :    /opt/cuckoo/bin/cuckoo submit
+#storage_path     :    /var/lib//peekaboo/.cuckoo/storage
 
 # api mode
-url              :    http://127.0.0.1:8090
-poll_interval    :    5
+#url              :    http://127.0.0.1:8090
+#poll_interval    :    5
 
-storage_path     :    /home/peekaboo/.cuckoo/storage
-
-[cluster]
+#[cluster]
 # if multiple instances are to run in parallel and avoid concurrent analysis of
 # the same sample, set instance_id to a nonzero positive unique integer value
 # on each instance and use the same networked DBMS instance (MySQL or
 # PostgreSQL) for all them. (SQLite is not a good choice for this.) Also, do
 # make really, really sure to provide unique IDs. Two instances using the same
 # ID will corrupt each others' records and there is no mechanism to detect this.
-instance_id: 0
+#instance_id: 0
 
 # number of seconds after which in-flight markers of samples are to be
 # removed/ignored, assuming that the instance processing them has crashed or
 # been shut down.
-stale_in_flight_threshold: 3600
+#stale_in_flight_threshold: 3600
 
 # Interval in which to check if other instances of a Peekaboo cluster have
 # finished processing samples we have held.
-duplicate_check_interval: 60
+#duplicate_check_interval: 60

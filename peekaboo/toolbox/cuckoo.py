@@ -84,8 +84,8 @@ class CuckooEmbed(Cuckoo):
         @author: Sebastian Deiss
         @author: Felix Bauer
     """
-    def __init__(self, job_queue, connection_map, interpreter,
-            cuckoo_exec, cuckoo_submit, cuckoo_storage):
+    def __init__(self, job_queue, connection_map, cuckoo_exec, cuckoo_submit,
+                 cuckoo_storage, interpreter=None):
         Cuckoo.__init__(self, job_queue, connection_map)
         self.interpreter = interpreter
         self.cuckoo_exec = cuckoo_exec
@@ -103,7 +103,7 @@ class CuckooEmbed(Cuckoo):
         try:
             # cuckoo_submit is a list, make a copy as to not modify the
             # original value
-            proc = self.cuckoo_submit + [sample]
+            proc = self.cuckoo_submit.split(' ') + [sample]
             p = subprocess.Popen(proc,
                                  stdout=subprocess.PIPE,
                                  stderr=subprocess.PIPE)
@@ -155,10 +155,15 @@ class CuckooEmbed(Cuckoo):
         return report
 
     def do(self):
-        # Run Cuckoo sandbox, parse log output, and report back of Peekaboo.
-        srv = CuckooServer(self)
-        reactor.spawnProcess(srv, self.interpreter, [self.interpreter, '-u',
-                                                     self.cuckoo_exec])
+        """ Run Cuckoo sandbox, parse log output, and report back of Peekaboo. """
+        command = self.cuckoo_exec.split(' ')
+
+        # allow for injecting a custom interpreter which we use to run cuckoo
+        # with python -u for unbuffered standard output
+        if self.interpreter:
+            command = self.interpreter.split(' ') + command
+
+        reactor.spawnProcess(CuckooServer(self), command[0], command)
 
         # do not install twisted's signal handlers because it will screw with
         # our logic (install a handler for SIGTERM and SIGCHLD but not for
