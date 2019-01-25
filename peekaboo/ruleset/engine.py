@@ -87,8 +87,6 @@ class RulesetEngine(object):
         try:
             # skip disabled rules.
             if self.config.rule_enabled(rule_name):
-                # guaranteed to be a hash, albeit empty if no rule config
-                # exists
                 rule_config = self.config.rule_config(rule_name)
                 rule = rule_class(config=rule_config, db_con=self.db_con)
                 result = rule.evaluate(sample)

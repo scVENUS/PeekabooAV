@@ -26,15 +26,33 @@
 defaults as well as reading a configuration file. """
 
 
-import os
 import sys
 import logging
-from ConfigParser import SafeConfigParser, NoSectionError, NoOptionError
+import ConfigParser
 from peekaboo.exceptions import PeekabooConfigException
 
 
 logger = logging.getLogger(__name__)
 
+class PeekabooConfigParser(ConfigParser.SafeConfigParser):
+    """ A config parser that gives error feedback if a required file does not
+    exist or cannot be opened. """
+
+    def __init__(self, config_file):
+        # super() does not work here because ConfigParser uses old-style
+        # classes in python 2
+        ConfigParser.SafeConfigParser.__init__(self)
+
+        try:
+            self.readfp(open(config_file))
+        except IOError as ioerror:
+            raise PeekabooConfigException(
+                'Configuration file "%s" can not be opened for reading: %s' %
+                (config_file, ioerror))
+        except ConfigParser.Error as cperror:
+            raise PeekabooConfigException(
+                'Configuration file "%s" can not be parsed: %s' %
+                (config_file, cperror))
 
 class PeekabooConfig(object):
     """
@@ -120,18 +138,7 @@ class PeekabooConfig(object):
         # read configuration file. Note that we require a configuration file
         # here. We may change that if we decide that we want to allow the user
         # to run us with the above defaults only.
-        if not os.path.isfile(self.config_file):
-            raise PeekabooConfigException(
-                'Configuration file "%s" does not exist or is not a file.' %
-                self.config_file)
-
-        if not os.access(self.config_file, os.R_OK):
-            raise PeekabooConfigException(
-                'Configuration file "%s" is not accessible for reading.' %
-                self.config_file)
-
-        self.__config = SafeConfigParser()
-        self.__config.read(self.config_file)
+        self.__config = PeekabooConfigParser(self.config_file)
 
         # overwrite above defaults in our member variables via indirect access
         settings = vars(self)
@@ -152,10 +159,6 @@ class PeekabooConfig(object):
 
         # here we could overwrite defaults and config file with additional
         # command line arguments if required
-
-        # log the configuration options if we are in debug mode
-        if self.log_level == logging.DEBUG:
-            logger.debug(self)
 
     def get(self, section, option, default=None, option_type=None):
         """ Get an option from the configuration file parser. Automatically
@@ -184,10 +187,10 @@ class PeekabooConfig(object):
 
         try:
             return getter[option_type](section, option)
-        except NoSectionError:
+        except ConfigParser.NoSectionError:
             logger.debug('Configuration section %s not found - using '
                          'default %s', section, default)
-        except NoOptionError:
+        except ConfigParser.NoOptionError:
             logger.debug('Configuration option %s not found in section '
                          '%s - using default: %s', option, section, default)
 
@@ -209,7 +212,7 @@ class PeekabooConfig(object):
         if level is None:
             return default
 
-        if not levels.has_key(level):
+        if level not in levels:
             raise PeekabooConfigException('Unknown log level %s' % level)
 
         return levels[level]
@@ -243,54 +246,89 @@ class PeekabooConfig(object):
     __repr__ = __str__
 
 
-class PeekabooRulesetConfiguration(object):
+class PeekabooRulesetConfig(object):
     """
     This class represents the ruleset configuration file "ruleset.conf".
 
     The ruleset configuration is stored as a dictionary in the form of
     ruleset_config[rule_name][config_option] = value | [value1, value2, ...]
 
-    @author: Sebastian Deiss
-    @since: 1.6
+    :author: Sebastian Deiss
+    :since: 1.6
     """
     def __init__(self, config_file):
         self.config_file = config_file
         self.ruleset_config = {}
-        config = SafeConfigParser()
-        try:
-            config.read(self.config_file)
-            for section in config.sections():
-                if section not in self.ruleset_config.keys():
-                    self.ruleset_config[section] = {}
-                for setting, value in config.items(section):
-                    if '.' in setting:
-                        key = setting.split('.')[0]
-                        if key not in self.ruleset_config[section]:
-                            self.ruleset_config[section][key] = []
-                        self.ruleset_config[section][key].append(value)
-                    else:
-                        self.ruleset_config[section][setting] = value
-        except NoSectionError as e:
-            logger.exception(e)
-        except NoOptionError as e:
-            logger.exception(e)
+
+        config = PeekabooConfigParser(self.config_file)
+        sections = config.sections()
+        for section in sections:
+            self.ruleset_config[section] = {}
+
+        for section in sections:
+            for setting in config.options(section):
+                # Parse 'setting' into (key) and 'setting.subscript' into
+                # (key, subscript) and use it to determine if this setting is a
+                # list. Note how we do not use the subscript at all here.
+                name_parts = setting.split('.')
+                key = name_parts[0]
+                is_list = len(name_parts) > 1
+
+                saved_val = self.ruleset_config[section].get(key)
+                if saved_val is None and is_list:
+                    saved_val = []
+
+                # If the setting wants to add to a list the saved or freshly
+                # initialised value from above should be a list. Otherwise it
+                # should of course not be.
+                if is_list != isinstance(saved_val, list):
+                    raise PeekabooConfigException(
+                        'Setting %s in section %s specified as list as well '
+                        'as individual setting' % (setting, section))
+
+                # Potential further checks:
+                # - There are no duplicate settings with ConfigParser. The last
+                #   one always wins.
+
+                # special keyword enabled is boolean and has the same behaviour
+                # for all rules
+                if key.lower() in ['enabled']:
+                    saved_val = config.getboolean(section, setting)
+                elif is_list:
+                    saved_val.append(config.get(section, setting))
+                else:
+                    saved_val = config.get(section, setting)
+
+                self.ruleset_config[section][key] = saved_val
 
     def rule_config(self, rule):
-        # potentially do some validity checks here
+        """ Get the configuration for a rule.
 
-        # arbitrary interface definition: return an empty hash if no rule
-        # config exists as empty rule config so the rule func can rely on it
-        # and does not need to do any type checking
-        return self.ruleset_config.get(rule, {})
+        :param rule: Name of the rule whose configuration to return.
+        :type rule: string
+        :return: dict of rule configuration settings or None if no
+                 configuration is present. """
+        return self.ruleset_config.get(rule)
 
-    # rule is enabled as long as:
-    # - no config section for that rule is present
-    # - enabled keyword is not present in that section or
-    # - enabled is not equal to 'no'
     def rule_enabled(self, rule):
-        return (self.rule_config(rule).get('enabled', 'yes') != 'no')
+        """ Check if a rule is enabled. Cases are:
+
+        - no config section for that rule is present
+        - enabled keyword is not present in that section or
+        - the value of the enabled is True (i.e. yes, true, 1 in the file)
+
+        :param rule: Name of the rule to check if enabled or not.
+        :type rule: string
+        :return: True or False based on above criteria.
+        """
+        config = self.rule_config(rule)
+        if config is None:
+            return True
+
+        return config.get('enabled', True)
 
     def __str__(self):
-        return '<PeekabooRulesetConfiguration(filepath="%s")>' % self.config_file
+        return str('<PeekabooRulesetConfiguration(filepath="%s", %s)>' %
+                   (self.config_file, self.ruleset_config))
 
     __repr__ = __str__

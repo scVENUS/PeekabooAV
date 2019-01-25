@@ -37,7 +37,7 @@ from threading import Thread
 from argparse import ArgumentParser
 from sdnotify import SystemdNotifier
 from peekaboo import _owl, __version__
-from peekaboo.config import PeekabooConfig, PeekabooRulesetConfiguration
+from peekaboo.config import PeekabooConfig, PeekabooRulesetConfig
 from peekaboo.db import PeekabooDatabase
 from peekaboo.toolbox.sampletools import ConnectionMap
 from peekaboo.queuing import JobQueue
@@ -228,6 +228,7 @@ def run():
 
     try:
         config = PeekabooConfig(config_file=args.config, log_level=log_level)
+        logger.debug(config)
     except PeekabooConfigException as error:
         logging.critical(error)
         sys.exit(1)
@@ -294,7 +295,13 @@ def run():
 
     # workers of the job queue need the ruleset configuration to create the
     # ruleset engine with it
-    ruleset_config = PeekabooRulesetConfiguration(config.ruleset_config)
+    try:
+        ruleset_config = PeekabooRulesetConfig(config.ruleset_config)
+        logger.debug(ruleset_config)
+    except PeekabooConfigException as error:
+        logging.critical(error)
+        sys.exit(1)
+
     job_queue = JobQueue(
         worker_count=config.worker_count, ruleset_config=ruleset_config,
         db_con=db_con,
