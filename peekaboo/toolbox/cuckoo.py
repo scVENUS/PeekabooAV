@@ -33,7 +33,6 @@ import requests
 import random
 from twisted.internet import protocol, reactor, process
 from time import sleep
-from peekaboo import MultiRegexMatcher
 from peekaboo.exceptions import CuckooAnalysisFailedException
 
 
@@ -78,11 +77,10 @@ class Cuckoo:
         pass
 
 class CuckooEmbed(Cuckoo):
-    """
-        Runs and interfaces with Cuckoo in IPC
+    """ Runs and interfaces with Cuckoo in IPC
         
-        @author: Sebastian Deiss
-        @author: Felix Bauer
+    :author: Sebastian Deiss
+    :author: Felix Bauer
     """
     def __init__(self, job_queue, connection_map, cuckoo_exec, cuckoo_submit,
                  cuckoo_storage, interpreter=None):
@@ -92,6 +90,14 @@ class CuckooEmbed(Cuckoo):
         self.cuckoo_submit = cuckoo_submit
         self.cuckoo_storage = cuckoo_storage
         self.exit_code = 0
+
+        # process output to get job ID
+        patterns = (
+            # Example: Success: File "/var/lib/peekaboo/.bashrc" added as task with ID #4
+            "Success.*: File .* added as task with ID #([0-9]*)",
+            "added as task with ID ([0-9]*)",
+        )
+        self.job_id_patterns = [re.compile(pattern) for pattern in patterns]
     
     def submit(self, sample):
         """
@@ -118,22 +124,25 @@ class CuckooEmbed(Cuckoo):
             out, err = p.communicate()
             logger.debug("cuckoo submit STDOUT: %s" % out)
             logger.debug("cuckoo submit STDERR: %s" % err)
-            # process output to get job ID
-            patterns = list()
-            # Example: Success: File "/var/lib/peekaboo/.bashrc" added as task with ID #4
-            patterns.append(".*Success.*: File .* added as task with ID #([0-9]*).*")
-            patterns.append(".*added as task with ID ([0-9]*).*")
-            matcher = MultiRegexMatcher(patterns)
+
             response = out.replace("\n", "")
-            m = matcher.match(response)
-            logger.debug('Pattern %d matched.' % matcher.matched_pattern)
+
+            match = None
+            pattern_no = 0
+            for pattern in self.job_id_patterns:
+                match = re.search(pattern, response)
+                if match is not None:
+                    logger.debug('Pattern %d matched.' % pattern_no)
+                    break
+
+                pattern_no += 1
             
-            if m:
-                job_id = int(m.group(1))
+            if match is not None:
+                job_id = int(match.group(1))
                 return job_id
+
             raise CuckooAnalysisFailedException(
-                                                'Unable to extract job ID from given string %s' % response
-                                                )
+                'Unable to extract job ID from given string %s' % response)
 
     def get_report(self, job_id):
         path = os.path.join(self.cuckoo_storage,

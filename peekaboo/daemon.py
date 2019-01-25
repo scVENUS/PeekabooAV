@@ -36,7 +36,7 @@ import json
 from threading import Thread
 from argparse import ArgumentParser
 from sdnotify import SystemdNotifier
-from peekaboo import _owl, __version__
+from peekaboo import PEEKABOO_OWL, __version__
 from peekaboo.config import PeekabooConfig, PeekabooRulesetConfig
 from peekaboo.db import PeekabooDatabase
 from peekaboo.toolbox.sampletools import ConnectionMap
@@ -216,10 +216,9 @@ def run():
     )
     args = arg_parser.parse_args()
 
+    print('Starting Peekaboo %s.' % __version__)
     if not args.daemon:
-        print(_owl)
-    else:
-        print('Starting Peekaboo %s.' % __version__)
+        print(PEEKABOO_OWL)
 
     # Check if CLI arguments override the configuration
     log_level = None

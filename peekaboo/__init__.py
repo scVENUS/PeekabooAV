@@ -22,8 +22,7 @@
 #                                                                             #
 ###############################################################################
 
-
-import re
+""" Peekaboo constant module data. """
 
 
 VERSION = (1, 6, 2)
@@ -36,9 +35,7 @@ __copyright__ = 'Copyright (C) 2016-2018 science + computing ag. All rights rese
 __license__ = 'GPLv3'
 
 
-_owl = """
-PEEKABOO {0}
-
+PEEKABOO_OWL = r"""
 Peekaboo Extended Email Attachment Behavior Observation Owl
 
                    _a_aa                    a_aa,
@@ -62,38 +59,4 @@ Peekaboo Extended Email Attachment Behavior Observation Owl
         aaad0P!!!!!!                             '!!!!!!Laaa
   _aa!!!!                                                    !! _,
 (never mind the K)
-""".format(__version__)
-
-
-#
-# Helpers
-#
-
-
-class MultiRegexMatcher(object):
-    """
-    Validate multiple regular expressions for the same string.
-
-    @author: Sebastian Deiss
-    """
-    def __init__(self, patterns, flags=0):
-        self.__patterns = [(re.compile(pattern, flags)) for pattern in patterns]
-        self.matched_pattern = -1    # No pattern matched (default value)
-
-    def match(self, str):
-        """
-        Try to apply the patterns at the start of the string.
-        As soon as a pattern that matches, processing is stopped
-        and a match object is returned.
-
-        :param str: The string to apply the pattern to.
-        :return: a match object, or None if no match was found.
-        """
-        iter_count = 0
-        for pattern in self.__patterns:
-            _match = re.match(pattern, str)
-            if _match:
-                self.matched_pattern = iter_count
-                return _match
-            iter_count += 1
-        return None
+"""
