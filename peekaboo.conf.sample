@@ -48,7 +48,6 @@ url              :    sqlite:////path/to/database.db
 # PostgreSQL
 # url             :    postgresql://user:password@host:port/database
 
-
 #
 # Cuckoo specific settings
 #
@@ -67,3 +66,21 @@ url              :    http://127.0.0.1:8090
 poll_interval    :    5
 
 storage_path     :    /home/peekaboo/.cuckoo/storage
+
+[cluster]
+# if multiple instances are to run in parallel and avoid concurrent analysis of
+# the same sample, set instance_id to a nonzero positive unique integer value
+# on each instance and use the same networked DBMS instance (MySQL or
+# PostgreSQL) for all them. (SQLite is not a good choice for this.) Also, do
+# make really, really sure to provide unique IDs. Two instances using the same
+# ID will corrupt each others' records and there is no mechanism to detect this.
+instance_id: 0
+
+# number of seconds after which in-flight markers of samples are to be
+# removed/ignored, assuming that the instance processing them has crashed or
+# been shut down.
+stale_in_flight_threshold: 3600
+
+# Interval in which to check if other instances of a Peekaboo cluster have
+# finished processing samples we have held.
+duplicate_check_interval: 60

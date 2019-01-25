@@ -1,4 +1,4 @@
-sqlalchemy>=1.0.8
+sqlalchemy>=1.1.0
 Twisted>=17.1.0
 service_identity>=16.0.0
 python-magic>=0.4.12

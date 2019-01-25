@@ -47,11 +47,10 @@ class SampleFactory(object):
     Contains all the global configuration data and object references each
     sample needs and thus serves as a registry of potential API breakage
     perhaps deserving looking into. """
-    def __init__(self, cuckoo, db_con, connection_map, base_dir, job_hash_regex,
+    def __init__(self, cuckoo, connection_map, base_dir, job_hash_regex,
             keep_mail_data):
         # object references for interaction
         self.cuckoo = cuckoo
-        self.db_con = db_con
         self.connection_map = connection_map
 
         # configuration
@@ -60,7 +59,7 @@ class SampleFactory(object):
         self.keep_mail_data = keep_mail_data
 
     def make_sample(self, file_path, metainfo = {}, socket = None):
-        return Sample(file_path, self.cuckoo, self.db_con, metainfo,
+        return Sample(file_path, self.cuckoo, metainfo,
                 self.connection_map, socket, self.base_dir, self.job_hash_regex,
                 self.keep_mail_data)
 
@@ -78,18 +77,18 @@ class Sample(object):
     @author: Felix Bauer
     @author: Sebastian Deiss
     """
-    def __init__(self, file_path, cuckoo = None, db_con = None, metainfo = {},
+    def __init__(self, file_path, cuckoo = None, metainfo = {},
             connection_map = None, socket = None, base_dir = None,
             job_hash_regex = None, keep_mail_data = False):
         self.__path = file_path
         self.__cuckoo = cuckoo
-        self.__db_con = db_con
         self.__wd = None
         self.__filename = os.path.basename(self.__path)
         # A symlink that points to the actual file named
         # sha256sum.suffix
         self.__submit_path = None
         self.__result = ruleset.Result.unchecked
+        self.__reason = None
         self.__report = []  # Peekaboo's own report
         self.__connection_map = connection_map
         self.__socket = socket
@@ -144,11 +143,6 @@ class Sample(object):
             os.symlink(self.__path, self.__submit_path)
 
         self.initialized = True
-
-        # Add sample to database with state 'inProgress' if the sample is unknown
-        # to avoid multiple concurrent analysis.
-        self.__result = ruleset.Result.inProgress
-        self.__db_con.analysis2db(self)
 
         message = "Datei \"%s\" %s wird analysiert\n" % (self.__filename,
                                                          self.sha256sum)
@@ -217,6 +211,9 @@ class Sample(object):
     def get_result(self):
         return self.__result
 
+    def get_reason(self):
+        return self.__reason
+
     def get_peekaboo_report(self):
         return ''.join(self.__report)
 
@@ -233,13 +230,7 @@ class Sample(object):
         logger.debug("Job hash for this sample: %s" % job_hash)
         return job_hash
 
-    def save_result(self):
-        if self.known_to_db:
-            logger.debug('Known sample info not logged to database')
-        else:
-            logger.debug('Saving results to database')
-            self.__db_con.sample_info_update(self)
-
+    def remove_from_connection_map(self):
         if self.__connection_map is not None:
             # de-register ourselves from the connection map
             if self.__socket is not None:
@@ -262,9 +253,9 @@ class Sample(object):
             logger.debug("Current result: %s, Rule result: %s"
                          % (self.__result, rule_result.result))
             # check if result of this rule is worse than what we know so far
-            if rule_result.result > self.__result:
+            if rule_result.result >= self.__result:
                 self.__result = rule_result.result
-                self.set_attr('reason', rule_result.reason)
+                self.__reason = rule_result.reason
 
     def report(self):
         """
@@ -280,10 +271,6 @@ class Sample(object):
             self.__report.append(message)
             self.__send_message(message)
 
-        if self.__result == ruleset.Result.inProgress:
-            logger.warning('Ruleset result forces to unchecked.')
-            self.__result = ruleset.Result.unchecked
-
         message = "Die Datei \"%s\" wurde als \"%s\" eingestuft\n\n" \
                   % (self.__filename, self.__result.name)
         self.__report.append(message)
@@ -297,25 +284,6 @@ class Sample(object):
                 self.set_attr('sha256sum', checksum)
                 return checksum
         return self.get_attr('sha256sum')
-
-    @property
-    def known(self):
-        if self.known_to_db:
-            self.set_attr('known', True)
-            return True
-        return False
-
-    # These two hint at architectural breakage: Why do we sometimes want to know if
-    # a sample is known, its previous classification (result, reason) without
-    # updating its internal state (attribute)? Why is the sample interacting
-    # with the database in the first place?
-    @property
-    def known_to_db(self):
-        return self.__db_con.known(self)
-
-    @property
-    def info_from_db(self):
-        return self.__db_con.sample_info_fetch(self)
 
     @property
     def file_extension(self):
@@ -395,20 +363,6 @@ class Sample(object):
         return -1
 
     @property
-    def reason(self):
-        # TODO: Cover all possible cases.
-        # if reason exists and sample is not known?
-        if not self.has_attr('reason'):
-            if not self.has_attr('known'):
-                rr = self.__db_con.fetch_rule_result(self)
-                self.__result = rr.result
-                self.set_attr('known', True)
-                self.set_attr('reason',
-                              'Ausschlaggebendes Ergebnis laut Datenbank: %s'
-                              % rr.reason)
-        return self.get_attr('reason')
-
-    @property
     def office_macros(self):
         if not self.has_attr('office_macros'):
             self.set_attr('office_macros', has_office_macros(self.__path))
@@ -439,7 +393,6 @@ class Sample(object):
                           % (self, job_id)
                 self.__report.append(message)
                 logger.info('Sample submitted to Cuckoo. Job ID: %s. Sample: %s' % (job_id, self))
-                self.__db_con.analysis_update(self)
                 raise CuckooReportPendingException()
             except CuckooAnalysisFailedException as e:
                 logger.exception(e)
@@ -495,10 +448,9 @@ class Sample(object):
         if self.has_attr('job_id'):
             job_id = self.get_attr('job_id')
 
-        return ("<Sample(filename='%s', known='%s', job_id='%d',"
+        return ("<Sample(filename='%s', job_id='%d',"
                 " result='%s', sha256sum='%s')>"
                 % (self.__filename,
-                   'yes' if self.known else 'no',
                    job_id,
                    self.__result,
                    self.sha256sum))

@@ -24,10 +24,13 @@
 #                                                                             #
 ###############################################################################
 
+""" The testsuite. """
 
 import sys
 import os
+import hashlib
 import unittest
+from datetime import datetime, timedelta
 
 
 # Add Peekaboo to PYTHONPATH
@@ -35,46 +38,24 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from peekaboo.sample import SampleFactory
 from peekaboo.ruleset import RuleResult, Result
-from peekaboo.ruleset.rules import file_type_on_whitelist, file_type_on_greylist
-from peekaboo.db import PeekabooDatabase
+from peekaboo.ruleset.rules import FileTypeOnWhitelistRule, FileTypeOnGreylistRule
+from peekaboo.db import PeekabooDatabase, PeekabooDatabaseError
 
 class PeekabooDummyConfig(object):
+    """ A dummy configuration for the test cases. """
     def __init__(self):
+        """ Initialize dummy configuration """
         self.job_hash_regex = r'/var/lib/amavis/tmp/([^/]+)/parts.*'
         self.sample_base_dir = '/tmp'
 
     def get(self, option, default):
+        """ Return specific dummy settings. """
         config = {
             'whitelist':['text/plain', 'inode/x-empty'],
-            'greylist' :['application/x-dosexec', 'application/msword', 'application/vnd.ms-powerpoint'],
+            'greylist' :['application/x-dosexec', 'application/msword',
+                         'application/vnd.ms-powerpoint'],
         }
         return config[option]
-
-
-class PeekabooDummyDB(object):
-    def sample_info2db(self, sample):
-        pass
-
-    def sample_info_fetch(self, sha256):
-        pass
-
-    def fetch_rule_result(self, sha256):
-        return RuleResult('fake_db',
-                          result=Result.checked,
-                          reason='Test Case',
-                          further_analysis=True)
-
-    def sample_info_update(self, sample):
-        pass
-
-    def known(self, sha256):
-        return False
-
-    def in_progress(self, sha256):
-        return True
-
-    def _clear_in_progress(self):
-        pass
 
 
 class TestDatabase(unittest.TestCase):
@@ -85,57 +66,144 @@ class TestDatabase(unittest.TestCase):
     """
     @classmethod
     def setUpClass(cls):
+        """ Set up common test case resources. """
         cls.test_db = os.path.abspath('./test.db')
         cls.conf = PeekabooDummyConfig()
-        cls.db_con = PeekabooDatabase('sqlite:///' + cls.test_db)
-        cls.factory = SampleFactory(cuckoo = None,
-                db_con = cls.db_con,
-                connection_map = None,
-                base_dir = cls.conf.sample_base_dir,
-                job_hash_regex = cls.conf.job_hash_regex,
-                keep_mail_data = False)
+        cls.db_con = PeekabooDatabase('sqlite:///' + cls.test_db,
+                                      instance_id=1,
+                                      stale_in_flight_threshold=10)
+        cls.no_cluster_db = PeekabooDatabase('sqlite:///' + cls.test_db,
+                                             instance_id=0)
+        cls.factory = SampleFactory(
+            cuckoo=None, connection_map=None, base_dir=cls.conf.sample_base_dir,
+            job_hash_regex=cls.conf.job_hash_regex, keep_mail_data=False)
         cls.sample = cls.factory.make_sample(os.path.realpath(__file__))
         result = RuleResult('Unittest',
-                            Result.unknown,
+                            Result.checked,
                             'This is just a test case.',
-                            further_analysis=True)
+                            further_analysis=False)
         cls.sample.add_rule_result(result)
         cls.sample.determine_result()
 
-    def test_1_analysis2db(self):
-        self.db_con.analysis2db(self.sample)
+    def test_1_analysis_save(self):
+        """ Test saving of analysis results. """
+        self.db_con.analysis_save(self.sample)
 
     def test_2_sample_info_fetch(self):
+        """ Test retrieval of analysis results. """
         sample_info = self.db_con.sample_info_fetch(self.sample)
-        self.assertEqual(self.sample.sha256sum, sample_info.sha256sum)
+        self.assertEqual(sample_info.sha256sum, self.sample.sha256sum)
+        self.assertEqual(sample_info.result, Result.checked)
+        self.assertEqual(sample_info.reason, 'This is just a test case.')
 
-    def test_3_sample_info_update(self):
-        result = RuleResult('Unittest',
-                            Result.checked,
-                            'This is another test case.',
-                            further_analysis=False)
-        self.sample.add_rule_result(result)
-        self.sample.determine_result()
-        self.db_con.sample_info_update(self.sample)
-        rule_result = self.db_con.fetch_rule_result(self.sample)
-        self.assertEqual(rule_result.result, Result.checked)
-        self.assertEqual(rule_result.reason, 'This is another test case.')
+    def test_5_in_flight_no_cluster(self):
+        """ Test that marking of samples as in-flight on a non-cluster-enabled
+        database are no-ops. """
+        self.assertTrue(self.no_cluster_db.mark_sample_in_flight(self.sample))
+        self.assertTrue(self.no_cluster_db.mark_sample_in_flight(self.sample))
+        self.assertIsNone(self.no_cluster_db.clear_sample_in_flight(self.sample))
+        self.assertIsNone(self.no_cluster_db.clear_sample_in_flight(self.sample))
+        self.assertIsNone(self.no_cluster_db.clear_in_flight_samples())
 
-    def test_4_fetch_rule_result(self):
-        rule_result = self.db_con.fetch_rule_result(self.sample)
-        # RuleResults from the DB have 'db' as rule name
-        self.assertEqual(rule_result.rule, 'db')
-        self.assertEqual(rule_result.result, Result.checked)
-        self.assertEqual(rule_result.reason, 'This is another test case.')
-        # We assert True since the DB rule result always sets further_analysis to True
-        self.assertTrue(rule_result.further_analysis)
+    def test_6_in_flight_cluster(self):
+        """ Test marking of samples as in-flight. """
+        self.assertTrue(self.db_con.mark_sample_in_flight(self.sample, 1))
+        # re-locking the same sample should fail
+        self.assertFalse(self.db_con.mark_sample_in_flight(self.sample, 1))
+        self.assertIsNone(self.db_con.clear_sample_in_flight(self.sample, 1))
+        # unlocking twice should fail
+        self.assertRaisesRegexp(
+            PeekabooDatabaseError, "Unexpected inconsistency: Sample .* not "
+            "recoreded as in-flight upon clearing flag",
+            self.db_con.clear_sample_in_flight, self.sample, 1)
 
-    def test_5_known(self):
-        self.assertTrue(self.db_con.known(self.sample))
-        self.assertFalse(self.db_con.in_progress(self.sample))
+    def test_7_in_flight_clear(self):
+        """ Test clearing of in-flight markers. """
+        sample2 = self.factory.make_sample('foo.pyc')
+        sample2.set_attr('sha256sum', hashlib.sha256('foo').hexdigest())
+        sample3 = self.factory.make_sample('bar.pyc')
+        sample3.set_attr('sha256sum', hashlib.sha256('bar').hexdigest())
+
+        self.assertTrue(self.db_con.mark_sample_in_flight(self.sample, 1))
+        self.assertTrue(self.db_con.mark_sample_in_flight(sample2, 1))
+        self.assertTrue(self.db_con.mark_sample_in_flight(sample3, 2))
+
+        # should only clear samples of instance 1
+        self.assertIsNone(self.db_con.clear_in_flight_samples(1))
+        self.assertTrue(self.db_con.mark_sample_in_flight(self.sample, 1))
+        self.assertTrue(self.db_con.mark_sample_in_flight(sample2, 1))
+        self.assertFalse(self.db_con.mark_sample_in_flight(sample3, 2))
+
+        # should only clear samples of instance 2
+        self.assertIsNone(self.db_con.clear_in_flight_samples(2))
+        self.assertFalse(self.db_con.mark_sample_in_flight(self.sample, 1))
+        self.assertFalse(self.db_con.mark_sample_in_flight(sample2, 1))
+        self.assertTrue(self.db_con.mark_sample_in_flight(sample3, 2))
+
+        # should clear all samples
+        self.assertIsNone(self.db_con.clear_in_flight_samples(-1))
+        self.assertTrue(self.db_con.mark_sample_in_flight(self.sample, 1))
+        self.assertTrue(self.db_con.mark_sample_in_flight(sample2, 1))
+        self.assertTrue(self.db_con.mark_sample_in_flight(sample3, 2))
+
+        # should be a no-op because there will never be any entries of instance
+        # 0
+        self.assertIsNone(self.db_con.clear_in_flight_samples(0))
+        self.assertFalse(self.db_con.mark_sample_in_flight(self.sample, 1))
+        self.assertFalse(self.db_con.mark_sample_in_flight(sample2, 1))
+        self.assertFalse(self.db_con.mark_sample_in_flight(sample3, 2))
+
+        # should be a no-op because this database is not cluster-enabled
+        self.assertIsNone(self.no_cluster_db.clear_in_flight_samples())
+        self.assertFalse(self.db_con.mark_sample_in_flight(self.sample, 1))
+        self.assertFalse(self.db_con.mark_sample_in_flight(sample2, 1))
+        self.assertFalse(self.db_con.mark_sample_in_flight(sample3, 2))
+
+        # leave as found
+        self.assertIsNone(self.db_con.clear_in_flight_samples(-1))
+
+    def test_8_stale_in_flight(self):
+        """ Test the cleaning of stale in-flight markers. """
+        stale = datetime.utcnow() - timedelta(seconds=20)
+        self.assertTrue(self.db_con.mark_sample_in_flight(
+            self.sample, 1, stale))
+        sample2 = self.factory.make_sample('foo.pyc')
+        sample2.set_attr('sha256sum', hashlib.sha256('foo').hexdigest())
+        self.assertTrue(self.db_con.mark_sample_in_flight(sample2, 1))
+
+        # should not clear anything because the database is not cluster-enabled
+        self.assertTrue(self.no_cluster_db.clear_stale_in_flight_samples())
+        self.assertFalse(self.db_con.mark_sample_in_flight(self.sample, 1))
+        self.assertFalse(self.db_con.mark_sample_in_flight(sample2, 1))
+
+        # should clear sample marker because it is stale but not sample2
+        self.assertTrue(self.db_con.clear_stale_in_flight_samples())
+        self.assertTrue(self.db_con.mark_sample_in_flight(self.sample, 1))
+        self.assertFalse(self.db_con.mark_sample_in_flight(sample2, 1))
+
+        # should not clear anything because all markers are fresh
+        self.assertFalse(self.db_con.clear_stale_in_flight_samples())
+        self.assertFalse(self.db_con.mark_sample_in_flight(self.sample, 1))
+        self.assertFalse(self.db_con.mark_sample_in_flight(sample2, 1))
+
+        # set up new constellation
+        self.assertIsNone(self.db_con.clear_in_flight_samples(-1))
+        self.assertTrue(self.db_con.mark_sample_in_flight(
+            self.sample, 1, stale))
+        self.assertTrue(self.db_con.mark_sample_in_flight(sample2, 1, stale))
+
+        # should clear all markers because all are stale
+        self.assertTrue(self.db_con.clear_stale_in_flight_samples())
+        self.assertTrue(self.db_con.mark_sample_in_flight(
+            self.sample, 1, stale))
+        self.assertTrue(self.db_con.mark_sample_in_flight(sample2, 1, stale))
+
+        # leave as found
+        self.assertTrue(self.db_con.clear_stale_in_flight_samples())
 
     @classmethod
     def tearDownClass(cls):
+        """ Clean up after the tests. """
         os.unlink(cls.test_db)
 
 
@@ -147,18 +215,17 @@ class TestSample(unittest.TestCase):
     """
     @classmethod
     def setUpClass(cls):
+        """ Set up common test case resources. """
         cls.test_db = os.path.abspath('./test.db')
         cls.conf = PeekabooDummyConfig()
         cls.db_con = PeekabooDatabase('sqlite:///' + cls.test_db)
-        cls.factory = SampleFactory(cuckoo = None,
-                db_con = cls.db_con,
-                connection_map = None,
-                base_dir = cls.conf.sample_base_dir,
-                job_hash_regex = cls.conf.job_hash_regex,
-                keep_mail_data = False)
+        cls.factory = SampleFactory(
+            cuckoo=None, connection_map=None, base_dir=cls.conf.sample_base_dir,
+            job_hash_regex=cls.conf.job_hash_regex, keep_mail_data=False)
         cls.sample = cls.factory.make_sample(os.path.realpath(__file__))
 
     def test_attribute_dict(self):
+        """ Test the attribute functions. """
         self.sample.set_attr('Unittest', 'Hello World!')
         self.assertTrue(self.sample.has_attr('Unittest'))
         self.assertEqual(self.sample.get_attr('Unittest'), 'Hello World!')
@@ -166,6 +233,8 @@ class TestSample(unittest.TestCase):
         self.assertEqual(self.sample.get_attr('Unittest'), 'Test')
 
     def test_job_hash_regex(self):
+        """ Test extraction of the job hash from the working directory path.
+        """
         path_with_job_hash = '/var/lib/amavis/tmp/amavis-20170831T132736-07759-iSI0rJ4b/parts'
         sample = self.factory.make_sample(path_with_job_hash)
         job_hash = sample.get_job_hash()
@@ -175,39 +244,41 @@ class TestSample(unittest.TestCase):
         self.assertIn('peekaboo-run_analysis', job_hash)
 
     def test_sample_attributes(self):
+        """ Test the various sample attribute getters. """
         self.assertEqual(self.sample.get_filename(), 'test.py')
         self.assertEqual(self.sample.file_extension, 'py')
         self.assertTrue(set(['text/x-python']).issubset(set(self.sample.mimetypes)))
         self.assertIsNotNone(self.sample.sha256sum)
         self.assertEqual(self.sample.job_id, -1)
         self.assertEqual(self.sample.get_result(), Result.unchecked)
-        self.assertEqual(self.sample.reason,
-                         'Ausschlaggebendes Ergebnis laut Datenbank: Datei ist dem System noch nicht bekannt')
+        self.assertEqual(self.sample.get_reason(), None)
         self.assertFalse(self.sample.office_macros)
-        self.assertFalse(self.sample.known)
 
     def test_sample_attributes_with_meta_info(self):
+        """ Test use of optional meta data. """
         sample = self.factory.make_sample('test.pyc', {
             'full_name': '/tmp/test.pyc',
             'name_declared': 'test.pyc',
             'type_declared': 'application/x-bytecode.python',
             'type_long': 'application/x-python-bytecode',
             'type_short': 'pyc',
-            'size': '200' })
+            'size': '200'})
         self.assertEqual(sample.file_extension, 'pyc')
 
     def test_sample_without_suffix(self):
+        """ Test extraction of file extension from declared name. """
         sample = self.factory.make_sample('junk', {
             'full_name': '/tmp/junk',
             'name_declared': 'Report.docx',
             'type_declared': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
             'type_long': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
             'type_short': 'docx',
-            'size': '212' })
+            'size': '212'})
         self.assertEqual(sample.file_extension, 'docx')
 
     @classmethod
     def tearDownClass(cls):
+        """ Clean up after the tests. """
         os.unlink(cls.test_db)
 
 
@@ -219,16 +290,15 @@ class TestRules(unittest.TestCase):
     """
     @classmethod
     def setUpClass(cls):
+        """ Set up common test case resources. """
         cls.conf = PeekabooDummyConfig()
-        cls.factory = SampleFactory(cuckoo = None,
-                db_con = None,
-                connection_map = None,
-                base_dir = cls.conf.sample_base_dir,
-                job_hash_regex = cls.conf.job_hash_regex,
-                keep_mail_data = False)
+        cls.factory = SampleFactory(
+            cuckoo=None, connection_map=None, base_dir=cls.conf.sample_base_dir,
+            job_hash_regex=cls.conf.job_hash_regex, keep_mail_data=False)
         cls.sample = cls.factory.make_sample(os.path.realpath(__file__))
 
     def test_rule_file_type_on_whitelist(self):
+        """ Test whitelist rule. """
         combinations = [
             [False, ['text/plain']],
             [True, ['application/vnd.ms-excel']],
@@ -237,30 +307,36 @@ class TestRules(unittest.TestCase):
             [True, ['', 'asdfjkl', '93219843298']],
             [True, []],
         ]
+        rule = FileTypeOnWhitelistRule(self.conf)
         for expected, types in combinations:
             self.sample.set_attr('mimetypes', set(types))
-            r = file_type_on_whitelist(self.conf, self.sample)
-            self.assertEqual(r.further_analysis, expected)
+            result = rule.evaluate(self.sample)
+            self.assertEqual(result.further_analysis, expected)
 
     def test_rule_file_type_on_greylist(self):
+        """ Test greylist rule. """
         combinations = [
             [False, ['text/plain']],
             [True, ['application/msword']],
             [True, ['text/plain', 'application/x-dosexec']],
-            [True, ['image/png', 'application/zip', 'application/vnd.ms-excel', 'application/vnd.ms-powerpoint']],
+            [True, ['image/png', 'application/zip', 'application/vnd.ms-excel',
+                    'application/vnd.ms-powerpoint']],
             [False, ['', 'asdfjkl', '93219843298']],
             [True, []],
         ]
+        rule = FileTypeOnGreylistRule(self.conf)
         for expected, types in combinations:
             self.sample.set_attr('mimetypes', set(types))
-            r = file_type_on_greylist(self.conf, self.sample)
-            self.assertEqual(r.further_analysis, expected)
+            result = rule.evaluate(self.sample)
+            self.assertEqual(result.further_analysis, expected)
 
     @classmethod
     def tearDownClass(cls):
+        """ Clean up after the tests. """
         pass
 
 def main():
+    """ Run the testsuite. """
     suite = unittest.TestSuite()
     suite.addTest(unittest.makeSuite(TestSample))
     suite.addTest(unittest.makeSuite(TestDatabase))

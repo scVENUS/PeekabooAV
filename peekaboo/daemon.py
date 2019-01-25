@@ -252,7 +252,9 @@ def run():
 
     # establish a connection to the database
     try:
-        db_con = PeekabooDatabase(config.db_url)
+        db_con = PeekabooDatabase(db_url=config.db_url,
+                instance_id=config.cluster_instance_id,
+                stale_in_flight_threshold=config.cluster_stale_in_flight_threshold)
     except PeekabooDatabaseError as e:
         logging.exception(e)
         sys.exit(1)
@@ -287,11 +289,29 @@ def run():
 
     systemd = SystemdNotifier()
 
+    # clear all our in flight samples and all instances' stale in flight
+    # samples
+    db_con.clear_in_flight_samples()
+    db_con.clear_stale_in_flight_samples()
+
+    # a cluster duplicate interval of 0 disables the handler thread which is
+    # what we want if we don't have an instance_id and therefore are alone
+    cluster_duplicate_check_interval = 0
+    if config.cluster_instance_id > 0:
+        cluster_duplicate_check_interval = config.cluster_duplicate_check_interval
+        if cluster_duplicate_check_interval < 5:
+            cluster_update_check_interval = 5
+            log.warning("Raising excessively low cluster duplicate check "
+                        "interval to %d seconds.",
+                        cluster_duplicate_check_interval)
+
     # workers of the job queue need the ruleset configuration to create the
     # ruleset engine with it
     ruleset_config = PeekabooRulesetConfiguration(config.ruleset_config)
-    job_queue = JobQueue(worker_count = config.worker_count,
-            ruleset_config = ruleset_config)
+    job_queue = JobQueue(
+        worker_count=config.worker_count, ruleset_config=ruleset_config,
+        db_con=db_con,
+        cluster_duplicate_check_interval=cluster_duplicate_check_interval)
     connection_map = ConnectionMap()
 
     if config.cuckoo_mode == "embed":
@@ -309,7 +329,7 @@ def run():
     # Factory producing almost identical samples providing them with global
     # config values and references to other objects they need, such as cuckoo,
     # database connection and connection map.
-    sample_factory = SampleFactory(cuckoo, db_con, connection_map,
+    sample_factory = SampleFactory(cuckoo, connection_map,
                 config.sample_base_dir, config.job_hash_regex,
                 config.keep_mail_data)
 
@@ -350,6 +370,8 @@ def run():
         server.shutdown()
         server.server_close()
         job_queue.shut_down()
+        db_con.clear_in_flight_samples()
+        db_con.clear_stale_in_flight_samples()
         if debugger is not None:
             debugger.shut_down()
 

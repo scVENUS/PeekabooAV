@@ -60,6 +60,9 @@ class PeekabooConfig(object):
         self.cuckoo_storage = None
         self.cuckoo_exec = None
         self.cuckoo_submit = None
+        self.cluster_instance_id = 0
+        self.cluster_stale_in_flight_threshold = 1*60*60
+        self.cluster_duplicate_check_interval = 60
         ##############################################
         # setup default logging to log any errors during the
         # parsing of the config file.
@@ -96,6 +99,11 @@ class PeekabooConfig(object):
             self.cuckoo_storage = config.get('cuckoo', 'storage_path')
             self.cuckoo_exec = config.get('cuckoo', 'exec')
             self.cuckoo_submit = config.get('cuckoo', 'submit').split(' ')
+            self.cluster_instance_id = config.getint('cluster', 'instance_id')
+            self.cluster_stale_in_flight_threshold = config.getint(
+                'cluster', 'stale_in_flight_threshold')
+            self.cluster_duplicate_check_interval = config.getint(
+                'cluster', 'duplicate_check_interval')
             # Update logging with what we just parsed from the config
             self.__setup_logging()
         except NoSectionError as e:
