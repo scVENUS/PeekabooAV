@@ -34,7 +34,8 @@ from peekaboo.exceptions import PeekabooConfigException
 
 logger = logging.getLogger(__name__)
 
-class PeekabooConfigParser(configparser.ConfigParser):
+class PeekabooConfigParser( # pylint: disable=too-many-ancestors
+        configparser.ConfigParser):
     """ A config parser that gives error feedback if a required file does not
     exist or cannot be opened. """
 
@@ -55,7 +56,7 @@ class PeekabooConfigParser(configparser.ConfigParser):
                 (config_file, cperror))
 
 
-class PeekabooConfig(object):
+class PeekabooConfig(object): # pylint: disable=too-many-instance-attributes
     """
     This class represents the Peekaboo configuration.
 
