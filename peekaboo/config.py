@@ -28,31 +28,32 @@ defaults as well as reading a configuration file. """
 
 import sys
 import logging
-import ConfigParser
+import configparser
 from peekaboo.exceptions import PeekabooConfigException
 
 
 logger = logging.getLogger(__name__)
 
-class PeekabooConfigParser(ConfigParser.SafeConfigParser):
+class PeekabooConfigParser(configparser.ConfigParser):
     """ A config parser that gives error feedback if a required file does not
     exist or cannot be opened. """
 
     def __init__(self, config_file):
         # super() does not work here because ConfigParser uses old-style
         # classes in python 2
-        ConfigParser.SafeConfigParser.__init__(self)
+        configparser.ConfigParser.__init__(self)
 
         try:
-            self.readfp(open(config_file))
+            self.read_file(open(config_file))
         except IOError as ioerror:
             raise PeekabooConfigException(
                 'Configuration file "%s" can not be opened for reading: %s' %
                 (config_file, ioerror))
-        except ConfigParser.Error as cperror:
+        except configparser.Error as cperror:
             raise PeekabooConfigException(
                 'Configuration file "%s" can not be parsed: %s' %
                 (config_file, cperror))
+
 
 class PeekabooConfig(object):
     """
@@ -187,10 +188,10 @@ class PeekabooConfig(object):
 
         try:
             return getter[option_type](section, option)
-        except ConfigParser.NoSectionError:
+        except configparser.NoSectionError:
             logger.debug('Configuration section %s not found - using '
                          'default %s', section, default)
-        except ConfigParser.NoOptionError:
+        except configparser.NoOptionError:
             logger.debug('Configuration option %s not found in section '
                          '%s - using default: %s', option, section, default)
 
