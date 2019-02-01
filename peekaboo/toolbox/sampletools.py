@@ -52,9 +52,9 @@ class ConnectionMap:
         Add an entry to the connection map. An entry consists of a
         socket object and a list of Sample objects.
 
-        :param socket: The socket object to add.
-        :param sample: The corresponding Samples objects for the socket.
-        :return:The length of the connection map.
+        @param socket: The socket object to add.
+        @param sample: The corresponding Samples objects for the socket.
+        @return: The length of the connection map.
         """
         with self.__lock:
             logger.debug('Registered sample for connection %s' % socket)
@@ -71,9 +71,9 @@ class ConnectionMap:
         the given socket. If the sample list is empty, we remove the
         entire entry from the map.
 
-        :param socket: A socket object, which is related to the sample.
-        :param sample: The sample to remove.
-        :return: The length of the connection map.
+        @param socket: A socket object, which is related to the sample.
+        @param sample: The sample to remove.
+        @return: The length of the connection map.
         """
         with self.__lock:
             if self.has_connection(socket):
@@ -104,8 +104,8 @@ class ConnectionMap:
         """
         Check if the given socket object exists in the map.
 
-        :param socket: A socket object to search for in the map.
-        :return: True if the map contains the given socket object, otherwise False.
+        @param socket: A socket object to search for in the map.
+        @return: True if the map contains the given socket object, otherwise False.
         """
         if socket in self.__map.keys():
             return True
@@ -115,8 +115,8 @@ class ConnectionMap:
         """
         Get a Sample object from the map by its job ID.
 
-        :param job_id: The job ID of the Sample object to fetch.
-        :return:The Sample object with the given job ID or None.
+        @param job_id: The job ID of the Sample object to fetch.
+        @return: The Sample object with the given job ID or None.
         """
         with self.__lock:
             logger.debug("Searching for a sample with job ID %d" % job_id)
@@ -132,10 +132,10 @@ def next_job_hash(size=8):
     """
     Generates a job hash (default: 8 characters).
 
-    :param size The amount of random characters to use for a job hash.
-                Defaults to 8.
-    :return Returns a job hash consisting of a static prefix, a timestamp
-            representing the time when the method was invoked, and random characters.
+    @param size: The amount of random characters to use for a job hash.
+                 Defaults to 8.
+    @return: a job hash consisting of a static prefix, a timestamp representing
+             the time when the method was invoked, and random characters.
     """
     job_hash = 'peekaboo-run_analysis-'
     job_hash += '%s-' % datetime.now().strftime('%Y%m%dT%H%M%S')

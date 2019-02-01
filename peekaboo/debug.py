@@ -63,7 +63,7 @@ class PeekabooDebugger(Thread):
         All input / output is redirected to the socket connection.
         DO NOT USE THIS MODULE IN PRODUCTION!
 
-        Usage:
+        Usage::
           socket /path/to/debug.sock
         """
         sockfile = os.path.abspath('./debug.sock')

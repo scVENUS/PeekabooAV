@@ -32,9 +32,6 @@ import yara
 class ContainsPeekabooYarRule(Rule):
     """
     Checks the given sample for the PeekabooYar (EICAR like) malicious string.
-
-    :param s: sample to check
-    :return: RueleResult
     """
     rule_name = 'contains_peekabooyar'
 

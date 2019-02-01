@@ -58,7 +58,7 @@ class PeekabooConfig(object):
     """
     This class represents the Peekaboo configuration.
 
-    :author: Sebastian Deiss
+    @author: Sebastian Deiss
     """
     def __init__(self, config_file=None, log_level=None):
         """ Initialise the configuration with defaults, overwrite with command
@@ -165,16 +165,16 @@ class PeekabooConfig(object):
         detects the type from the type of the default if given and calls the
         right getter method to coerce the value to the correct type.
 
-        :param section: Which section to look for option in.
-        :type section: string
-        :param option: The option to read.
-        :type option: string
-        :param default: (optional) Default value to return if option is not
+        @param section: Which section to look for option in.
+        @type section: string
+        @param option: The option to read.
+        @type option: string
+        @param default: (optional) Default value to return if option is not
                         found. Defaults itself to None so that the method will
                         return None if the option is not found.
-        :type default: int, bool, str or None.
-        :param option_type: Override the option type.
-        :param type: int, bool, str or None. """
+        @type default: int, bool, str or None.
+        @param option_type: Override the option type.
+        @type option_type: int, bool, str or None. """
         if option_type is None and default is not None:
             option_type = type(default)
 
@@ -253,8 +253,8 @@ class PeekabooRulesetConfig(object):
     The ruleset configuration is stored as a dictionary in the form of
     ruleset_config[rule_name][config_option] = value | [value1, value2, ...]
 
-    :author: Sebastian Deiss
-    :since: 1.6
+    @author: Sebastian Deiss
+    @since: 1.6
     """
     def __init__(self, config_file):
         self.config_file = config_file
@@ -304,22 +304,21 @@ class PeekabooRulesetConfig(object):
     def rule_config(self, rule):
         """ Get the configuration for a rule.
 
-        :param rule: Name of the rule whose configuration to return.
-        :type rule: string
-        :return: dict of rule configuration settings or None if no
+        @param rule: Name of the rule whose configuration to return.
+        @type rule: string
+        @return: dict of rule configuration settings or None if no
                  configuration is present. """
         return self.ruleset_config.get(rule)
 
     def rule_enabled(self, rule):
         """ Check if a rule is enabled. Cases are:
-
         - no config section for that rule is present
         - enabled keyword is not present in that section or
         - the value of the enabled is True (i.e. yes, true, 1 in the file)
 
-        :param rule: Name of the rule to check if enabled or not.
-        :type rule: string
-        :return: True or False based on above criteria.
+        @param rule: Name of the rule to check if enabled or not.
+        @type rule: string
+        @return: True or False based on above criteria.
         """
         config = self.rule_config(rule)
         if config is None:

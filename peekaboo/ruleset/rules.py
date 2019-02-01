@@ -54,6 +54,16 @@ class Rule(object):
         return RuleResult(self.rule_name, result=result, reason=reason,
                           further_analysis=further_analysis)
 
+    def evaluate(self, sample):
+        """ Evaluate a rule against a sample.
+
+        @param sample: The sample to evaluate.
+        @returns: RuleResult containing verdict, reason, source of this
+                  assessment (i.e. the rule's name) and whether to continue
+                  analysis or not.
+        """
+        raise NotImplemented
+
 class KnownRule(Rule):
     """ A rule determining if a sample is known by looking at the database for
     a previous record of an identical sample sample. """

@@ -40,9 +40,7 @@ logger = logging.getLogger(__name__)
 
 
 class Cuckoo:
-    """
-        Parent class, defines interface to Cuckoo
-    """
+    """ Parent class, defines interface to Cuckoo """
     def __init__(self, job_queue, connection_map):
         self.job_queue = job_queue
         self.connection_map = connection_map
@@ -79,8 +77,8 @@ class Cuckoo:
 class CuckooEmbed(Cuckoo):
     """ Runs and interfaces with Cuckoo in IPC
         
-    :author: Sebastian Deiss
-    :author: Felix Bauer
+    @author: Sebastian Deiss
+    @author: Felix Bauer
     """
     def __init__(self, job_queue, connection_map, cuckoo_exec, cuckoo_submit,
                  cuckoo_storage, interpreter=None):
@@ -101,11 +99,11 @@ class CuckooEmbed(Cuckoo):
     
     def submit(self, sample):
         """
-            Submit a file or directory to Cuckoo for behavioural analysis.
+        Submit a file or directory to Cuckoo for behavioural analysis.
             
-            :param sample: Path to a file or a directory.
-            :return: The job ID used by Cuckoo to identify this analysis task.
-            """
+        @param sample: Path to a file or a directory.
+        @return: The job ID used by Cuckoo to identify this analysis task.
+        """
         try:
             # cuckoo_submit is a list, make a copy as to not modify the
             # original value
@@ -204,9 +202,9 @@ class CuckooEmbed(Cuckoo):
 
 class CuckooApi(Cuckoo):
     """
-        Interfaces with a Cuckoo installation via its REST API
+    Interfaces with a Cuckoo installation via its REST API
         
-        @author: Felix Bauer
+    @author: Felix Bauer
     """
     def __init__(self, job_queue, connection_map,
             url="http://localhost:8090", poll_interval = 5):
@@ -301,12 +299,11 @@ class CuckooApi(Cuckoo):
 class CuckooServer(protocol.ProcessProtocol):
     """
     Class that is used by twisted.internet.reactor to process Cuckoo
-    output and process its behavior.
+    output and process its behavior. Usage::
 
-    Usage:
-    srv = CuckooServer()
-    reactor.spawnProcess(srv, 'python2', ['python2', '/path/to/cukoo.py'])
-    reactor.run()
+        srv = CuckooServer()
+        reactor.spawnProcess(srv, 'python2', ['python2', '/path/to/cukoo.py'])
+        reactor.run()
 
     @author: Felix Bauer
     @author: Sebastian Deiss
@@ -380,7 +377,7 @@ class CuckooReport(object):
     """
     def __init__(self, report):
         """
-        :param report: hash with report data from Cuckoo
+        @param report: hash with report data from Cuckoo
         """
         self.report = report
 
@@ -393,7 +390,7 @@ class CuckooReport(object):
         """
         Gets the requested domains from the Cuckoo report.
 
-        :return: The requested domains from the Cuckoo report.
+        @returns: The requested domains from the Cuckoo report.
         """
         try:
             return [d['request'] for d in self.report['network']['dns']]
@@ -405,8 +402,8 @@ class CuckooReport(object):
         """
         Gets the triggered signatures from the Cuckoo report.
 
-        :return: The triggered signatures from the Cuckoo report or
-                 None of there was an error parsing the Cuckoo report.
+        @returns: The triggered signatures from the Cuckoo report or None of
+                  there was an error parsing the Cuckoo report.
         """
         try:
             return self.report['signatures']
@@ -418,8 +415,8 @@ class CuckooReport(object):
         """
         Gets the score from the Cuckoo report.
 
-        :return: The score from the Cuckoo report or
-                 None of there was an error parsing the Cuckoo report.
+        @returns: The score from the Cuckoo report or None of there was an
+                  error parsing the Cuckoo report.
         """
         try:
             return self.report['info']['score']
@@ -431,8 +428,8 @@ class CuckooReport(object):
         """
         Errors occurred during Cuckoo analysis.
 
-        :return: The errors occurred during Cuckoo analysis or
-                 None of there was an error parsing the Cuckoo report.
+        @returns: The errors occurred during Cuckoo analysis or None of there
+                  was an error parsing the Cuckoo report.
         """
         try:
             return self.report['debug']['errors']
@@ -444,7 +441,7 @@ class CuckooReport(object):
         """
         Has the Cuckoo analysis failed?
 
-        :return: True if the Cuckoo analysis failed, otherwise False.
+        @returns: True if the Cuckoo analysis failed, otherwise False.
         """
         if self.errors:
             logger.warning('Cuckoo produced %d error(s) during processing.' % len(self.errors))

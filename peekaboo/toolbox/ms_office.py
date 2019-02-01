@@ -42,8 +42,8 @@ def has_office_macros(office_file):
     """
     Detects macros in Microsoft Office documents.
 
-    :param office_file: The MS Office document to check for macros.
-    :return: True if macros where found, otherwise False.
+    @param office_file: The MS Office document to check for macros.
+    @return: True if macros where found, otherwise False.
              If VBA_Parser crashes it returns False too.
     """
     file_extension = office_file.split('.')[-1]

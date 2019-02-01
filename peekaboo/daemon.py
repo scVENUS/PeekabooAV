@@ -137,13 +137,13 @@ class PeekabooStreamRequestHandler(SocketServer.StreamRequestHandler):
     def handle(self):
         """
         Handles an analysis request. This is expected to be a JSON structure
-        containing the path of the directory / file to analyse. Structure:
+        containing the path of the directory / file to analyse. Structure::
 
-        [ { "full_name": "<path>",
-            "name_declared": ...,
-            ... },
-          { ... },
-          ... ]
+            [ { "full_name": "<path>",
+                "name_declared": ...,
+                ... },
+              { ... },
+              ... ]
 
         The maximum buffer size is 16 KiB, because JSON incurs some bloat.
         """

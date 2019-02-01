@@ -46,9 +46,10 @@ class JobQueue:
         """ Initialise job queue by creating n Peekaboo worker threads to
         process samples.
 
-        :param db_con: Database connection object for cluster instance
+        @param db_con: Database connection object for cluster instance
                        coordination, i.e. saving sample info.
-        :param worker_count: The amount of worker threads to create. Defaults to 4.
+        @param worker_count: The amount of worker threads to create. Defaults to 4.
+        @param queue_timeout: How long to block before considering queueing failed.
         """
         self.db_con = db_con
         self.jobs = Queue()
@@ -93,11 +94,9 @@ class JobQueue:
         Adds a Sample object to the job queue.
         If the queue is full, we block for 300 seconds and then throw an exception.
 
-        :param sample: The Sample object to add to the queue.
-        :param submitter: The name of the class / module that wants to submit the sample.
-        :param timeout: Block until timeout is reached and then trow an exception
-                        if the job has not been submitted.
-        :raises Full: if the queue is full.
+        @param sample: The Sample object to add to the queue.
+        @param submitter: The name of the class / module that wants to submit the sample.
+        @raises Full: if the queue is full.
         """
         sample_hash = sample.sha256sum
         sample_str = str(sample)

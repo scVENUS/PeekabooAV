@@ -157,13 +157,13 @@ class PeekabooDatabase(object):
         """
         Initialize the Peekaboo database handler.
 
-        :param db_url: An RFC 1738 URL that points to the database.
-        :param instance_id: A positive, unique ID differentiating this Peekaboo
+        @param db_url: An RFC 1738 URL that points to the database.
+        @param instance_id: A positive, unique ID differentiating this Peekaboo
                             instance from any other instance using the same
                             database for concurrency coordination. Value of 0
                             means that we're alone and have no other instances
                             to worry about.
-        :param stale_in_flight_threshold: Number of seconds after which a in
+        @param stale_in_flight_threshold: Number of seconds after which a in
         flight marker is considered stale and deleted or ignored.
         """
         self.__engine = create_engine(db_url, pool_recycle=1)
@@ -180,7 +180,7 @@ class PeekabooDatabase(object):
         """
         Save an analysis task to the analysis journal in the database.
 
-        :param sample: The sample object for this analysis task.
+        @param sample: The sample object for this analysis task.
         """
         analysis = AnalysisJournal()
         analysis.job_hash = sample.get_job_hash()
@@ -215,9 +215,9 @@ class PeekabooDatabase(object):
         """
         Fetch information stored in the database about a given sample object.
 
-        :param sample: The sample object of which the information shall be
+        @param sample: The sample object of which the information shall be
                        fetched from the database.
-        :return: A SampleInfo object containing the information stored in teh
+        @return: A SampleInfo object containing the information stored in teh
                  database about the sample.
         """
         with self.__lock:
@@ -232,10 +232,10 @@ class PeekabooDatabase(object):
         """
         Mark a sample as in flight, i.e. being worked on by an instance.
 
-        :param sample: The sample to mark as in flight.
-        :param instance_id: (optionally) The ID of the instance that is
+        @param sample: The sample to mark as in flight.
+        @param instance_id: (optionally) The ID of the instance that is
                             handling this sample. Default: Us.
-        :param start_time: Override the time the marker was placed for
+        @param start_time: Override the time the marker was placed for
                            debugging purposes.
         """
         # an instance id of 0 denotes that we're alone and don't need to track
@@ -281,8 +281,8 @@ class PeekabooDatabase(object):
         """
         Clear the mark that a sample is being processed by an instance.
 
-        :param sample: The sample to clear from in-flight list.
-        :param instance_id: (optionally) The ID of the instance that is
+        @param sample: The sample to clear from in-flight list.
+        @param instance_id: (optionally) The ID of the instance that is
                             handling this sample. Default: Us.
         """
         # an instance id of 0 denotes that we're alone and don't need to track
@@ -328,7 +328,7 @@ class PeekabooDatabase(object):
         Clear all in-flight markers left over by previous runs or other
         instances by removing them from the lock table.
 
-        :param instance_id: Clear our own (None), another instance's (positive
+        @param instance_id: Clear our own (None), another instance's (positive
                             integer) or all instances' (negative integer) locks.
                             Since an instance_id of 0 disables in-flight sample
                             tracking, no instance will ever set a marker with
