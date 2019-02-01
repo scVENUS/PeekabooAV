@@ -8,7 +8,7 @@
 # scan_file.py                                                                #
 ###############################################################################
 #                                                                             #
-# Copyright (C) 2016-2018  science + computing ag                             #
+# Copyright (C) 2016-2019  science + computing ag                             #
 #                                                                             #
 # This program is free software: you can redistribute it and/or modify        #
 # it under the terms of the GNU General Public License as published by        #
@@ -27,7 +27,7 @@
 
 """
 @author:     Felix Bauer, Sebastian Deiss
-@copyright:  2016-2017 science + computing ag. All rights reserved.
+@copyright:  2016-2019 science + computing ag. All rights reserved.
 @license:    GPLv3
 """
 
