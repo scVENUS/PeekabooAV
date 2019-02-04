@@ -113,7 +113,7 @@ class PeekabooDebugger(Thread):
                         break
 
                     try:
-                        exec line
+                        exec(line)
                     except Exception as e:
                         logger.exception(e)
 

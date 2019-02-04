@@ -123,7 +123,7 @@ def dump_processing_info(sample):
     job_hash = sample.get_job_hash()
     dump_dir = os.path.join(os.environ['HOME'], 'malware_reports', job_hash)
     if not os.path.isdir(dump_dir):
-        os.makedirs(dump_dir, 0770)
+        os.makedirs(dump_dir, 0o770)
     filename = sample.get_filename() + '-' + sample.sha256sum
 
     logger.debug('Dumping processing info to %s for sample %s' % (dump_dir, sample))

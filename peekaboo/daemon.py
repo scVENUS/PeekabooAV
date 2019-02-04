@@ -336,7 +336,7 @@ def run():
                     sample_factory = sample_factory,
                     request_queue_size = config.worker_count * 2)
             break
-        except socket.error, msg:
+        except socket.error as msg:
             logger.warning("SocketServer couldn't start (%i): %s" % (i, msg))
     if not server:
         logger.error('Fatal: Couldn\'t initialise Peekaboo Server')
