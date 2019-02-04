@@ -25,7 +25,7 @@
 
 import logging
 from threading import Thread, Event, Lock
-from Queue import Queue, Empty
+from queue import Queue, Empty
 from time import sleep
 from peekaboo.ruleset.engine import RulesetEngine
 from peekaboo.exceptions import CuckooReportPendingException

@@ -28,7 +28,7 @@ import grp
 import pwd
 import stat
 import logging
-import SocketServer
+import socketserver
 import socket
 import signal
 from time import sleep
@@ -86,7 +86,7 @@ class SignalHandler():
                 listener.reap_children()
 
 
-class PeekabooStreamServer(SocketServer.ThreadingUnixStreamServer):
+class PeekabooStreamServer(socketserver.ThreadingUnixStreamServer):
     """
     Asynchronous server.
 
@@ -100,7 +100,7 @@ class PeekabooStreamServer(SocketServer.ThreadingUnixStreamServer):
         self.request_queue_size = request_queue_size
         self.allow_reuse_address = True
         
-        SocketServer.ThreadingUnixStreamServer.__init__(self, server_address,
+        socketserver.ThreadingUnixStreamServer.__init__(self, server_address,
                                                         request_handler_cls,
                                                         bind_and_activate=bind_and_activate)
 
@@ -120,17 +120,17 @@ class PeekabooStreamServer(SocketServer.ThreadingUnixStreamServer):
     def server_close(self):
         # no new connections from this point on
         os.remove(self.server_address)
-        return SocketServer.ThreadingUnixStreamServer.server_close(self)
+        return socketserver.ThreadingUnixStreamServer.server_close(self)
 
 
-class PeekabooStreamRequestHandler(SocketServer.StreamRequestHandler):
+class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
     """
     Request handler used by PeekabooStreamServer to handle analysis requests.
 
     @author: Sebastian Deiss
     """
     def setup(self):
-        SocketServer.StreamRequestHandler.setup(self)
+        socketserver.StreamRequestHandler.setup(self)
         self.job_queue = self.server.job_queue
         self.sample_factory = self.server.sample_factory
 
