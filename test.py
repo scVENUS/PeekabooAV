@@ -200,8 +200,8 @@ user: peekaboo''')
 user; peekaboo''')
         with self.assertRaisesRegexp(
             PeekabooConfigException,
-            'Configuration file "%s" can not be parsed: File contains parsing '
-            'errors:' % self.config_file):
+            'Configuration file "%s" can not be parsed: (File|Source) '
+            'contains parsing errors:' % self.config_file):
             self.config_class(config_file=self.config_file)
 
     def test_3_section_header(self):
