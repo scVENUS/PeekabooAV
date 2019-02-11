@@ -8,21 +8,28 @@ This chapter explains how to configure Peekaboo.
 Setup Directories and Users
 ===========================
 We assume that the user you run Peekaboo with is ``peekaboo``.
-First, create a directory for Peekaboo and its components
+Its home directory will be used by Peekaboo to store transient data.
+Also, in embed mode, the ``.cuckoo`` instance directory will reside there.
+``/var/lib/peekaboo`` is a good choice for this path and the default:
 
 .. code-block:: shell
 
     groupadd -g 150 peekaboo
-    useradd -g 150 -u 150 -m -d /opt/peekaboo peekaboo
-    gpasswd -a amavis peekaboo
-    gpasswd -a peekaboo amavis
+    useradd -g 150 -u 150 -m -d /var/lib/peekaboo peekaboo
 
 If you plan to use AMaViSd to analyse email attachments with Peekaboo,
 the Peekaboo user must be a member of the ``amavis`` group in order to access
-the files from an email created by AMaViSd.
+the files from an email created by AMaViSd:
+
+.. code-block:: shell
+
+    gpasswd -a amavis peekaboo
+    gpasswd -a peekaboo amavis
 
 You may choose VirtualBox as hypervisor. If so, you must add the Peekaboo user to the
 ``vboxusers`` group.
+
+.. code-block:: shell
 
     $ sudo usermod -a -G vboxusers peekaboo
 
@@ -31,12 +38,14 @@ Configuration File
 ==================
 Peekaboo requires a configuration file to be supplied on startup.
 If no configuration file is supplied on startup, Peekaboo will look for a file
-named ``peekaboo.conf`` in your current working directory. For details, please run
+named ``/opt/peekaboo/etc/peekaboo.conf``. For details, please run
 
-    $ peekaboo --help
+.. code-block:: shell
+
+    $ /opt/peekaboo/bin/peekaboo --help
 
 You can configure Peekaboo according to the sample configuration in
-``peekaboo.conf.sample`` and save it to ``/opt/peekaboo/peekaboo.conf``.
+``peekaboo.conf.sample`` and save it to ``/opt/peekaboo/etc/peekaboo.conf``.
 
 
 Database Configuration
@@ -47,6 +56,8 @@ database management systems, please visit the website of the 3rd party module *S
 
 MySQL
 -----
+
+.. code-block:: shell
 
     $ mysql -u root -p
 
@@ -70,10 +81,14 @@ PostgreSQL
 Crate User
 ++++++++++
    
+.. code-block:: shell
+
     $ sudo -u postgres createuser peekaboo --encrypted --login --host=localhost --pwprompt
 
 Create Database
 +++++++++++++++
+
+.. code-block:: shell
 
     $ sudo -u postgres createdb peekaboo --host=localhost --encoding=UTF-8 --owner=peekaboo
 
@@ -81,8 +96,8 @@ Create Database
 ``systemd``
 ===========
 Simply copy ``systemd/peekaboo.service`` to ``/etc/systemd/system/peekaboo.service``.
-If you don't use the systems Python interpreter (``/usr/bin/python``) and have placed the configuration file
-in ``/opt/peekaboo/peekaboo.conf``, no changes to this file are reuired.
+If you don't use the system's Python interpreter (``/usr/bin/python``) and have placed the configuration file
+in ``/opt/peekaboo/etc/peekaboo.conf``, no changes to this file are reuired.
 
 Finally, run ``systemctl daemon-reload``, so ``systemd`` recognizes Peekaboo.
 
@@ -112,7 +127,7 @@ Put the following code into ``/etc/amavis/conf.d/15-av_scanners``:
 
     @av_scanners = (
         ['Peekaboo-Analysis',
-        \&ask_peekaboo, ["{}\n", "/var/lib/peekaboo/peekaboo.sock"],
+        \&ask_peekaboo, ["{}\n", "/var/run/peekaboo/peekaboo.sock"],
         qr/wurde als "(unknown|checked|good|ignored)" eingestuft/m,
         qr/wurde als "bad" eingestuft/m ],
     );
