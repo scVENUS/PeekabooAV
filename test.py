@@ -333,7 +333,7 @@ class TestDatabase(unittest.TestCase):
             job_hash_regex=cls.conf.job_hash_regex, keep_mail_data=False)
         cls.sample = cls.factory.make_sample(os.path.realpath(__file__))
         result = RuleResult('Unittest',
-                            Result.checked,
+                            Result.failed,
                             'This is just a test case.',
                             further_analysis=False)
         cls.sample.add_rule_result(result)
@@ -347,7 +347,7 @@ class TestDatabase(unittest.TestCase):
         """ Test retrieval of analysis results. """
         sample_info = self.db_con.sample_info_fetch(self.sample)
         self.assertEqual(sample_info.sha256sum, self.sample.sha256sum)
-        self.assertEqual(sample_info.result, Result.checked)
+        self.assertEqual(sample_info.result, Result.failed)
         self.assertEqual(sample_info.reason, 'This is just a test case.')
 
     def test_5_in_flight_no_cluster(self):

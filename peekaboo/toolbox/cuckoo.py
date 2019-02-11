@@ -54,14 +54,14 @@ class Cuckoo:
             logger.debug('Requesting Cuckoo report for sample %s' % sample)
             report = self.get_report(job_id)
 
-            # do not set the sample attribute if we were unable to get the
-            # report because e.g. it was corrupted or the API connection
+            # do not register the report with the sample if we were unable to
+            # get it because e.g. it was corrupted or the API connection
             # failed. This will cause the sample to be resubmitted to Cuckoo
             # upon the next try to access the report.
             # TODO: This can cause an endless loop.
             if report is not None:
                 reportobj = CuckooReport(report)
-                sample.set_attr('cuckoo_report', reportobj)
+                sample.register_cuckoo_report(reportobj)
 
             self.job_queue.submit(sample, self.__class__)
             logger.debug("Remaining connections: %d" % self.connection_map.size())
@@ -116,7 +116,6 @@ class CuckooEmbed(Cuckoo):
             raise CuckooAnalysisFailedException(e)
         
         if not p.returncode == 0:
-            # TODO: tell opponent on socket that file has not been checked.
             raise CuckooAnalysisFailedException('cuckoo submit returned a non-zero return code.')
         else:
             out, err = p.communicate()

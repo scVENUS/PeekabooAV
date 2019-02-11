@@ -29,6 +29,8 @@
 import re
 import logging
 from peekaboo.ruleset import Result, RuleResult
+from peekaboo.exceptions import CuckooReportPendingException, \
+        CuckooAnalysisFailedException
 
 
 logger = logging.getLogger(__name__)
@@ -62,7 +64,8 @@ class Rule(object):
                   assessment (i.e. the rule's name) and whether to continue
                   analysis or not.
         """
-        raise NotImplemented
+        raise NotImplementedError
+
 
 class KnownRule(Rule):
     """ A rule determining if a sample is known by looking at the database for
@@ -152,12 +155,55 @@ class FileTypeOnGreylistRule(Rule):
                            False)
 
 
-class CuckooEvilSigRule(Rule):
+class CuckooRule(Rule):
+    """ A common base class for rules that evaluate the Cuckoo report. """
+    def evaluate(self, sample):
+        """ If a report is present for the sample in question we call method
+        evaluate_report() implemented by subclasses to evaluate it for
+        findings. Otherwise we submit the sample to Cuckoo and raise
+        CuckooReportPendingException to abort the current run of the ruleset
+        until the report arrives. If submission to Cuckoo fails we will
+        ourselves report the sample as failed.
+
+        @param sample: The sample to evaluate.
+        @raises CuckooReportPendingException: if the sample was submitted to
+                                              Cuckoo
+        @returns: RuleResult containing verdict.
+        """
+        report = sample.cuckoo_report
+        if report is None:
+            try:
+                job_id = sample.submit_to_cuckoo()
+            except CuckooAnalysisFailedException:
+                return self.result(
+                    Result.failed,
+                    "Die Verhaltensanalyse durch Cuckoo hat einen "
+                    "Fehler produziert und konnte nicht erfolgreich "
+                    "abgeschlossen werden",
+                    False)
+
+            logger.info('Sample submitted to Cuckoo. Job ID: %s. '
+                        'Sample: %s', job_id, sample)
+            raise CuckooReportPendingException()
+
+        # call report evaluation function if we get here
+        return self.evaluate_report(report)
+
+    def evaluate_report(self, report):
+        """ Evaluate a Cuckoo report.
+
+        @param report: The Cuckoo report.
+        @returns: RuleResult containing verdict.
+        """
+        raise NotImplementedError
+
+
+class CuckooEvilSigRule(CuckooRule):
     """ A rule evaluating the signatures from the Cuckoo report against a list
     of signatures considered bad. """
     rule_name = 'cuckoo_evil_sig'
 
-    def evaluate(self, sample):
+    def evaluate_report(self, report):
         """ Evaluate the sample against signatures that if matched mark a
         sample as bad. """
         # list all installed signatures
@@ -169,10 +215,9 @@ class CuckooEvilSigRule(Rule):
                                "Leere Liste schaedlicher Signaturen",
                                True)
 
-        sigs = []
-
         # look through matched signatures
-        for descr in sample.cuckoo_report.signatures:
+        sigs = []
+        for descr in report.signatures:
             logger.debug(descr['description'])
             sigs.append(descr['description'])
 
@@ -195,25 +240,25 @@ class CuckooEvilSigRule(Rule):
                            False)
 
 
-class CuckooScoreRule(Rule):
+class CuckooScoreRule(CuckooRule):
     """ A rule checking the score reported by Cuckoo against a configurable
     threshold. """
     rule_name = 'cuckoo_score'
 
-    def evaluate(self, sample):
+    def evaluate_report(self, report):
         """ Evaluate the score reported by Cuckoo against the threshold from
         the configuration and report sample as bad if above. """
         threshold = float(self.config.get('higher_than', 4.0))
 
-        if sample.cuckoo_report.score >= threshold:
+        if report.score >= threshold:
             return self.result(Result.bad,
                                "Cuckoo score >= %s: %s" %
-                               (threshold, sample.cuckoo_report.score),
+                               (threshold, report.score),
                                False)
 
         return self.result(Result.unknown,
                            "Cuckoo score < %s: %s" %
-                           (threshold, sample.cuckoo_report.score),
+                           (threshold, report.score),
                            True)
 
 
@@ -234,12 +279,12 @@ class OfficeMacroRule(Rule):
                            True)
 
 
-class RequestsEvilDomainRule(Rule):
+class RequestsEvilDomainRule(CuckooRule):
     """ A rule checking the domains reported as requested by the sample by
     Cuckoo against a blacklist. """
     rule_name = 'requests_evil_domain'
 
-    def evaluate(self, sample):
+    def evaluate_report(self, report):
         """ Report the sample as bad if one of the requested domains is on our
         list of evil domains. """
         evil_domains = self.config.get('domain', ())
@@ -247,7 +292,7 @@ class RequestsEvilDomainRule(Rule):
             logger.warn("Empty evil domain list, check ruleset config.")
             return self.result(Result.unknown, "Leere Domainliste", True)
 
-        for domain in sample.cuckoo_report.requested_domains:
+        for domain in report.requested_domains:
             if domain in evil_domains:
                 return self.result(Result.bad,
                                    "Die Datei versucht mindestens eine Domain "
@@ -261,15 +306,15 @@ class RequestsEvilDomainRule(Rule):
                            True)
 
 
-class CuckooAnalysisFailedRule(Rule):
+class CuckooAnalysisFailedRule(CuckooRule):
     """ A rule checking the final status reported by Cuckoo for success. """
     rule_name = 'cuckoo_analysis_failed'
 
-    def evaluate(self, sample):
+    def evaluate_report(self, report):
         """ Report the sample as bad if the Cuckoo indicates that the analysis
         has failed. """
-        if sample.cuckoo_report.analysis_failed:
-            return self.result(Result.bad,
+        if report.analysis_failed:
+            return self.result(Result.failed,
                                "Die Verhaltensanalyse durch Cuckoo hat einen "
                                "Fehler produziert und konnte nicht erfolgreich "
                                "abgeschlossen werden",

@@ -146,11 +146,10 @@ def dump_processing_info(sample):
             logger.exception(e)
 
     # Cuckoo report
-    if sample.has_attr('cuckoo_report'):
-        report = sample.get_attr('cuckoo_report').raw
-
+    report = sample.cuckoo_report
+    if report:
         try:
             with open(os.path.join(dump_dir, filename + '_cuckoo_report.json'), 'w+') as f:
-                json.dump(report, f, indent = 1)
+                json.dump(report.raw, f, indent=1)
         except Exception as e:
             logger.exception(e)

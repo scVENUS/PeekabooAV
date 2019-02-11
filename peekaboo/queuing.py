@@ -27,6 +27,7 @@ import logging
 from threading import Thread, Event, Lock
 from queue import Queue, Empty
 from time import sleep
+from peekaboo.ruleset import Result
 from peekaboo.ruleset.engine import RulesetEngine
 from peekaboo.exceptions import CuckooReportPendingException
 
@@ -309,8 +310,11 @@ class Worker(Thread):
                 engine.run()
                 engine.report()
 
-                logger.debug('Saving results to database')
-                self.db_con.analysis_save(sample)
+                if sample.get_result() != Result.failed:
+                    logger.debug('Saving results to database')
+                    self.db_con.analysis_save(sample)
+                else:
+                    logger.debug('Not saving results of failed analysis')
                 sample.remove_from_connection_map()
 
                 self.job_queue.done(sample.sha256sum)

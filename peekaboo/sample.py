@@ -31,8 +31,6 @@ import shutil
 import logging
 import tempfile
 from datetime import datetime
-from peekaboo.exceptions import CuckooReportPendingException, \
-                                CuckooAnalysisFailedException
 from peekaboo.toolbox.sampletools import next_job_hash
 from peekaboo.toolbox.files import guess_mime_type_from_file_contents, \
                                    guess_mime_type_from_filename
@@ -88,6 +86,7 @@ class Sample(object):
         # sha256sum.suffix
         self.__submit_path = None
         self.__cuckoo_job_id = -1
+        self.__cuckoo_report = None
         self.__result = ruleset.Result.unchecked
         self.__reason = None
         self.__report = []  # Peekaboo's own report
@@ -383,19 +382,25 @@ class Sample(object):
 
     @property
     def cuckoo_report(self):
-        if not self.has_attr('cuckoo_report'):
-            try:
-                logger.debug("Submitting %s to Cuckoo" % self.__submit_path)
-                self.__cuckoo_job_id = self.__cuckoo.submit(self.__submit_path)
-                message = 'Erfolgreich an Cuckoo gegeben %s als Job %d\n' \
-                          % (self, self.__cuckoo_job_id)
-                self.__report.append(message)
-                logger.info('Sample submitted to Cuckoo. Job ID: %s. '
-                            'Sample: %s' % (self.__cuckoo_job_id, self))
-                raise CuckooReportPendingException()
-            except CuckooAnalysisFailedException as e:
-                logger.exception(e)
-        return self.get_attr('cuckoo_report')
+        """ Returns the cuckoo report """
+        return self.__cuckoo_report
+
+    def submit_to_cuckoo(self):
+        """ Submit the sample to Cuckoo for analysis and record job id.
+
+        @raises: CuckooAnalsisFailedException if submission failed
+        @returns: cuckoo job id
+        """
+        logger.debug("Submitting %s to Cuckoo", self.__submit_path)
+        self.__cuckoo_job_id = self.__cuckoo.submit(self.__submit_path)
+        message = 'Erfolgreich an Cuckoo gegeben %s als Job %d\n' \
+                  % (self, self.__cuckoo_job_id)
+        self.__report.append(message)
+        return self.__cuckoo_job_id
+
+    def register_cuckoo_report(self, report):
+        """ Records a Cuckoo report for later evaluation. """
+        self.__cuckoo_report = report
 
     def __close_socket(self):
         logger.debug('Closing socket connection.')

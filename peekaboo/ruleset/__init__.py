@@ -35,8 +35,8 @@ class Result(Enum):
     unchecked = 1
     unknown = 2
     ignored = 3
-    checked = 4
-    good = 5
+    good = 4
+    failed = 5
     bad = 6
 
     def __ge__(self, other):
