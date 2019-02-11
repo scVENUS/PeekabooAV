@@ -18,7 +18,7 @@ Status: **DRAFT**.
 **The main developers are:**
 
 * Felix Bauer
-* Sebastian Deiss
+* Michael Weiser
 * Christoph Herrmann
 
 For news and announcements follow us on twitter [@peekabooAV](https://twitter.com/peekabooav).
