@@ -89,8 +89,6 @@ Finally, run ``systemctl daemon-reload``, so ``systemd`` recognizes Peekaboo.
 
 Helpers & 3rd Party Applications
 ================================
-Peekaboo requires a little tool called ``chwon2me`` in order to change the ownership of files and directories
-to be analyed by Peekaboo.
 Also, Peekaboo can run behavioural analysis of file and directories by utilizing Cuckoo sandbox for this purpose.
 Further, email attachments can be supplied to Peekaboo for analysis directly from AMaViSd.
 
