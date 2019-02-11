@@ -24,7 +24,6 @@ the files from an email created by AMaViSd:
 .. code-block:: shell
 
     gpasswd -a amavis peekaboo
-    gpasswd -a peekaboo amavis
 
 You may choose VirtualBox as hypervisor. If so, you must add the Peekaboo user to the
 ``vboxusers`` group.
