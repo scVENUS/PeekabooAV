@@ -25,6 +25,12 @@ the files from an email created by AMaViSd:
 
     gpasswd -a amavis peekaboo
 
+**Note**: The group membership only affects direct launch of Peekaboo as that
+user.
+The same convention is implemented in the systemd unit.
+Also, option ``group`` of ``peekaboo.conf`` affects the group Peekaboo changes
+to when started as root.
+
 You may choose VirtualBox as hypervisor. If so, you must add the Peekaboo user to the
 ``vboxusers`` group.
 
