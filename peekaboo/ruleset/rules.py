@@ -155,6 +155,23 @@ class FileTypeOnGreylistRule(Rule):
                            False)
 
 
+class OfficeMacroRule(Rule):
+    """ A rule checking the sample for Office macros. """
+    rule_name = 'office_macro'
+
+    def evaluate(self, sample):
+        """ Report the sample as bad if it contains a macro. """
+        if sample.office_macros:
+            return self.result(Result.bad,
+                               "Die Datei beinhaltet ein Office-Makro",
+                               False)
+
+        return self.result(Result.unknown,
+                           "Die Datei beinhaltet kein erkennbares "
+                           "Office-Makro",
+                           True)
+
+
 class CuckooRule(Rule):
     """ A common base class for rules that evaluate the Cuckoo report. """
     def evaluate(self, sample):
@@ -259,23 +276,6 @@ class CuckooScoreRule(CuckooRule):
         return self.result(Result.unknown,
                            "Cuckoo score < %s: %s" %
                            (threshold, report.score),
-                           True)
-
-
-class OfficeMacroRule(Rule):
-    """ A rule checking the sample for Office macros. """
-    rule_name = 'office_macro'
-
-    def evaluate(self, sample):
-        """ Report the sample as bad if it contains a macro. """
-        if sample.office_macros:
-            return self.result(Result.bad,
-                               "Die Datei beinhaltet ein Office-Makro",
-                               False)
-
-        return self.result(Result.unknown,
-                           "Die Datei beinhaltet kein erkennbares "
-                           "Office-Makro",
                            True)
 
 
