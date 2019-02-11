@@ -87,6 +87,7 @@ class Sample(object):
         # A symlink that points to the actual file named
         # sha256sum.suffix
         self.__submit_path = None
+        self.__cuckoo_job_id = -1
         self.__result = ruleset.Result.unchecked
         self.__reason = None
         self.__report = []  # Peekaboo's own report
@@ -358,9 +359,7 @@ class Sample(object):
 
     @property
     def job_id(self):
-        if self.has_attr('job_id'):
-            return self.get_attr('job_id')
-        return -1
+        return self.__cuckoo_job_id
 
     @property
     def office_macros(self):
@@ -387,12 +386,12 @@ class Sample(object):
         if not self.has_attr('cuckoo_report'):
             try:
                 logger.debug("Submitting %s to Cuckoo" % self.__submit_path)
-                job_id = self.__cuckoo.submit(self.__submit_path)
-                self.set_attr('job_id', job_id)
+                self.__cuckoo_job_id = self.__cuckoo.submit(self.__submit_path)
                 message = 'Erfolgreich an Cuckoo gegeben %s als Job %d\n' \
-                          % (self, job_id)
+                          % (self, self.__cuckoo_job_id)
                 self.__report.append(message)
-                logger.info('Sample submitted to Cuckoo. Job ID: %s. Sample: %s' % (job_id, self))
+                logger.info('Sample submitted to Cuckoo. Job ID: %s. '
+                            'Sample: %s' % (self.__cuckoo_job_id, self))
                 raise CuckooReportPendingException()
             except CuckooAnalysisFailedException as e:
                 logger.exception(e)
@@ -444,14 +443,10 @@ class Sample(object):
                 logger.exception(e)
 
     def __str__(self):
-        job_id = -1
-        if self.has_attr('job_id'):
-            job_id = self.get_attr('job_id')
-
         return ("<Sample(filename='%s', job_id='%d',"
                 " result='%s', sha256sum='%s')>"
                 % (self.__filename,
-                   job_id,
+                   self.__cuckoo_job_id,
                    self.__result,
                    self.sha256sum))
 
