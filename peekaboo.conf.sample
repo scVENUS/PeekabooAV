@@ -60,7 +60,7 @@
 # embed mode
 #exec             :    /opt/cuckoo/bin/cuckoo
 #submit           :    /opt/cuckoo/bin/cuckoo submit
-#storage_path     :    /var/lib//peekaboo/.cuckoo/storage
+#storage_path     :    /var/lib/peekaboo/.cuckoo/storage
 
 # api mode
 #url              :    http://127.0.0.1:8090
