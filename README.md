@@ -46,6 +46,8 @@ Install PeekabooAV
 /path/to/venv/bin/pip install .
 ```
 
+This will pull in all required packages and install them into the virtualenv.
+
 ### Configuration ###
 Take a look at ``peekaboo.conf.sample`` and ``ruleset.conf.sample``.
 
@@ -74,7 +76,7 @@ peekaboo --help
 
 ### Usage without Installation ###
 
-You can now run PeekabooAV without installing it using the ``peekaboo_debug.py`` script.
+You can also run PeekabooAV without installing it using the ``peekaboo_debug.py`` script.
 ```shell
 python peekaboo_debug.py -c /path/to/your/peekaboo.conf
 ```

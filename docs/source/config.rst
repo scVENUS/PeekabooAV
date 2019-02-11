@@ -27,17 +27,6 @@ You may choose VirtualBox as hypervisor. If so, you must add the Peekaboo user t
     $ sudo usermod -a -G vboxusers peekaboo
 
 
-Virtualenv
-==========
-
-You may run Peekaboo in a virtualenv. The setup is done by typing the following command:
-
-.. code-block:: shell
-
-   sudo -u peekaboo mkdir /opt/peekaboo/virtualenv
-   sudo -u peekaboo virtualenv /opt/peekaboo/virtualenv
-
-
 Configuration File
 ==================
 Peekaboo requires a configuration file to be supplied on startup.
