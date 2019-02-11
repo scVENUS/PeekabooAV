@@ -6,7 +6,7 @@
 #         rules.py                                                            #
 ###############################################################################
 #                                                                             #
-# Copyright (C) 2016-2018  science + computing ag                             #
+# Copyright (C) 2016-2019  science + computing ag                             #
 #                                                                             #
 # This program is free software: you can redistribute it and/or modify        #
 # it under the terms of the GNU General Public License as published by        #
@@ -40,13 +40,29 @@ class Rule(object):
     connection) or helper functions. """
     def __init__(self, config=None, db_con=None):
         """ Initialize common configuration and resources """
-        self.config = config
         self.db_con = db_con
+
+        # initialise and retain config as empty dict if no rule config is given
+        # to us so the rule can rely on it and does not need to do any type
+        # checking
+        self.config = {}
+        if config is not None:
+            self.config = config
 
     def result(self, result, reason, further_analysis):
         """ Construct a RuleResult for returning to the engine. """
         return RuleResult(self.rule_name, result=result, reason=reason,
                           further_analysis=further_analysis)
+
+    def evaluate(self, sample):
+        """ Evaluate a rule against a sample.
+
+        @param sample: The sample to evaluate.
+        @returns: RuleResult containing verdict, reason, source of this
+                  assessment (i.e. the rule's name) and whether to continue
+                  analysis or not.
+        """
+        raise NotImplemented
 
 class KnownRule(Rule):
     """ A rule determining if a sample is known by looking at the database for

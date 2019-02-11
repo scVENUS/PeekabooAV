@@ -5,7 +5,7 @@
 # sample.py                                                                   #
 ###############################################################################
 #                                                                             #
-# Copyright (C) 2016-2018  science + computing ag                             #
+# Copyright (C) 2016-2019  science + computing ag                             #
 #                                                                             #
 # This program is free software: you can redistribute it and/or modify        #
 # it under the terms of the GNU General Public License as published by        #
@@ -162,7 +162,7 @@ class Sample(object):
         """
         Get a sample attribute by a specified key.
 
-        :param key: The identifier of the sample attribute to get.
+        @param key: The identifier of the sample attribute to get.
         """
         if self.has_attr(key):
             return self.__attributes[key]
@@ -172,9 +172,9 @@ class Sample(object):
         """
         Add an attribute to a sample.
 
-        :param key: The identifier of the attribute.
-        :param val: The attribute to add.
-        :param override: Whether the existing attribute shall be overwritten or not.
+        @param key: The identifier of the attribute.
+        @param val: The attribute to add.
+        @param override: Whether the existing attribute shall be overwritten or not.
         """
         if self.has_attr(key) and override is False:
             raise KeyError("Key '%s' already exists." % key)
@@ -184,7 +184,7 @@ class Sample(object):
         """
         Check if an attribute exists for this sample.
 
-        :param key: The identifier of the attribute.
+        @param key: The identifier of the attribute.
         """
         if key in self.__attributes.keys():
             return True
@@ -194,9 +194,9 @@ class Sample(object):
         """
         Delete an attribute for this sample.
 
-        :param key: The identifier of the attribute
-        :raises ValueError if the given key was not found in
-                the attributes dictionary.
+        @param key: The identifier of the attribute
+        @raises ValueError: if the given key was not found in
+                            the attributes dictionary.
         """
         if key in self.__attributes.keys():
             del self.__attributes[key]
@@ -430,7 +430,7 @@ class Sample(object):
         """
         Write a message to the socket.
 
-        :param msg: The message to send (max. 1024 bytes).
+        @param msg: The message to send (max. 1024 bytes).
         """
         if self.__socket is None:
             return

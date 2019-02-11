@@ -5,7 +5,7 @@
 # daemon.py                                                                   #
 ###############################################################################
 #                                                                             #
-# Copyright (C) 2016-2018  science + computing ag                             #
+# Copyright (C) 2016-2019  science + computing ag                             #
 #                                                                             #
 # This program is free software: you can redistribute it and/or modify        #
 # it under the terms of the GNU General Public License as published by        #
@@ -22,14 +22,13 @@
 #                                                                             #
 ###############################################################################
 
-
 import os
 import sys
 import grp
 import pwd
 import stat
 import logging
-import SocketServer
+import socketserver
 import socket
 import signal
 from time import sleep
@@ -37,13 +36,13 @@ import json
 from threading import Thread
 from argparse import ArgumentParser
 from sdnotify import SystemdNotifier
-from peekaboo import _owl, __version__
-from peekaboo.config import PeekabooConfig, PeekabooRulesetConfiguration
+from peekaboo import PEEKABOO_OWL, __version__
+from peekaboo.config import PeekabooConfig, PeekabooRulesetConfig
 from peekaboo.db import PeekabooDatabase
 from peekaboo.toolbox.sampletools import ConnectionMap
 from peekaboo.queuing import JobQueue
 from peekaboo.sample import SampleFactory
-from peekaboo.exceptions import PeekabooDatabaseError
+from peekaboo.exceptions import PeekabooDatabaseError, PeekabooConfigException
 from peekaboo.toolbox.cuckoo import Cuckoo, CuckooEmbed, CuckooApi
 
 
@@ -87,7 +86,7 @@ class SignalHandler():
                 listener.reap_children()
 
 
-class PeekabooStreamServer(SocketServer.ThreadingUnixStreamServer):
+class PeekabooStreamServer(socketserver.ThreadingUnixStreamServer):
     """
     Asynchronous server.
 
@@ -101,7 +100,7 @@ class PeekabooStreamServer(SocketServer.ThreadingUnixStreamServer):
         self.request_queue_size = request_queue_size
         self.allow_reuse_address = True
         
-        SocketServer.ThreadingUnixStreamServer.__init__(self, server_address,
+        socketserver.ThreadingUnixStreamServer.__init__(self, server_address,
                                                         request_handler_cls,
                                                         bind_and_activate=bind_and_activate)
 
@@ -121,30 +120,30 @@ class PeekabooStreamServer(SocketServer.ThreadingUnixStreamServer):
     def server_close(self):
         # no new connections from this point on
         os.remove(self.server_address)
-        return SocketServer.ThreadingUnixStreamServer.server_close(self)
+        return socketserver.ThreadingUnixStreamServer.server_close(self)
 
 
-class PeekabooStreamRequestHandler(SocketServer.StreamRequestHandler):
+class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
     """
     Request handler used by PeekabooStreamServer to handle analysis requests.
 
     @author: Sebastian Deiss
     """
     def setup(self):
-        SocketServer.StreamRequestHandler.setup(self)
+        socketserver.StreamRequestHandler.setup(self)
         self.job_queue = self.server.job_queue
         self.sample_factory = self.server.sample_factory
 
     def handle(self):
         """
         Handles an analysis request. This is expected to be a JSON structure
-        containing the path of the directory / file to analyse. Structure:
+        containing the path of the directory / file to analyse. Structure::
 
-        [ { "full_name": "<path>",
-            "name_declared": ...,
-            ... },
-          { ... },
-          ... ]
+            [ { "full_name": "<path>",
+                "name_declared": ...,
+                ... },
+              { ... },
+              ... ]
 
         The maximum buffer size is 16 KiB, because JSON incurs some bloat.
         """
@@ -203,64 +202,47 @@ def run():
     arg_parser.add_argument(
         '-c', '--config',
         action='store',
-        required=False,
-        default=os.path.join('./peekaboo.conf'),
         help='The configuration file for Peekaboo.'
     )
     arg_parser.add_argument(
         '-d', '--debug',
         action='store_true',
-        required=False,
-        default=False,
         help="Run Peekaboo in debug mode regardless of what's specified in the configuration."
     )
     arg_parser.add_argument(
         '-D', '--daemon',
         action='store_true',
-        required=False,
-        default=False,
         help='Run Peekaboo in daemon mode (suppresses the logo to be written to STDOUT).'
     )
     args = arg_parser.parse_args()
 
+    print('Starting Peekaboo %s.' % __version__)
     if not args.daemon:
-        print(_owl)
-    else:
-        print('Starting Peekaboo %s.' % __version__)
-
-    # read configuration
-    if not os.path.isfile(args.config):
-        # logger doesn't exist here
-        print('Configuration file "%s" does not exist or is not a file.' %
-                args.config)
-        sys.exit(1)
-
-    if not os.access(args.config, os.R_OK):
-        print('Configuration file "%s" is not accessible for reading.' %
-                args.config)
-        sys.exit(1)
-
-    config = PeekabooConfig(args.config)
+        print(PEEKABOO_OWL)
 
     # Check if CLI arguments override the configuration
+    log_level = None
     if args.debug:
-        config.change_log_level('DEBUG')
+        log_level = logging.DEBUG
 
-    # Log the configuration options if we are in debug mode
-    if config.log_level == logging.DEBUG:
-        logger.debug(config.__str__())
+    try:
+        config = PeekabooConfig(config_file=args.config, log_level=log_level)
+        logger.debug(config)
+    except PeekabooConfigException as error:
+        logging.critical(error)
+        sys.exit(1)
 
     # establish a connection to the database
     try:
-        db_con = PeekabooDatabase(db_url=config.db_url,
-                instance_id=config.cluster_instance_id,
-                stale_in_flight_threshold=config.cluster_stale_in_flight_threshold)
-    except PeekabooDatabaseError as e:
-        logging.exception(e)
+        db_con = PeekabooDatabase(
+            db_url=config.db_url, instance_id=config.cluster_instance_id,
+            stale_in_flight_threshold=config.cluster_stale_in_flight_threshold)
+    except PeekabooDatabaseError as error:
+        logging.critical(error)
         sys.exit(1)
-    except Exception as e:
-        logger.critical('Failed to establish a connection to the database.')
-        logger.exception(e)
+    except Exception as error:
+        logger.critical('Failed to establish a connection to the database '
+                        'at %s: %s', config.db_url, error)
         sys.exit(1)
 
     # Import debug module if we are in debug mode
@@ -271,16 +253,21 @@ def run():
         debugger.start()
 
     if os.getuid() == 0:
-        logger.warning('Peekaboo should not run as root.')
-        # drop privileges to user
-        os.setgid(grp.getgrnam(config.group)[2])
-        os.setuid(pwd.getpwnam(config.user)[2])
-        # set $HOME to the users home directory
-        # (VirtualBox must access the configs)
-        os.environ['HOME'] = pwd.getpwnam(config.user)[5]
-        logger.info("Dropped privileges to user %s and group %s"
-                    % (config.user, config.group))
-        logger.debug('$HOME is ' + os.environ['HOME'])
+        if config.user and config.group:
+            # drop privileges to user
+            os.setgid(grp.getgrnam(config.group)[2])
+            os.setuid(pwd.getpwnam(config.user)[2])
+            logger.info("Dropped privileges to user %s and group %s"
+                        % (config.user, config.group))
+
+            # set $HOME to the users home directory
+            # (VirtualBox must access the configs)
+            os.environ['HOME'] = pwd.getpwnam(config.user)[5]
+            logger.debug('$HOME is ' + os.environ['HOME'])
+        else:
+            logger.warning('Peekaboo should not run as root. Please '
+                           'configure a user and group to run as.')
+            sys.exit(0)
 
     # write PID file
     pid = str(os.getpid())
@@ -307,7 +294,13 @@ def run():
 
     # workers of the job queue need the ruleset configuration to create the
     # ruleset engine with it
-    ruleset_config = PeekabooRulesetConfiguration(config.ruleset_config)
+    try:
+        ruleset_config = PeekabooRulesetConfig(config.ruleset_config)
+        logger.debug(ruleset_config)
+    except PeekabooConfigException as error:
+        logging.critical(error)
+        sys.exit(1)
+
     job_queue = JobQueue(
         worker_count=config.worker_count, ruleset_config=ruleset_config,
         db_con=db_con,
@@ -315,9 +308,9 @@ def run():
     connection_map = ConnectionMap()
 
     if config.cuckoo_mode == "embed":
-        cuckoo = CuckooEmbed(job_queue, connection_map, config.interpreter,
-                config.cuckoo_exec, config.cuckoo_submit,
-                config.cuckoo_storage)
+        cuckoo = CuckooEmbed(job_queue, connection_map, config.cuckoo_exec,
+                             config.cuckoo_submit, config.cuckoo_storage,
+                             config.interpreter)
     # otherwise it's the new API method and default
     else:
         cuckoo = CuckooApi(job_queue, connection_map, config.cuckoo_url,
@@ -343,7 +336,7 @@ def run():
                     sample_factory = sample_factory,
                     request_queue_size = config.worker_count * 2)
             break
-        except socket.error, msg:
+        except socket.error as msg:
             logger.warning("SocketServer couldn't start (%i): %s" % (i, msg))
     if not server:
         logger.error('Fatal: Couldn\'t initialise Peekaboo Server')
@@ -364,8 +357,8 @@ def run():
         systemd.notify("READY=1")
         # If this dies Peekaboo dies, since this is the main thread. (legacy)
         rc = cuckoo.do()
-    except Exception as e:
-        logger.exception(e)
+    except Exception as error:
+        logger.critical('Main thread aborted: %s' % error)
     finally:
         server.shutdown()
         server.server_close()

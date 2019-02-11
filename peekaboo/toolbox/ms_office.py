@@ -6,7 +6,7 @@
 #         ms_office.py                                                        #
 ###############################################################################
 #                                                                             #
-# Copyright (C) 2016-2018  science + computing ag                             #
+# Copyright (C) 2016-2019  science + computing ag                             #
 #                                                                             #
 # This program is free software: you can redistribute it and/or modify        #
 # it under the terms of the GNU General Public License as published by        #
@@ -23,13 +23,15 @@
 #                                                                             #
 ###############################################################################
 
+""" Tool functions for handling office macros. """
 
 import logging
 from oletools.olevba import VBA_Parser
 
 
 logger = logging.getLogger(__name__)
-ms_office_extensions = [
+
+MS_OFFICE_EXTENSIONS = [
     ".doc", ".docm", ".dotm", ".docx",
     ".ppt", ".pptm", ".pptx", ".potm", ".ppam", ".ppsm",
     ".xls", ".xlsm", ".xlsx",
@@ -40,12 +42,12 @@ def has_office_macros(office_file):
     """
     Detects macros in Microsoft Office documents.
 
-    :param office_file: The MS Office document to check for macros.
-    :return: True if macros where found, otherwise False.
+    @param office_file: The MS Office document to check for macros.
+    @return: True if macros where found, otherwise False.
              If VBA_Parser crashes it returns False too.
     """
     file_extension = office_file.split('.')[-1]
-    if file_extension not in ms_office_extensions:
+    if file_extension not in MS_OFFICE_EXTENSIONS:
         return False
     try:
         # VBA_Parser reports macros for office documents
@@ -54,6 +56,6 @@ def has_office_macros(office_file):
     except TypeError:
         # The given file is not an office document.
         return False
-    except Exception as e:
-        logger.exception(e)
+    except Exception as error:
+        logger.exception(error)
         return False

@@ -6,7 +6,7 @@
 #         engine.py                                                           #
 ###############################################################################
 #                                                                             #
-# Copyright (C) 2016-2018  science + computing ag                             #
+# Copyright (C) 2016-2019  science + computing ag                             #
 #                                                                             #
 # This program is free software: you can redistribute it and/or modify        #
 # it under the terms of the GNU General Public License as published by        #
@@ -87,8 +87,6 @@ class RulesetEngine(object):
         try:
             # skip disabled rules.
             if self.config.rule_enabled(rule_name):
-                # guaranteed to be a hash, albeit empty if no rule config
-                # exists
                 rule_config = self.config.rule_config(rule_name)
                 rule = rule_class(config=rule_config, db_con=self.db_con)
                 result = rule.evaluate(sample)
@@ -125,7 +123,7 @@ def dump_processing_info(sample):
     job_hash = sample.get_job_hash()
     dump_dir = os.path.join(os.environ['HOME'], 'malware_reports', job_hash)
     if not os.path.isdir(dump_dir):
-        os.makedirs(dump_dir, 0770)
+        os.makedirs(dump_dir, 0o770)
     filename = sample.get_filename() + '-' + sample.sha256sum
 
     logger.debug('Dumping processing info to %s for sample %s' % (dump_dir, sample))

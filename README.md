@@ -36,14 +36,14 @@ Clone the repository
 git clone https://github.com/scVENUS/PeekabooAV.git
 ```
 
-Install dependencies
+Start a new virtualenv
 ```shell
-pip install -r requirements.txt
+virtualenv --python2 /path/to/venv
 ```
 
 Install PeekabooAV
 ```shell
-python setup.py install
+/path/to/venv/bin/pip install .
 ```
 
 ### Configuration ###
@@ -54,7 +54,7 @@ Take a look at ``peekaboo.conf.sample`` and ``ruleset.conf.sample``.
 
 Runs the unit tests
 ```shell
-python test.py 
+/path/to/venv/bin/python test.py
 ```
 
 
@@ -62,11 +62,11 @@ python test.py
 
 Now, you can run PeekabooAV with
 ```shell
-peekaboo -c /path/to/your/peekaboo.conf
+/path/to/venv/bin/peekaboo -c /path/to/your/peekaboo.conf
 ```
 
-**Note:** If you have your PeekabooAV configuration file named ``peekaboo.conf``
-and put it in the base directory of the repository you can omit the ``-c`` option.  
+**Note:** If you put your PeekabooAV configuration file at
+``/opt/peekaboo/etc/peekaboo.conf`` you can omit the ``-c`` option.
 Also, for detailed command line options run
 ```shell
 peekaboo --help

@@ -7,7 +7,7 @@
 # scan_emailed_file.py                                                        #
 ###############################################################################
 #                                                                             #
-# Copyright (C) 2016-2018  science + computing ag                             #
+# Copyright (C) 2016-2019  science + computing ag                             #
 #                                                                             #
 # This program is free software: you can redistribute it and/or modify        #
 # it under the terms of the GNU General Public License as published by        #
@@ -26,8 +26,9 @@
 
 
 """
-Use with
+Use with::
     python -m smtpd -n -c DebuggingServer localhost:10025
+
 as mailserver or use the script "run_dev_mailserver.sh".
 """
 
@@ -49,13 +50,13 @@ def send_mail(send_from, send_to, subject, text, files=[],
     """
     Send an email.
 
-    :param send_from: Email sender
-    :param send_to: The recipient
-    :param subject: Email subject
-    :param text: Email content
-    :param files: A list of files to attach to the mail
-    :param server: FQDN or IP of the mail server
-    :param port: TCP port of the mail server
+    @param send_from: Email sender
+    @param send_to: The recipient
+    @param subject: Email subject
+    @param text: Email content
+    @param files: A list of files to attach to the mail
+    @param server: FQDN or IP of the mail server
+    @param port: TCP port of the mail server
     """
     assert isinstance(send_to, list)
 

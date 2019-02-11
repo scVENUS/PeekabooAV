@@ -6,7 +6,7 @@
 #         cuckoo.py                                                           #
 ###############################################################################
 #                                                                             #
-# Copyright (C) 2016-2018  science + computing ag                             #
+# Copyright (C) 2016-2019  science + computing ag                             #
 #                                                                             #
 # This program is free software: you can redistribute it and/or modify        #
 # it under the terms of the GNU General Public License as published by        #
@@ -33,7 +33,6 @@ import requests
 import random
 from twisted.internet import protocol, reactor, process
 from time import sleep
-from peekaboo import MultiRegexMatcher
 from peekaboo.exceptions import CuckooAnalysisFailedException
 
 
@@ -41,9 +40,7 @@ logger = logging.getLogger(__name__)
 
 
 class Cuckoo:
-    """
-        Parent class, defines interface to Cuckoo
-    """
+    """ Parent class, defines interface to Cuckoo """
     def __init__(self, job_queue, connection_map):
         self.job_queue = job_queue
         self.connection_map = connection_map
@@ -78,32 +75,39 @@ class Cuckoo:
         pass
 
 class CuckooEmbed(Cuckoo):
-    """
-        Runs and interfaces with Cuckoo in IPC
+    """ Runs and interfaces with Cuckoo in IPC
         
-        @author: Sebastian Deiss
-        @author: Felix Bauer
+    @author: Sebastian Deiss
+    @author: Felix Bauer
     """
-    def __init__(self, job_queue, connection_map, interpreter,
-            cuckoo_exec, cuckoo_submit, cuckoo_storage):
+    def __init__(self, job_queue, connection_map, cuckoo_exec, cuckoo_submit,
+                 cuckoo_storage, interpreter=None):
         Cuckoo.__init__(self, job_queue, connection_map)
         self.interpreter = interpreter
         self.cuckoo_exec = cuckoo_exec
         self.cuckoo_submit = cuckoo_submit
         self.cuckoo_storage = cuckoo_storage
         self.exit_code = 0
+
+        # process output to get job ID
+        patterns = (
+            # Example: Success: File "/var/lib/peekaboo/.bashrc" added as task with ID #4
+            "Success.*: File .* added as task with ID #([0-9]*)",
+            "added as task with ID ([0-9]*)",
+        )
+        self.job_id_patterns = [re.compile(pattern) for pattern in patterns]
     
     def submit(self, sample):
         """
-            Submit a file or directory to Cuckoo for behavioural analysis.
+        Submit a file or directory to Cuckoo for behavioural analysis.
             
-            :param sample: Path to a file or a directory.
-            :return: The job ID used by Cuckoo to identify this analysis task.
-            """
+        @param sample: Path to a file or a directory.
+        @return: The job ID used by Cuckoo to identify this analysis task.
+        """
         try:
             # cuckoo_submit is a list, make a copy as to not modify the
             # original value
-            proc = self.cuckoo_submit + [sample]
+            proc = self.cuckoo_submit.split(' ') + [sample]
             p = subprocess.Popen(proc,
                                  stdout=subprocess.PIPE,
                                  stderr=subprocess.PIPE)
@@ -118,22 +122,25 @@ class CuckooEmbed(Cuckoo):
             out, err = p.communicate()
             logger.debug("cuckoo submit STDOUT: %s" % out)
             logger.debug("cuckoo submit STDERR: %s" % err)
-            # process output to get job ID
-            patterns = list()
-            # Example: Success: File "/var/lib/peekaboo/.bashrc" added as task with ID #4
-            patterns.append(".*Success.*: File .* added as task with ID #([0-9]*).*")
-            patterns.append(".*added as task with ID ([0-9]*).*")
-            matcher = MultiRegexMatcher(patterns)
+
             response = out.replace("\n", "")
-            m = matcher.match(response)
-            logger.debug('Pattern %d matched.' % matcher.matched_pattern)
+
+            match = None
+            pattern_no = 0
+            for pattern in self.job_id_patterns:
+                match = re.search(pattern, response)
+                if match is not None:
+                    logger.debug('Pattern %d matched.' % pattern_no)
+                    break
+
+                pattern_no += 1
             
-            if m:
-                job_id = int(m.group(1))
+            if match is not None:
+                job_id = int(match.group(1))
                 return job_id
+
             raise CuckooAnalysisFailedException(
-                                                'Unable to extract job ID from given string %s' % response
-                                                )
+                'Unable to extract job ID from given string %s' % response)
 
     def get_report(self, job_id):
         path = os.path.join(self.cuckoo_storage,
@@ -155,10 +162,15 @@ class CuckooEmbed(Cuckoo):
         return report
 
     def do(self):
-        # Run Cuckoo sandbox, parse log output, and report back of Peekaboo.
-        srv = CuckooServer(self)
-        reactor.spawnProcess(srv, self.interpreter, [self.interpreter, '-u',
-                                                     self.cuckoo_exec])
+        """ Run Cuckoo sandbox, parse log output, and report back of Peekaboo. """
+        command = self.cuckoo_exec.split(' ')
+
+        # allow for injecting a custom interpreter which we use to run cuckoo
+        # with python -u for unbuffered standard output
+        if self.interpreter:
+            command = self.interpreter.split(' ') + command
+
+        reactor.spawnProcess(CuckooServer(self), command[0], command)
 
         # do not install twisted's signal handlers because it will screw with
         # our logic (install a handler for SIGTERM and SIGCHLD but not for
@@ -190,9 +202,9 @@ class CuckooEmbed(Cuckoo):
 
 class CuckooApi(Cuckoo):
     """
-        Interfaces with a Cuckoo installation via its REST API
+    Interfaces with a Cuckoo installation via its REST API
         
-        @author: Felix Bauer
+    @author: Felix Bauer
     """
     def __init__(self, job_queue, connection_map,
             url="http://localhost:8090", poll_interval = 5):
@@ -287,12 +299,11 @@ class CuckooApi(Cuckoo):
 class CuckooServer(protocol.ProcessProtocol):
     """
     Class that is used by twisted.internet.reactor to process Cuckoo
-    output and process its behavior.
+    output and process its behavior. Usage::
 
-    Usage:
-    srv = CuckooServer()
-    reactor.spawnProcess(srv, 'python2', ['python2', '/path/to/cukoo.py'])
-    reactor.run()
+        srv = CuckooServer()
+        reactor.spawnProcess(srv, 'python2', ['python2', '/path/to/cukoo.py'])
+        reactor.run()
 
     @author: Felix Bauer
     @author: Sebastian Deiss
@@ -366,7 +377,7 @@ class CuckooReport(object):
     """
     def __init__(self, report):
         """
-        :param report: hash with report data from Cuckoo
+        @param report: hash with report data from Cuckoo
         """
         self.report = report
 
@@ -379,7 +390,7 @@ class CuckooReport(object):
         """
         Gets the requested domains from the Cuckoo report.
 
-        :return: The requested domains from the Cuckoo report.
+        @returns: The requested domains from the Cuckoo report.
         """
         try:
             return [d['request'] for d in self.report['network']['dns']]
@@ -391,8 +402,8 @@ class CuckooReport(object):
         """
         Gets the triggered signatures from the Cuckoo report.
 
-        :return: The triggered signatures from the Cuckoo report or
-                 None of there was an error parsing the Cuckoo report.
+        @returns: The triggered signatures from the Cuckoo report or None of
+                  there was an error parsing the Cuckoo report.
         """
         try:
             return self.report['signatures']
@@ -404,8 +415,8 @@ class CuckooReport(object):
         """
         Gets the score from the Cuckoo report.
 
-        :return: The score from the Cuckoo report or
-                 None of there was an error parsing the Cuckoo report.
+        @returns: The score from the Cuckoo report or None of there was an
+                  error parsing the Cuckoo report.
         """
         try:
             return self.report['info']['score']
@@ -417,8 +428,8 @@ class CuckooReport(object):
         """
         Errors occurred during Cuckoo analysis.
 
-        :return: The errors occurred during Cuckoo analysis or
-                 None of there was an error parsing the Cuckoo report.
+        @returns: The errors occurred during Cuckoo analysis or None of there
+                  was an error parsing the Cuckoo report.
         """
         try:
             return self.report['debug']['errors']
@@ -430,7 +441,7 @@ class CuckooReport(object):
         """
         Has the Cuckoo analysis failed?
 
-        :return: True if the Cuckoo analysis failed, otherwise False.
+        @returns: True if the Cuckoo analysis failed, otherwise False.
         """
         if self.errors:
             logger.warning('Cuckoo produced %d error(s) during processing.' % len(self.errors))
