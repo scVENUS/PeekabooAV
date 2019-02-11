@@ -14,8 +14,8 @@ Also, in embed mode, the ``.cuckoo`` instance directory will reside there.
 
 .. code-block:: shell
 
-    groupadd -g 150 peekaboo
-    useradd -g 150 -u 150 -m -d /var/lib/peekaboo peekaboo
+    $ groupadd -g 150 peekaboo
+    $ useradd -g 150 -u 150 -m -d /var/lib/peekaboo peekaboo
 
 If you plan to use AMaViSd to analyse email attachments with Peekaboo,
 the Peekaboo user must be a member of the ``amavis`` group in order to access
@@ -23,7 +23,7 @@ the files from an email created by AMaViSd:
 
 .. code-block:: shell
 
-    gpasswd -a amavis peekaboo
+    $ gpasswd -a amavis peekaboo
 
 **Note**: The group membership only affects direct launch of Peekaboo as that
 user.
@@ -80,7 +80,7 @@ PostgreSQL
 
 .. code-block:: shell
    
-   sudo -u postgres psql postgres
+   $ sudo -u postgres psql postgres
    \password postgres
 
 Crate User
@@ -102,7 +102,7 @@ Create Database
 ===========
 Simply copy ``systemd/peekaboo.service`` to ``/etc/systemd/system/peekaboo.service``.
 If you don't use the system's Python interpreter (``/usr/bin/python``) and have placed the configuration file
-in ``/opt/peekaboo/etc/peekaboo.conf``, no changes to this file are reuired.
+in ``/opt/peekaboo/etc/peekaboo.conf``, no changes to this file are required.
 
 Finally, run ``systemctl daemon-reload``, so ``systemd`` recognizes Peekaboo.
 
