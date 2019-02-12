@@ -303,9 +303,9 @@ class Worker(Thread):
                 continue
             logger.info('Worker %d: Processing sample %s' % (self.worker_id, sample))
 
-            sample.init()
-
             try:
+                sample.init()
+
                 engine = RulesetEngine(sample, self.ruleset_config, self.db_con)
                 engine.run()
 
@@ -318,7 +318,9 @@ class Worker(Thread):
                     self.db_con.analysis_save(sample)
                 else:
                     logger.debug('Not saving results of failed analysis')
-                sample.remove_from_connection_map()
+
+                sample.cleanup()
+                sample.mark_done()
 
                 self.job_queue.done(sample.sha256sum)
             except CuckooReportPendingException:

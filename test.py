@@ -329,7 +329,7 @@ class TestDatabase(unittest.TestCase):
         cls.no_cluster_db = PeekabooDatabase('sqlite:///' + cls.test_db,
                                              instance_id=0)
         cls.factory = SampleFactory(
-            cuckoo=None, connection_map=None, base_dir=cls.conf.sample_base_dir,
+            cuckoo=None, base_dir=cls.conf.sample_base_dir,
             job_hash_regex=cls.conf.job_hash_regex, keep_mail_data=False)
         cls.sample = cls.factory.make_sample(os.path.realpath(__file__))
         result = RuleResult('Unittest',
@@ -474,7 +474,7 @@ class TestSample(unittest.TestCase):
         cls.conf = PeekabooDummyConfig()
         cls.db_con = PeekabooDatabase('sqlite:///' + cls.test_db)
         cls.factory = SampleFactory(
-            cuckoo=None, connection_map=None, base_dir=cls.conf.sample_base_dir,
+            cuckoo=None, base_dir=cls.conf.sample_base_dir,
             job_hash_regex=cls.conf.job_hash_regex, keep_mail_data=False)
         cls.sample = cls.factory.make_sample(os.path.realpath(__file__))
 
@@ -510,24 +510,26 @@ class TestSample(unittest.TestCase):
 
     def test_sample_attributes_with_meta_info(self):
         """ Test use of optional meta data. """
-        sample = self.factory.make_sample('test.pyc', {
-            'full_name': '/tmp/test.pyc',
-            'name_declared': 'test.pyc',
-            'type_declared': 'application/x-bytecode.python',
-            'type_long': 'application/x-python-bytecode',
-            'type_short': 'pyc',
-            'size': '200'})
+        sample = self.factory.make_sample(
+            'test.pyc', metainfo={
+                'full_name': '/tmp/test.pyc',
+                'name_declared': 'test.pyc',
+                'type_declared': 'application/x-bytecode.python',
+                'type_long': 'application/x-python-bytecode',
+                'type_short': 'pyc',
+                'size': '200'})
         self.assertEqual(sample.file_extension, 'pyc')
 
     def test_sample_without_suffix(self):
         """ Test extraction of file extension from declared name. """
-        sample = self.factory.make_sample('junk', {
-            'full_name': '/tmp/junk',
-            'name_declared': 'Report.docx',
-            'type_declared': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            'type_long': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            'type_short': 'docx',
-            'size': '212'})
+        sample = self.factory.make_sample(
+            'junk', metainfo={
+                'full_name': '/tmp/junk',
+                'name_declared': 'Report.docx',
+                'type_declared': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'type_long': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'type_short': 'docx',
+                'size': '212'})
         self.assertEqual(sample.file_extension, 'docx')
 
     @classmethod
@@ -547,7 +549,7 @@ class TestRules(unittest.TestCase):
         """ Set up common test case resources. """
         cls.conf = PeekabooDummyConfig()
         cls.factory = SampleFactory(
-            cuckoo=None, connection_map=None, base_dir=cls.conf.sample_base_dir,
+            cuckoo=None, base_dir=cls.conf.sample_base_dir,
             job_hash_regex=cls.conf.job_hash_regex, keep_mail_data=False)
         cls.sample = cls.factory.make_sample(os.path.realpath(__file__))
 

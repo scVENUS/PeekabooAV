@@ -41,32 +41,34 @@ logger = logging.getLogger(__name__)
 
 class Cuckoo:
     """ Parent class, defines interface to Cuckoo """
-    def __init__(self, job_queue, connection_map):
+    def __init__(self, job_queue):
         self.job_queue = job_queue
-        self.connection_map = connection_map
         self.shutdown_requested = False
+        self.running_jobs = {}
 
     def resubmit_with_report(self, job_id):
         logger.debug("Analysis done for task #%d" % job_id)
-        logger.debug("Remaining connections: %d" % self.connection_map.size())
-        sample = self.connection_map.get_sample_by_job_id(job_id)
-        if sample:
-            logger.debug('Requesting Cuckoo report for sample %s' % sample)
-            report = self.get_report(job_id)
 
-            # do not register the report with the sample if we were unable to
-            # get it because e.g. it was corrupted or the API connection
-            # failed. This will cause the sample to be resubmitted to Cuckoo
-            # upon the next try to access the report.
-            # TODO: This can cause an endless loop.
-            if report is not None:
-                reportobj = CuckooReport(report)
-                sample.register_cuckoo_report(reportobj)
+        # thread-safe, no locking required, revisit if splitting into
+        # multiple operations
+        sample = self.running_jobs.pop(job_id, None)
+        if sample is None:
+            logger.debug('No sample found for job ID %d', job_id)
+            return None
 
-            self.job_queue.submit(sample, self.__class__)
-            logger.debug("Remaining connections: %d" % self.connection_map.size())
-        else:
-            logger.debug('No connection found for ID %d' % job_id)
+        logger.debug('Requesting Cuckoo report for sample %s', sample)
+        report = self.get_report(job_id)
+
+        # do not register the report with the sample if we were unable to
+        # get it because e.g. it was corrupted or the API connection
+        # failed. This will cause the sample to be resubmitted to Cuckoo
+        # upon the next try to access the report.
+        # TODO: This can cause an endless loop.
+        if report is not None:
+            reportobj = CuckooReport(report)
+            sample.register_cuckoo_report(reportobj)
+
+        self.job_queue.submit(sample, self.__class__)
 
     def shut_down(self):
         self.shutdown_requested = True
@@ -74,15 +76,20 @@ class Cuckoo:
     def reap_children(self):
         pass
 
+    def get_report(self, job_id):
+        """ Extract the report of a finished analysis from Cuckoo. To be
+        overridden by derived classes for actual implementation. """
+        raise NotImplementedError
+
 class CuckooEmbed(Cuckoo):
     """ Runs and interfaces with Cuckoo in IPC
         
     @author: Sebastian Deiss
     @author: Felix Bauer
     """
-    def __init__(self, job_queue, connection_map, cuckoo_exec, cuckoo_submit,
+    def __init__(self, job_queue, cuckoo_exec, cuckoo_submit,
                  cuckoo_storage, interpreter=None):
-        Cuckoo.__init__(self, job_queue, connection_map)
+        Cuckoo.__init__(self, job_queue)
         self.interpreter = interpreter
         self.cuckoo_exec = cuckoo_exec
         self.cuckoo_submit = cuckoo_submit
@@ -101,13 +108,13 @@ class CuckooEmbed(Cuckoo):
         """
         Submit a file or directory to Cuckoo for behavioural analysis.
             
-        @param sample: Path to a file or a directory.
+        @param sample: Sample object to analyse.
         @return: The job ID used by Cuckoo to identify this analysis task.
         """
         try:
             # cuckoo_submit is a list, make a copy as to not modify the
             # original value
-            proc = self.cuckoo_submit.split(' ') + [sample]
+            proc = self.cuckoo_submit.split(' ') + [sample.submit_path]
             p = subprocess.Popen(proc,
                                  stdout=subprocess.PIPE,
                                  stderr=subprocess.PIPE)
@@ -136,6 +143,9 @@ class CuckooEmbed(Cuckoo):
             
             if match is not None:
                 job_id = int(match.group(1))
+                # thread-safe, no locking required, revisit if splitting into
+                # multiple operations
+                self.running_jobs[job_id] = sample
                 return job_id
 
             raise CuckooAnalysisFailedException(
@@ -205,9 +215,8 @@ class CuckooApi(Cuckoo):
         
     @author: Felix Bauer
     """
-    def __init__(self, job_queue, connection_map,
-            url="http://localhost:8090", poll_interval = 5):
-        Cuckoo.__init__(self, job_queue, connection_map)
+    def __init__(self, job_queue, url="http://localhost:8090", poll_interval=5):
+        Cuckoo.__init__(self, job_queue)
         self.url = url
         self.poll_interval = poll_interval
         self.reported = self.__status()["tasks"]["reported"]
@@ -251,16 +260,19 @@ class CuckooApi(Cuckoo):
         return self.__get("cuckoo/status")
     
     def submit(self, sample):
-        filename = os.path.basename(sample)
-        files = {"file": (filename, open(sample, 'rb'))}
-        r = self.__get("tasks/create/file", method="post", files=files)
+        path = sample.submit_path
+        filename = os.path.basename(path)
+        files = {"file": (filename, open(path, 'rb'))}
+        response = self.__get("tasks/create/file", method="post", files=files)
         
-        task_id = r["task_id"]
+        task_id = response["task_id"]
         if task_id > 0:
+            # thread-safe, no locking required, revisit if splitting into
+            # multiple operations
+            self.running_jobs[task_id] = sample
             return task_id
         raise CuckooAnalysisFailedException(
-                                            'Unable to extract job ID from given string %s' % response
-                                            )
+            'Unable to extract job ID from given string %s' % response)
 
     def get_report(self, job_id):
         logger.debug("Report from Cuckoo API requested, job_id = %d" % job_id)

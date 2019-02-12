@@ -26,13 +26,13 @@
 import os
 import hashlib
 import json
+import random
 import re
-import errno
 import shutil
+import string
 import logging
 import tempfile
 from datetime import datetime
-from peekaboo.toolbox.sampletools import next_job_hash
 from peekaboo.toolbox.files import guess_mime_type_from_file_contents, \
                                    guess_mime_type_from_filename
 from peekaboo.toolbox.ms_office import has_office_macros
@@ -46,21 +46,22 @@ class SampleFactory(object):
     Contains all the global configuration data and object references each
     sample needs and thus serves as a registry of potential API breakage
     perhaps deserving looking into. """
-    def __init__(self, cuckoo, connection_map, base_dir, job_hash_regex,
-            keep_mail_data):
+    def __init__(self, cuckoo, base_dir, job_hash_regex,
+                 keep_mail_data):
         # object references for interaction
         self.cuckoo = cuckoo
-        self.connection_map = connection_map
 
         # configuration
         self.base_dir = base_dir
         self.job_hash_regex = job_hash_regex
         self.keep_mail_data = keep_mail_data
 
-    def make_sample(self, file_path, metainfo = {}, socket = None):
-        return Sample(file_path, self.cuckoo, metainfo,
-                self.connection_map, socket, self.base_dir, self.job_hash_regex,
-                self.keep_mail_data)
+    def make_sample(self, file_path, status_change=None, metainfo=None):
+        """ Create a new Sample object based on the factory's configured
+        defaults and variable parameters. """
+        return Sample(file_path, self.cuckoo, status_change, metainfo,
+                      self.base_dir, self.job_hash_regex, self.keep_mail_data)
+
 
 class Sample(object):
     """
@@ -76,9 +77,9 @@ class Sample(object):
     @author: Felix Bauer
     @author: Sebastian Deiss
     """
-    def __init__(self, file_path, cuckoo = None, metainfo = {},
-            connection_map = None, socket = None, base_dir = None,
-            job_hash_regex = None, keep_mail_data = False):
+    def __init__(self, file_path, cuckoo=None, status_change=None,
+                 metainfo=None, base_dir=None, job_hash_regex=None,
+                 keep_mail_data=False):
         self.__path = file_path
         self.__cuckoo = cuckoo
         self.__wd = None
@@ -88,11 +89,12 @@ class Sample(object):
         self.__submit_path = None
         self.__cuckoo_job_id = -1
         self.__cuckoo_report = None
+        self.__done = False
+        self.__status_change = status_change
         self.__result = Result.unchecked
         self.__reason = None
         self.__report = []  # Peekaboo's own report
-        self.__connection_map = connection_map
-        self.__socket = socket
+        self.__internal_report = []
         # Additional attributes for a sample object (e. g. meta info)
         self.__attributes = {}
         self.__base_dir = base_dir
@@ -100,17 +102,14 @@ class Sample(object):
         self.__keep_mail_data = keep_mail_data
         self.initialized = False
 
-        # register ourselves with the connection map
-        if self.__connection_map is not None and self.__socket is not None:
-            self.__connection_map.add(self.__socket, self)
+        if metainfo:
+            for field in metainfo:
+                logger.debug('meta_info_%s = %s', field, metainfo[field])
 
-        for field in metainfo:
-            logger.debug('meta_info_%s = %s' % (field, metainfo[field]))
-
-            # JSON will transfer null/None values but we don't want them as
-            # attributes in that case
-            if metainfo[field] is not None:
-                self.set_attr('meta_info_' + field, metainfo[field])
+                # JSON will transfer null/None values but we don't want them as
+                # attributes in that case
+                if metainfo[field] is not None:
+                    self.set_attr('meta_info_' + field, metainfo[field])
 
     def init(self):
         """
@@ -145,19 +144,20 @@ class Sample(object):
 
         self.initialized = True
 
-        message = "Datei \"%s\" %s wird analysiert\n" % (self.__filename,
+        message = "Datei \"%s\" %s wird analysiert" % (self.__filename,
                                                          self.sha256sum)
         self.__report.append(message)
-        self.__send_message(message)
 
         # log some additional info to report to aid debugging
         if self.has_attr('meta_info_name_declared'):
-            self.__report.append("meta info: name_declared: %s\n" %
-                    self.get_attr('meta_info_name_declared'))
+            self.__internal_report.append(
+                "meta info: name_declared: %s" %
+                self.get_attr('meta_info_name_declared'))
 
         if self.has_attr('meta_info_type_declared'):
-            self.__report.append("meta info: type_declared: %s\n" %
-                    self.get_attr('meta_info_type_declared'))
+            self.__internal_report.append(
+                "meta info: type_declared: %s" %
+                self.get_attr('meta_info_type_declared'))
 
     def get_attr(self, key):
         """
@@ -216,7 +216,43 @@ class Sample(object):
         return self.__reason
 
     def get_peekaboo_report(self):
-        return ''.join(self.__report)
+        return '\n'.join(self.__report)
+
+    def get_internal_peekaboo_report(self):
+        """ Return Peekaboo's internal report, some extra messages not meant
+        for the client but useful for debugging. """
+        return '\n'.join(self.__internal_report)
+
+    @property
+    def done(self):
+        """ Tells whether the analysis of the sample is done, i.e. a final
+        verdict has been reached and a result and reason are available. """
+        return self.__done
+
+    def mark_done(self):
+        """ Mark this sample as done, i.e. fully analysed and verdict reached.
+        """
+        self.__done = True
+        if self.__status_change:
+            # notify whoever is interested that our status has changed
+            self.__status_change.set()
+
+    def generate_job_hash(self, size=8):
+        """
+        Generates a job hash (default: 8 characters).
+
+        @param size: The amount of random characters to use for a job hash.
+                     Defaults to 8.
+        @return: a job hash consisting of a static prefix, a timestamp
+                 representing the time when the method was invoked, and random
+                 characters.
+        """
+        job_hash = 'peekaboo-run_analysis-'
+        job_hash += '%s-' % datetime.now().strftime('%Y%m%dT%H%M%S')
+        job_hash += ''.join(
+            random.choice(string.digits + string.ascii_lowercase
+                          + string.ascii_uppercase) for _ in range(size))
+        return job_hash
 
     def get_job_hash(self):
         job_hash = re.sub(self.__job_hash_regex, r'\1',
@@ -225,21 +261,11 @@ class Sample(object):
             # regex did not match.
             # so we generate our own job hash and create the
             # working directory.
-            job_hash = next_job_hash()
+            job_hash = self.generate_job_hash()
             os.mkdir(os.path.join(self.__base_dir, job_hash))
 
         logger.debug("Job hash for this sample: %s" % job_hash)
         return job_hash
-
-    def remove_from_connection_map(self):
-        if self.__connection_map is not None:
-            # de-register ourselves from the connection map
-            if self.__socket is not None:
-                self.__connection_map.remove(self.__socket, self)
-
-            if not self.__connection_map.has_connection(self.__socket):
-                self.__cleanup_temp_files()
-                self.__close_socket()
 
     def add_rule_result(self, res):
         logger.debug('Adding rule result %s' % str(res))
@@ -304,21 +330,23 @@ class Sample(object):
     def report(self):
         """
         Create the report for this sample. The report is saved as a list of
-        strings and is available via get_peekaboo_report(). Also, if a socket connection was
-        supplied to the sample the report messages are also written to the socket.
+        strings and is available via get_peekaboo_report().
         """
         # TODO: move to rule processing engine.
         self.determine_result()
 
         for rule_result in self.get_attr('rule_results'):
-            message = "Datei \"%s\": %s\n" % (self.__filename, str(rule_result))
+            message = "Datei \"%s\": %s" % (self.__filename, str(rule_result))
             self.__report.append(message)
-            self.__send_message(message)
 
-        message = "Die Datei \"%s\" wurde als \"%s\" eingestuft\n\n" \
+        # This message used to be:
+        # message = "Die Datei \"%s\" wurde als \"%s\" eingestuft\n\n"
+        # Changed intentionally to not trigger configured god/bad matching
+        # patterns in clients (e.g. AMaViS) any more since we switched to
+        # reporting an overall analysis batch result.
+        message = "Die Datei \"%s\" wird als \"%s\" betrachtet\n" \
                   % (self.__filename, self.__result.name)
         self.__report.append(message)
-        self.__send_message(message)
 
     @property
     def sha256sum(self):
@@ -429,6 +457,11 @@ class Sample(object):
         """ Returns the cuckoo report """
         return self.__cuckoo_report
 
+    @property
+    def submit_path(self):
+        """ Returns the path to use for submission to Cuckoo """
+        return self.__submit_path
+
     def submit_to_cuckoo(self):
         """ Submit the sample to Cuckoo for analysis and record job id.
 
@@ -436,30 +469,19 @@ class Sample(object):
         @returns: cuckoo job id
         """
         logger.debug("Submitting %s to Cuckoo", self.__submit_path)
-        self.__cuckoo_job_id = self.__cuckoo.submit(self.__submit_path)
-        message = 'Erfolgreich an Cuckoo gegeben %s als Job %d\n' \
+        self.__cuckoo_job_id = self.__cuckoo.submit(self)
+        message = 'Erfolgreich an Cuckoo gegeben %s als Job %d' \
                   % (self, self.__cuckoo_job_id)
-        self.__report.append(message)
+        self.__internal_report.append(message)
         return self.__cuckoo_job_id
 
     def register_cuckoo_report(self, report):
         """ Records a Cuckoo report for later evaluation. """
         self.__cuckoo_report = report
 
-    def __close_socket(self):
-        logger.debug('Closing socket connection.')
-        try:
-            if self.__socket is not None:
-                self.__socket.close()
-        except EnvironmentError as e:
-            # base class for exceptions that can occur outside the Python system.
-            # e. g. IOError, OSError
-            if e.errno == errno.EPIPE:
-                logger.warning('Unable to close the socket. Broken pipe.')
-            else:
-                logger.exception(e)
-
-    def __cleanup_temp_files(self):
+    def cleanup(self):
+        """ Clean up after the sample has been analysed, removing a potentially
+        created workdir. """
         # nothing to do if we never created a workdir
         if not self.__wd:
             return
@@ -473,23 +495,6 @@ class Sample(object):
             shutil.rmtree(self.__wd)
         except OSError as e:
             logger.exception(e)
-
-    def __send_message(self, msg):
-        """
-        Write a message to the socket.
-
-        @param msg: The message to send (max. 1024 bytes).
-        """
-        if self.__socket is None:
-            return
-        try:
-            self.__socket.send(msg)
-            logger.debug('Message send: %s ' % msg)
-        except IOError as e:
-            if e.errno == errno.EPIPE:
-                logger.warning('Unable send message "%s". Broken pipe.' % msg)
-            else:
-                logger.exception(e)
 
     def __str__(self):
         return ("<Sample(filename='%s', job_id='%d',"
