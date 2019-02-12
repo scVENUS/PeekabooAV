@@ -25,6 +25,7 @@
 
 import os
 import hashlib
+import json
 import re
 import errno
 import shutil
@@ -35,7 +36,7 @@ from peekaboo.toolbox.sampletools import next_job_hash
 from peekaboo.toolbox.files import guess_mime_type_from_file_contents, \
                                    guess_mime_type_from_filename
 from peekaboo.toolbox.ms_office import has_office_macros
-import peekaboo.ruleset as ruleset
+from peekaboo.ruleset import Result
 
 
 logger = logging.getLogger(__name__)
@@ -87,7 +88,7 @@ class Sample(object):
         self.__submit_path = None
         self.__cuckoo_job_id = -1
         self.__cuckoo_report = None
-        self.__result = ruleset.Result.unchecked
+        self.__result = Result.unchecked
         self.__reason = None
         self.__report = []  # Peekaboo's own report
         self.__connection_map = connection_map
@@ -256,6 +257,49 @@ class Sample(object):
             if rule_result.result >= self.__result:
                 self.__result = rule_result.result
                 self.__reason = rule_result.reason
+
+    def dump_processing_info(self):
+        """
+        Saves the Cuckoo report as HTML + JSON
+        to a directory named after the job hash.
+        """
+        job_hash = self.get_job_hash()
+        dump_dir = os.path.join(os.environ['HOME'], 'malware_reports', job_hash)
+        if not os.path.isdir(dump_dir):
+            os.makedirs(dump_dir, 0o770)
+        filename = self.__filename + '-' + self.sha256sum
+
+        logger.debug('Dumping processing info to %s for sample %s',
+                     dump_dir, self)
+
+        # Peekaboo's report
+        try:
+            peekaboo_report = os.path.join(dump_dir, filename + '_report.txt')
+            with open(peekaboo_report, 'w+') as f:
+                f.write(self.get_peekaboo_report())
+                f.write(self.get_internal_peekaboo_report())
+        except IOError as ioerror:
+            logger.exception(ioerror)
+
+        # store malicious sample along with the reports
+        if self.__result == Result.bad:
+            try:
+                shutil.copyfile(
+                    self.__path,
+                    os.path.join(dump_dir, self.__filename)
+                )
+            except IOError as ioerror:
+                logger.exception(ioerror)
+
+        # Cuckoo report
+        if self.__cuckoo_report:
+            try:
+                cuckoo_report = os.path.join(dump_dir,
+                                             filename + '_cuckoo_report.json')
+                with open(cuckoo_report, 'w+') as f:
+                    json.dump(self.__cuckoo_report.raw, f, indent=1)
+            except IOError as ioerror:
+                logger.exception(ioerror)
 
     def report(self):
         """

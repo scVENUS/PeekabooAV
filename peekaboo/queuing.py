@@ -308,7 +308,10 @@ class Worker(Thread):
             try:
                 engine = RulesetEngine(sample, self.ruleset_config, self.db_con)
                 engine.run()
-                engine.report()
+
+                sample.report()
+                if sample.get_result() >= Result.failed:
+                    sample.dump_processing_info()
 
                 if sample.get_result() != Result.failed:
                     logger.debug('Saving results to database')

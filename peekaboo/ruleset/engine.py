@@ -24,10 +24,7 @@
 ###############################################################################
 
 
-import os
 import logging
-import json
-from shutil import copyfile
 from peekaboo.ruleset import Result, RuleResult
 from peekaboo.ruleset.rules import *
 from peekaboo.toolbox.peekabooyar import ContainsPeekabooYarRule
@@ -71,12 +68,6 @@ class RulesetEngine(object):
 
         logger.info("Rules evaluated")
 
-    def report(self):
-        # TODO: might be better to do this for each rule individually
-        self.sample.report()
-        if self.sample.get_result() == Result.bad:
-            dump_processing_info(self.sample)
-
     def __exec_rule(self, sample, rule_class):
         """
         rule wrapper for in/out logging and reporting
@@ -113,43 +104,3 @@ class RulesetEngine(object):
 
         logger.info("Rule '%s' processed for %s" % (rule_name, sample))
         return result
-
-
-def dump_processing_info(sample):
-    """
-    Saves the Cuckoo report as HTML + JSON
-    to a directory named after the job hash.
-    """
-    job_hash = sample.get_job_hash()
-    dump_dir = os.path.join(os.environ['HOME'], 'malware_reports', job_hash)
-    if not os.path.isdir(dump_dir):
-        os.makedirs(dump_dir, 0o770)
-    filename = sample.get_filename() + '-' + sample.sha256sum
-
-    logger.debug('Dumping processing info to %s for sample %s' % (dump_dir, sample))
-
-    # Peekaboo's report
-    try:
-        with open(os.path.join(dump_dir, filename + '_report.txt'), 'w+') as f:
-            f.write(sample.get_peekaboo_report())
-    except Exception as e:
-        logger.exception(e)
-
-    # store malicious sample along with the reports
-    if sample.get_result() == Result.bad:
-        try:
-            copyfile(
-                sample.get_file_path(),
-                os.path.join(dump_dir, sample.get_filename())
-            )
-        except Exception as e:
-            logger.exception(e)
-
-    # Cuckoo report
-    report = sample.cuckoo_report
-    if report:
-        try:
-            with open(os.path.join(dump_dir, filename + '_cuckoo_report.json'), 'w+') as f:
-                json.dump(report.raw, f, indent=1)
-        except Exception as e:
-            logger.exception(e)
