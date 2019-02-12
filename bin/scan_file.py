@@ -73,12 +73,16 @@ def main():
     if args.verbose2:
         args.verbose = True
 
+    buf = ''
     while True:
-        result = peekaboo.recv(1024)
-        result = result.rstrip(linesep)
-        if result == '':
+        data = peekaboo.recv(1024)
+        if data:
+            buf += data
+        else:
             peekaboo.close()
             break
+
+    for result in buf.splitlines():
         output = result_regex.search(result)
         if output:
             if 'bad' in result:
