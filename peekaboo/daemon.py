@@ -24,25 +24,19 @@
 
 import os
 import sys
-import errno
 import grp
 import pwd
-import stat
 import logging
-import socketserver
-import socket
 import signal
 from time import sleep
-import json
-from threading import Thread, Event
 from argparse import ArgumentParser
 from sdnotify import SystemdNotifier
 from peekaboo import PEEKABOO_OWL, __version__
 from peekaboo.config import PeekabooConfig, PeekabooRulesetConfig
 from peekaboo.db import PeekabooDatabase
 from peekaboo.queuing import JobQueue
-from peekaboo.ruleset import Result
 from peekaboo.sample import SampleFactory
+from peekaboo.server import PeekabooServer
 from peekaboo.exceptions import PeekabooDatabaseError, PeekabooConfigException
 from peekaboo.toolbox.cuckoo import Cuckoo, CuckooEmbed, CuckooApi
 
@@ -85,266 +79,6 @@ class SignalHandler():
             logger.debug("SIGCHLD")
             for listener in self.listeners:
                 listener.reap_children()
-
-
-class PeekabooStreamServer(socketserver.ThreadingUnixStreamServer):
-    """
-    Asynchronous server.
-
-    @author: Sebastian Deiss
-    """
-    def __init__(self, server_address, request_handler_cls, job_queue,
-                 sample_factory, bind_and_activate=True,
-                 request_queue_size=10, status_change_timeout=60):
-        self.server_address = server_address
-        self.__job_queue = job_queue
-        self.__sample_factory = sample_factory
-        self.request_queue_size = request_queue_size
-        self.allow_reuse_address = True
-        self.status_change_timeout = status_change_timeout
-        self.__shutdown_requested = False
-        self.__request_triggers = {}
-        
-        # no super() since old-style classes
-        logger.debug('Starting up server.')
-        socketserver.ThreadingUnixStreamServer.__init__(self, server_address,
-                                                        request_handler_cls,
-                                                        bind_and_activate=bind_and_activate)
-
-    @property
-    def job_queue(self):
-        return self.__job_queue
-
-    @property
-    def sample_factory(self):
-        return self.__sample_factory
-
-    @property
-    def shutting_down(self):
-        """ Return True if we've received a shutdown request. """
-        return self.__shutdown_requested
-
-    def register_request(self, thread, event):
-        """ Register an event for a request being handled to trigger if we want
-        it to shut down. """
-        self.__request_triggers[thread] = event
-        logger.debug('Request registered with server.')
-
-    def deregister_request(self, thread):
-        """ Deregister a request which has finished handling and does no logner
-        need to be made aware that we want it to shut down. """
-        logger.debug('Request deregistered from server.')
-        del self.__request_triggers[thread]
-
-    def shutdown(self):
-        """ Shut down the server. In our case, notify requests which are
-        currently being handled to shut down as well. """
-        logger.debug('Server shutting down.')
-        self.__shutdown_requested = True
-        for thread in self.__request_triggers:
-            # wake up the thread so it can see that we're shutting down
-            self.__request_triggers[thread].set()
-
-        socketserver.ThreadingUnixStreamServer.shutdown(self)
-
-    def server_close(self):
-        """ Finally completely close down the server. """
-        logger.debug('Closing down server.')
-        # no new connections from this point on
-        os.remove(self.server_address)
-        return socketserver.ThreadingUnixStreamServer.server_close(self)
-
-
-class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
-    """
-    Request handler used by PeekabooStreamServer to handle analysis requests.
-
-    @author: Sebastian Deiss
-    """
-    def setup(self):
-        socketserver.StreamRequestHandler.setup(self)
-        self.job_queue = self.server.job_queue
-        self.sample_factory = self.server.sample_factory
-        self.status_change_timeout = self.server.status_change_timeout
-
-    def handle(self):
-        """
-        Handles an analysis request. This is expected to be a JSON structure
-        containing the path of the directory / file to analyse. Structure::
-
-            [ { "full_name": "<path>",
-                "name_declared": ...,
-                ... },
-              { ... },
-              ... ]
-
-        The maximum buffer size is 16 KiB, because JSON incurs some bloat.
-        """
-        self.request.sendall('Hallo das ist Peekaboo\n\n')
-        request = self.request.recv(1024 * 16).rstrip()
-
-        try:
-            parts = json.loads(request)
-        except:
-            self.request.sendall('FEHLER: Ungueltiges JSON.')
-            logger.error('Invalid JSON in request.')
-            return
-
-        if type(parts) not in (list, tuple):
-            self.request.sendall('FEHLER: Ungueltiges Datenformat.')
-            logger.error('Invalid data structure.')
-            return
-
-        # create an event we will give to all the samples to wake us if their
-        # status changes
-        status_change = Event()
-        status_change.clear()
-
-        to_be_analysed = []
-        for part in parts:
-            if not part.has_key('full_name'):
-                self.request.sendall('FEHLER: Unvollstaendige Datenstruktur.')
-                logger.error('Incomplete data structure.')
-                return
-
-            path = part['full_name']
-            logger.info("Got run_analysis request for %s" % path)
-            if not os.path.exists(path):
-                self.request.sendall('FEHLER: Pfad existiert nicht oder '
-                        'Zugriff verweigert.')
-                logger.error('Path does not exist or no permission '
-                        'to access it.')
-                return
-
-            if not os.path.isfile(path):
-                self.request.sendall('FEHLER: Eingabe ist keine Datei.')
-                logger.error('Input is not a file')
-                return
-
-            sample = self.sample_factory.make_sample(
-                path, status_change=status_change, metainfo=part)
-            to_be_analysed.append(sample)
-            logger.debug('Created sample %s' % sample)
-
-        # introduced after an issue where results were reported
-        # before all files could be added.
-        for sample in to_be_analysed:
-            self.job_queue.submit(sample, self.__class__)
-
-        # register with our server so it can notify us if it wants us to shut
-        # down
-        # NOTE: Every exit point from this routine needs to deregister this
-        # request from the server to avoid memory leaks. Unfortunately, the
-        # server cannot do this iteself on shutdown_request() because it does
-        # not have any thread ID available there.
-        self.server.register_request(self, status_change)
-
-        # wait for results to come in
-        done = []
-        while to_be_analysed:
-            # wait for an event to signal that its status has changed or
-            # timeout expires
-            if not status_change.wait(self.status_change_timeout):
-                # keep our client engaged
-                # TODO: Impose maximum processing time of our own?
-                try:
-                    self.request.send('Dateien werden analysiert...\n')
-                    logger.debug('Client updated that samples are still '
-                                 'processing.')
-                except IOError as ioerror:
-                    if ioerror.errno == errno.EPIPE:
-                        # client got fed up with waiting, we're done here
-                        logger.warning(
-                            'Client closed connection on us: %s', ioerror)
-
-                        # Abort handling this request since no-one's interested
-                        # any more. We could dequeue the samples here to avoid
-                        # unnecessary work. Instead we'll have them run their
-                        # course, assuming that we'll be much quicker
-                        # responding if the client decides to resubmit them.
-                        self.server.deregister_request(self)
-                        return
-
-                    logger.warning('Error updating client on processing '
-                                   'status: %s', ioerror)
-
-                # Fall through here and evaluate all samples for paranoia's
-                # sake in case our status change event has a race condition.
-                # It shouldn't though, because we wait for it, then first clear
-                # it and then look at all samples that might have set it. If
-                # while doing that another sample sets it and we don't catch it
-                # because we've already looked at it, the next wait will
-                # immediately return and send us back into checking all samples
-                # for status change.
-
-            # see if our server is shutting down and follow it if so
-            if self.server.shutting_down:
-                try:
-                    self.request.send('Peekaboo wird beendet.\n')
-                    logger.debug('Request shutting down with server.')
-                except IOError as ioerror:
-                    pass
-
-                self.server.deregister_request(self)
-                return
-
-            status_change.clear()
-
-            # see which samples are done and which are still processing
-            still_analysing = []
-            for sample in to_be_analysed:
-                if sample.done:
-                    done.append(sample)
-                    continue
-
-                still_analysing.append(sample)
-
-            to_be_analysed = still_analysing
-
-        # deregister notification from server since we've exited our wait loop
-        self.server.deregister_request(self)
-
-        # evaluate results into an overall result: We want to present the
-        # client with an overall result instead of confusing them with
-        # assertions about individual files. Particularly in the case of
-        # AMaViS, this would otherwise lead to messages being passed on as
-        # clean where a single attachment evaluated to "good" but analysis of
-        # all the others failed.
-        result = Result.unchecked
-        reports = []
-        logger.debug('Determining final verdict to report to client.')
-        for sample in done:
-            # check if result of this rule is worse than what we know so far
-            sample_result = sample.get_result()
-            logger.debug('Current overall result: %s, Sample result: %s',
-                         result.name, sample_result.name)
-            if sample_result >= result:
-                result = sample_result
-
-            # and unconditionally append its report to our list of things to
-            # report to the client
-            reports.append(sample.get_peekaboo_report())
-
-        # report back
-        logger.debug('Reporting batch as "%s" to client', result.name)
-        reports.append('Die Datensammlung wurde als "%s" eingestuft\n\n'
-                       % result.name)
-        for report in reports:
-            try:
-                self.request.send(report)
-            except IOError as ioerror:
-                if ioerror.errno == errno.EPIPE:
-                    # client got fed up with waiting, we're done here
-                    logger.warning('Client closed connection on us: %s',
-                                   ioerror)
-                else:
-                    logger.warning('Error sending report to client: %s',
-                                   ioerror)
-
-                return
-
-        # shut down connection
-        logger.debug('Results reported back to client - closing connection.')
 
 
 def run():
@@ -478,34 +212,21 @@ def run():
                 config.sample_base_dir, config.job_hash_regex,
                 config.keep_mail_data)
 
-    # Try three times to start SocketServer
-    for i in range(0, 3):
-        try:
-            # We only want to accept 2 * worker_count connections.
-            server = PeekabooStreamServer(config.sock_file,
-                    PeekabooStreamRequestHandler,
-                    job_queue = job_queue,
-                    sample_factory = sample_factory,
-                    request_queue_size = config.worker_count * 2)
-            break
-        except socket.error as msg:
-            logger.warning("SocketServer couldn't start (%i): %s" % (i, msg))
-    if not server:
-        logger.error('Fatal: Couldn\'t initialise Peekaboo Server')
+    # We only want to accept 2 * worker_count connections.
+    try:
+        server = PeekabooServer(
+            sock_file=config.sock_file, job_queue=job_queue,
+            sample_factory=sample_factory,
+            request_queue_size=config.worker_count * 2)
+    except Exception as error:
+        logger.critical('Failed to start Peekaboo Server: %s', error)
+        job_queue.shut_down()
+        if debugger is not None:
+            debugger.shut_down()
         sys.exit(1)
-
-    runner = Thread(target=server.serve_forever)
-    runner.daemon = True
 
     rc = 1
     try:
-        runner.start()
-        logger.info('Peekaboo server is listening on %s' % server.server_address)
-
-        os.chmod(config.sock_file, stat.S_IWOTH | stat.S_IREAD |
-                                   stat.S_IWRITE | stat.S_IRGRP |
-                                   stat.S_IWGRP | stat.S_IWOTH)
-
         systemd.notify("READY=1")
         # If this dies Peekaboo dies, since this is the main thread. (legacy)
         rc = cuckoo.do()
@@ -513,7 +234,6 @@ def run():
         logger.critical('Main thread aborted: %s' % error)
     finally:
         server.shutdown()
-        server.server_close()
         job_queue.shut_down()
         db_con.clear_in_flight_samples()
         db_con.clear_stale_in_flight_samples()
