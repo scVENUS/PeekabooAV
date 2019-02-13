@@ -455,14 +455,6 @@ class Sample(object):
         return self.get_attr('file_stat').st_size
 
     @property
-    def analyses_time(self):
-        if not self.has_attr('analyses_time'):
-            timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
-            self.set_attr('analyses_time', timestamp)
-            return timestamp
-        return self.get_attr('analyses_time')
-
-    @property
     def cuckoo_report(self):
         """ Returns the cuckoo report """
         return self.__cuckoo_report

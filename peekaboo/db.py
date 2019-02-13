@@ -186,8 +186,7 @@ class PeekabooDatabase(object):
         analysis.job_hash = sample.get_job_hash()
         analysis.cuckoo_job_id = sample.job_id
         analysis.filename = sample.get_filename()
-        analysis.analyses_time = datetime.strptime(sample.analyses_time,
-                                                   "%Y%m%dT%H%M%S")
+        analysis.analyses_time = datetime.now()
         sample_info = self.sample_info_fetch(sample)
         if sample_info is None:
             sample_info = SampleInfo(
