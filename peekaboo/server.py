@@ -364,7 +364,6 @@ class PeekabooServer(object):
             request_queue_size=request_queue_size)
 
         self.runner = Thread(target=self.server.serve_forever)
-        self.runner.daemon = True
         self.runner.start()
 
         os.chmod(sock_file,
@@ -379,3 +378,4 @@ class PeekabooServer(object):
         """ Shuts down the server. """
         self.server.shutdown()
         self.server.server_close()
+        self.runner.join()
