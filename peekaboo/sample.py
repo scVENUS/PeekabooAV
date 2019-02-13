@@ -91,6 +91,7 @@ class Sample(object):
         self.__cuckoo_report = None
         self.__done = False
         self.__status_change = status_change
+        self.__rule_results = []
         self.__result = Result.unchecked
         self.__reason = None
         self.__report = []  # Peekaboo's own report
@@ -279,14 +280,10 @@ class Sample(object):
 
     def add_rule_result(self, res):
         logger.debug('Adding rule result %s' % str(res))
-        rule_results = []
-        if self.has_attr('rule_results'):
-            rule_results = self.get_attr('rule_results')
-        rule_results.append(res)
-        self.set_attr('rule_results', rule_results)
+        self.__rule_results.append(res)
 
     def determine_result(self):
-        for rule_result in self.get_attr('rule_results'):
+        for rule_result in self.__rule_results:
             logger.debug("Current result: %s, Rule result: %s"
                          % (self.__result, rule_result.result))
             # check if result of this rule is worse than what we know so far
@@ -345,7 +342,7 @@ class Sample(object):
         # TODO: move to rule processing engine.
         self.determine_result()
 
-        for rule_result in self.get_attr('rule_results'):
+        for rule_result in self.__rule_results:
             message = "Datei \"%s\": %s" % (self.__filename, str(rule_result))
             self.__report.append(message)
 
