@@ -282,14 +282,12 @@ class Sample(object):
         logger.debug('Adding rule result %s' % str(res))
         self.__rule_results.append(res)
 
-    def determine_result(self):
-        for rule_result in self.__rule_results:
-            logger.debug("Current result: %s, Rule result: %s"
-                         % (self.__result, rule_result.result))
-            # check if result of this rule is worse than what we know so far
-            if rule_result.result >= self.__result:
-                self.__result = rule_result.result
-                self.__reason = rule_result.reason
+        logger.debug("Current overall result: %s, new rule result: %s",
+                     self.__result, res.result)
+        # check if result of this rule is worse than what we know so far
+        if res.result >= self.__result:
+            self.__result = res.result
+            self.__reason = res.reason
 
     def dump_processing_info(self):
         """
@@ -339,9 +337,6 @@ class Sample(object):
         Create the report for this sample. The report is saved as a list of
         strings and is available via get_peekaboo_report().
         """
-        # TODO: move to rule processing engine.
-        self.determine_result()
-
         for rule_result in self.__rule_results:
             message = "Datei \"%s\": %s" % (self.__filename, str(rule_result))
             self.__report.append(message)

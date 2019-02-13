@@ -337,7 +337,6 @@ class TestDatabase(unittest.TestCase):
                             'This is just a test case.',
                             further_analysis=False)
         cls.sample.add_rule_result(result)
-        cls.sample.determine_result()
 
     def test_1_analysis_save(self):
         """ Test saving of analysis results. """
