@@ -215,13 +215,23 @@ class Sample(object):
     def get_reason(self):
         return self.__reason
 
-    def get_peekaboo_report(self):
-        return '\n'.join(self.__report)
+    @property
+    def peekaboo_report(self):
+        """ Return Peekaboo's report meant for the client, detailing what's
+        been found on this sample.
 
-    def get_internal_peekaboo_report(self):
+        @type: List of strings.
+        """
+        return self.__report
+
+    @property
+    def internal_peekaboo_report(self):
         """ Return Peekaboo's internal report, some extra messages not meant
-        for the client but useful for debugging. """
-        return '\n'.join(self.__internal_report)
+        for the client but useful for debugging.
+
+        @type: List of strings.
+        """
+        return self.__internal_report
 
     @property
     def done(self):
@@ -302,8 +312,8 @@ class Sample(object):
         try:
             peekaboo_report = os.path.join(dump_dir, filename + '_report.txt')
             with open(peekaboo_report, 'w+') as f:
-                f.write(self.get_peekaboo_report())
-                f.write(self.get_internal_peekaboo_report())
+                f.write('\n'.join(self.__report))
+                f.write('\n'.join(self.__internal_report))
         except IOError as ioerror:
             logger.exception(ioerror)
 

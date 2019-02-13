@@ -138,7 +138,10 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
 
     def handle(self):
         """ Handles an analysis request. """
-        self.request.sendall('Hallo das ist Peekaboo\n\n')
+        # catch wavering clients early on
+        logger.debug('New connection incoming.')
+        if not self.talk_back('Hallo das ist Peekaboo\n'):
+            return
 
         submitted = self.parse()
         if not submitted:
@@ -166,33 +169,33 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
         try:
             parts = json.loads(request)
         except ValueError as error:
-            self.request.sendall('FEHLER: Ungueltiges JSON.')
+            self.talk_back('FEHLER: Ungueltiges JSON.')
             logger.error('Invalid JSON in request: %s', error)
             return None
 
         if not isinstance(parts, (list, tuple)):
-            self.request.sendall('FEHLER: Ungueltiges Datenformat.')
+            self.talk_back('FEHLER: Ungueltiges Datenformat.')
             logger.error('Invalid data structure.')
             return None
 
         submitted = []
         for part in parts:
             if not part.has_key('full_name'):
-                self.request.sendall('FEHLER: Unvollstaendige Datenstruktur.')
+                self.talk_back('FEHLER: Unvollstaendige Datenstruktur.')
                 logger.error('Incomplete data structure.')
                 return None
 
             path = part['full_name']
             logger.info("Got run_analysis request for %s", path)
             if not os.path.exists(path):
-                self.request.sendall('FEHLER: Pfad existiert nicht oder '
-                                     'Zugriff verweigert.')
+                self.talk_back('FEHLER: Pfad existiert nicht oder '
+                               'Zugriff verweigert.')
                 logger.error('Path does not exist or no permission '
                              'to access it.')
                 return None
 
             if not os.path.isfile(path):
-                self.request.sendall('FEHLER: Eingabe ist keine Datei.')
+                self.talk_back('FEHLER: Eingabe ist keine Datei.')
                 logger.error('Input is not a file')
                 return None
 
@@ -227,26 +230,17 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
             if not self.status_change.wait(self.status_change_timeout):
                 # keep our client engaged
                 # TODO: Impose maximum processing time of our own?
-                try:
-                    self.request.send('Dateien werden analysiert...\n')
-                    logger.debug('Client updated that samples are still '
-                                 'processing.')
-                except IOError as ioerror:
-                    if ioerror.errno == errno.EPIPE:
-                        # client got fed up with waiting, we're done here
-                        logger.warning(
-                            'Client closed connection on us: %s', ioerror)
+                if not self.talk_back('Dateien werden analysiert...'):
+                    # Abort handling this request since no-one's interested
+                    # any more. We could dequeue the samples here to avoid
+                    # unnecessary work. Instead we'll have them run their
+                    # course, assuming that we'll be much quicker
+                    # responding if the client decides to resubmit them.
+                    self.server.deregister_request(self)
+                    return
 
-                        # Abort handling this request since no-one's interested
-                        # any more. We could dequeue the samples here to avoid
-                        # unnecessary work. Instead we'll have them run their
-                        # course, assuming that we'll be much quicker
-                        # responding if the client decides to resubmit them.
-                        self.server.deregister_request(self)
-                        return
-
-                    logger.warning('Error updating client on processing '
-                                   'status: %s', ioerror)
+                logger.debug('Client updated that samples are still '
+                             'processing.')
 
                 # Fall through here and evaluate all samples for paranoia's
                 # sake in case our status change event has a race condition.
@@ -259,12 +253,8 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
 
             # see if our server is shutting down and follow it if so
             if self.server.shutting_down:
-                try:
-                    self.request.send('Peekaboo wird beendet.\n')
-                    logger.debug('Request shutting down with server.')
-                except IOError as ioerror:
-                    pass
-
+                self.talk_back('Peekaboo wird beendet.')
+                logger.debug('Request shutting down with server.')
                 self.server.deregister_request(self)
                 return
 
@@ -298,7 +288,6 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
         # clean where a single attachment evaluated to "good" but analysis of
         # all the others failed.
         result = Result.unchecked
-        reports = []
         logger.debug('Determining final verdict to report to client.')
         for sample in done:
             # check if result of this rule is worse than what we know so far
@@ -308,30 +297,45 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
             if sample_result >= result:
                 result = sample_result
 
-            # and unconditionally append its report to our list of things to
-            # report to the client
-            reports.append(sample.get_peekaboo_report())
-
-        # report back
-        logger.debug('Reporting batch as "%s" to client', result.name)
-        reports.append('Die Datensammlung wurde als "%s" eingestuft\n\n'
-                       % result.name)
-        for report in reports:
-            try:
-                self.request.send(report)
-            except IOError as ioerror:
-                if ioerror.errno == errno.EPIPE:
-                    # client got fed up with waiting, we're done here
-                    logger.warning('Client closed connection on us: %s',
-                                   ioerror)
-                else:
-                    logger.warning('Error sending report to client: %s',
-                                   ioerror)
-
+            # and unconditionally send out its report to the client
+            if not self.talk_back(sample.peekaboo_report):
                 return
+
+        # report overall result
+        logger.debug('Reporting batch as "%s" to client', result.name)
+        if not self.talk_back('Die Datensammlung wurde als "%s" eingestuft\n'
+                              % result.name):
+            return
 
         # shut down connection
         logger.debug('Results reported back to client - closing connection.')
+
+    def talk_back(self, msgs):
+        """ Send message(s) back to the client. Automatically appends newline
+        to each message.
+
+        @param msgs: message(s) to send to client.
+        @type msgs: string or (list or tuple of strings)
+
+        @returns: True on successful sending of all messages, False on error of
+                  sending and None specifically if sending failed because the
+                  client closed the connection. """
+        if isinstance(msgs, str):
+            msgs = (msgs, )
+
+        for msg in msgs:
+            try:
+                self.request.sendall('%s\n' % msg)
+            except IOError as ioerror:
+                if ioerror.errno == errno.EPIPE:
+                    logger.warning('Client closed connection on us: %s',
+                                   ioerror)
+                    return None
+
+                logger.warning('Error talking back to client: %s', ioerror)
+                return False
+
+        return True
 
 
 class PeekabooServer(object):
