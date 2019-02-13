@@ -22,12 +22,14 @@
 #                                                                             #
 ###############################################################################
 
+import errno
 import os
 import sys
 import grp
 import pwd
 import logging
 import signal
+import socket
 from time import sleep
 from argparse import ArgumentParser
 from sdnotify import SystemdNotifier
@@ -79,6 +81,136 @@ class SignalHandler():
             logger.debug("SIGCHLD")
             for listener in self.listeners:
                 listener.reap_children()
+
+
+class PeekabooDaemonInfrastructure(object):
+    """ A class that manages typical daemon infrastructure such as PID file and
+    privileges. """
+    def __init__(self, pid_file, sock_file, user, group):
+        self.pid_file = pid_file
+        self.sock_file = sock_file
+        self.user = user
+        self.group = group
+
+        self.pid_file_created = False
+
+    def init(self):
+        """ Initialize daemon infrastructure. """
+        self.drop_privileges()
+        self.create_pid_file()
+        self.check_stale_socket()
+
+    def drop_privileges(self):
+        """ Check and potentially drop privileges. """
+        if os.getuid() == 0:
+            if self.user and self.group:
+                # drop privileges to user
+                os.setgid(grp.getgrnam(self.group)[2])
+                os.setuid(pwd.getpwnam(self.user)[2])
+                logger.info("Dropped privileges to user %s and group %s",
+                            self.user, self.group)
+
+                # set $HOME to the users home directory
+                # (VirtualBox must access the configs)
+                os.environ['HOME'] = pwd.getpwnam(self.user)[5]
+                logger.debug('$HOME is %s', os.environ['HOME'])
+            else:
+                logger.warning('Peekaboo should not run as root. Please '
+                               'configure a user and group to run as.')
+                sys.exit(0)
+
+    def create_pid_file(self):
+        """ Check for stale old and create a new PID file. Look at the socket
+        as well. """
+        pid = None
+        if os.path.exists(self.pid_file):
+            stale = False
+            try:
+                with open(self.pid_file, 'r') as pidfile:
+                    pid = int(pidfile.read())
+            except (OSError, IOError, ValueError) as error:
+                stale = True
+                logger.warning('PID file exists but cannot be read, '
+                               'assuming it to be stale')
+
+            if pid is not None:
+                try:
+                    # ping the process to see if it exists, sends no signal
+                    os.kill(pid, 0)
+                except OSError as oserror:
+                    # ESRCH == no such process
+                    if oserror.errno == errno.ESRCH:
+                        stale = True
+
+            if not stale:
+                logger.critical('Another instance of Peekaboo seems to be '
+                                'running as process %d. Please check PID '
+                                'file %s.', pid, self.pid_file)
+                sys.exit(1)
+
+            logger.warning('Removing stale PID file of process %d', pid)
+            try:
+                os.remove(self.pid_file)
+            except OSError as error:
+                logger.critical('Error deleting stale PID file %s: %s',
+                                self.pid_file, error)
+                sys.exit(1)
+
+        # write PID file
+        pid = os.getpid()
+        with open(self.pid_file, "w") as pidfile:
+            pidfile.write("%d\n" % pid)
+
+        # remember that the PID file is ours - important on shutdown
+        self.pid_file_created = True
+        logger.debug('PID %d written to %s', pid, self.pid_file)
+
+    def check_stale_socket(self):
+        """ Check if the socket file exists already/still and if it is stale or
+        actively serviced. Remove it if stale. """
+        # is the socket also stale?
+        if not os.path.exists(self.sock_file):
+            return
+
+        stale = False
+        try:
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            sock.connect(self.sock_file)
+            logger.debug('Someone answered on existing socket')
+        except socket.error as sockerr:
+            logger.debug('Existing socket connection attempt failed: %s',
+                         sockerr)
+            if sockerr.errno == errno.ECONNREFUSED:
+                stale = True
+
+        if not stale:
+            logger.critical('Socket %s exists and seems to be serviced. '
+                            'Please check for another instance running.',
+                            self.sock_file)
+            sys.exit(1)
+
+        logger.warning('Removing stale socket %s', self.sock_file)
+        try:
+            os.remove(self.sock_file)
+        except OSError as oserror:
+            logger.critical('Error removing stale socket %s: %s',
+                            self.sock_file, oserror)
+            sys.exit(1)
+
+    def __del__(self):
+        """ Clean up on shutdown, such as removing the PID file. """
+        # only remove stuff if we created it. Otherwise we're bailing (but
+        # still getting called) after realising that another instance is
+        # running.
+        if not self.pid_file_created:
+            return
+
+        logger.debug('Removing PID file %s', self.pid_file)
+        try:
+            os.remove(self.pid_file)
+        except OSError as oserror:
+            logger.warning('Removal of PID file %s failed: %s',
+                           self.pid_file, oserror)
 
 
 def run():
@@ -139,27 +271,11 @@ def run():
         debugger = PeekabooDebugger()
         debugger.start()
 
-    if os.getuid() == 0:
-        if config.user and config.group:
-            # drop privileges to user
-            os.setgid(grp.getgrnam(config.group)[2])
-            os.setuid(pwd.getpwnam(config.user)[2])
-            logger.info("Dropped privileges to user %s and group %s"
-                        % (config.user, config.group))
-
-            # set $HOME to the users home directory
-            # (VirtualBox must access the configs)
-            os.environ['HOME'] = pwd.getpwnam(config.user)[5]
-            logger.debug('$HOME is ' + os.environ['HOME'])
-        else:
-            logger.warning('Peekaboo should not run as root. Please '
-                           'configure a user and group to run as.')
-            sys.exit(0)
-
-    # write PID file
-    pid = str(os.getpid())
-    with open(config.pid_file, "w") as pidfile:
-        pidfile.write("%s\n" % pid)
+    # initialize the daemon infrastructure such as PID file and dropping
+    # privileges, automatically cleans up after itself when going out of scope
+    daemon_infrastructure = PeekabooDaemonInfrastructure(
+        config.pid_file, config.sock_file, config.user, config.group)
+    daemon_infrastructure.init()
 
     systemd = SystemdNotifier()
 

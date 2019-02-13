@@ -107,9 +107,15 @@ class PeekabooStreamServer(socketserver.ThreadingUnixStreamServer):
 
     def server_close(self):
         """ Finally completely close down the server. """
-        logger.debug('Closing down server.')
         # no new connections from this point on
-        os.remove(self.server_address)
+        logger.debug('Removing connection socket %s', self.server_address)
+        try:
+            os.remove(self.server_address)
+        except OSError as oserror:
+            logger.warning('Removal of socket %s failed: %s',
+                           self.server_address, oserror)
+
+        logger.debug('Closing down server.')
         return socketserver.ThreadingUnixStreamServer.server_close(self)
 
 
@@ -350,23 +356,12 @@ class PeekabooServer(object):
         self.server = None
         self.runner = None
 
-        # Try three times to start SocketServer
-        for attempt in range(0, 3):
-            try:
-                self.server = PeekabooStreamServer(
-                    sock_file,
-                    PeekabooStreamRequestHandler,
-                    job_queue=job_queue,
-                    sample_factory=sample_factory,
-                    request_queue_size=request_queue_size)
-                break
-            except socket.error as sockerr:
-                logger.warning("SocketServer didn't start in attempt %i: %s",
-                               attempt, sockerr)
-                last_sockerr = sockerr
-
-        if not self.server:
-            raise last_sockerr
+        self.server = PeekabooStreamServer(
+            sock_file,
+            PeekabooStreamRequestHandler,
+            job_queue=job_queue,
+            sample_factory=sample_factory,
+            request_queue_size=request_queue_size)
 
         self.runner = Thread(target=self.server.serve_forever)
         self.runner.daemon = True
