@@ -59,16 +59,22 @@ class PeekabooStreamServer(socketserver.ThreadingUnixStreamServer):
 
         # no super() since old-style classes
         logger.debug('Starting up server.')
-        socketserver.ThreadingUnixStreamServer.__init__(self, server_address,
-                                                        request_handler_cls,
-                                                        bind_and_activate=bind_and_activate)
+        socketserver.ThreadingUnixStreamServer.__init__(
+            self, server_address, request_handler_cls,
+            bind_and_activate=bind_and_activate)
 
     @property
     def job_queue(self):
+        """ Return this server's reference to the job queue. Used by handler
+        threads to get access to it for submission of samples for processing.
+        """
         return self.__job_queue
 
     @property
     def sample_factory(self):
+        """ Return this server's reference to a factory that can create
+        pre-configured sample objects. Used by handler threads to get access to
+        it for creation of samples prior to submission for processing. """
         return self.__sample_factory
 
     @property
@@ -137,12 +143,12 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
 
         try:
             parts = json.loads(request)
-        except:
+        except ValueError as error:
             self.request.sendall('FEHLER: Ungueltiges JSON.')
-            logger.error('Invalid JSON in request.')
+            logger.error('Invalid JSON in request: %s', error)
             return
 
-        if type(parts) not in (list, tuple):
+        if not isinstance(parts, (list, tuple)):
             self.request.sendall('FEHLER: Ungueltiges Datenformat.')
             logger.error('Invalid data structure.')
             return
@@ -160,12 +166,12 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
                 return
 
             path = part['full_name']
-            logger.info("Got run_analysis request for %s" % path)
+            logger.info("Got run_analysis request for %s", path)
             if not os.path.exists(path):
                 self.request.sendall('FEHLER: Pfad existiert nicht oder '
-                        'Zugriff verweigert.')
+                                     'Zugriff verweigert.')
                 logger.error('Path does not exist or no permission '
-                        'to access it.')
+                             'to access it.')
                 return
 
             if not os.path.isfile(path):
@@ -176,7 +182,7 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
             sample = self.sample_factory.make_sample(
                 path, status_change=status_change, metainfo=part)
             to_be_analysed.append(sample)
-            logger.debug('Created sample %s' % sample)
+            logger.debug('Created sample %s', sample)
 
         # introduced after an issue where results were reported
         # before all files could be added.
