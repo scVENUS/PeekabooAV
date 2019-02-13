@@ -134,15 +134,13 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
         """ Handles an analysis request. """
         self.request.sendall('Hallo das ist Peekaboo\n\n')
 
-        samples_to_analyse = self.parse()
-        if not samples_to_analyse:
+        submitted = self.parse()
+        if not submitted:
             return
 
-        # separation of parsing and submission introduced after an issue where
-        # results were reported before all files could be added.
-        self.submit_and_wait(samples_to_analyse)
+        self.wait(submitted)
         # here we know that all samples have reported back
-        self.report(samples_to_analyse)
+        self.report(submitted)
 
     def parse(self):
         """ Reads and parses an analysis request. This is expected to be a JSON
@@ -171,7 +169,7 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
             logger.error('Invalid data structure.')
             return None
 
-        to_be_analysed = []
+        submitted = []
         for part in parts:
             if not part.has_key('full_name'):
                 self.request.sendall('FEHLER: Unvollstaendige Datenstruktur.')
@@ -194,12 +192,13 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
 
             sample = self.sample_factory.make_sample(
                 path, status_change=self.status_change, metainfo=part)
-            to_be_analysed.append(sample)
-            logger.debug('Created sample %s', sample)
+            self.job_queue.submit(sample, self.__class__)
+            submitted.append(sample)
+            logger.debug('Created and submitted sample %s', sample)
 
-        return to_be_analysed
+        return submitted
 
-    def submit_and_wait(self, to_be_analysed):
+    def wait(self, to_be_analysed):
         """ Wait for submitted analysis jobs to finished.
 
         @param to_be_analysed: samples that have been submitted for analysis
@@ -207,9 +206,6 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
                                finished.
         @type to_be_analysed: List of Sample objects
         """
-        for sample in to_be_analysed:
-            self.job_queue.submit(sample, self.__class__)
-
         # register with our server so it can notify us if it wants us to shut
         # down
         # NOTE: Every exit point from this routine needs to deregister this
