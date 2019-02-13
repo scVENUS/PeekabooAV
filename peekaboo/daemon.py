@@ -22,6 +22,9 @@
 #                                                                             #
 ###############################################################################
 
+""" The main peekaboo module, starting up and managing all the various
+components. """
+
 import errno
 import os
 import sys
@@ -30,7 +33,6 @@ import pwd
 import logging
 import signal
 import socket
-from time import sleep
 from argparse import ArgumentParser
 from sdnotify import SystemdNotifier
 from peekaboo import PEEKABOO_OWL, __version__
@@ -40,7 +42,7 @@ from peekaboo.queuing import JobQueue
 from peekaboo.sample import SampleFactory
 from peekaboo.server import PeekabooServer
 from peekaboo.exceptions import PeekabooDatabaseError, PeekabooConfigException
-from peekaboo.toolbox.cuckoo import Cuckoo, CuckooEmbed, CuckooApi
+from peekaboo.toolbox.cuckoo import CuckooEmbed, CuckooApi
 
 
 logger = logging.getLogger(__name__)
@@ -49,7 +51,7 @@ logger = logging.getLogger(__name__)
 class SignalHandler():
     """
     Signal handler.
-    
+
     @author: Felix Bauer
     """
     def __init__(self):
@@ -286,14 +288,14 @@ def run():
 
     # a cluster duplicate interval of 0 disables the handler thread which is
     # what we want if we don't have an instance_id and therefore are alone
-    cluster_duplicate_check_interval = 0
+    cldup_check_interval = 0
     if config.cluster_instance_id > 0:
-        cluster_duplicate_check_interval = config.cluster_duplicate_check_interval
-        if cluster_duplicate_check_interval < 5:
-            cluster_update_check_interval = 5
-            log.warning("Raising excessively low cluster duplicate check "
-                        "interval to %d seconds.",
-                        cluster_duplicate_check_interval)
+        cldup_check_interval = config.cluster_duplicate_check_interval
+        if cldup_check_interval < 5:
+            cldup_check_interval = 5
+            logger.warning("Raising excessively low cluster duplicate check "
+                           "interval to %d seconds.",
+                           cldup_check_interval)
 
     # workers of the job queue need the ruleset configuration to create the
     # ruleset engine with it
@@ -307,7 +309,7 @@ def run():
     job_queue = JobQueue(
         worker_count=config.worker_count, ruleset_config=ruleset_config,
         db_con=db_con,
-        cluster_duplicate_check_interval=cluster_duplicate_check_interval)
+        cluster_duplicate_check_interval=cldup_check_interval)
 
     if config.cuckoo_mode == "embed":
         cuckoo = CuckooEmbed(job_queue, config.cuckoo_exec,
@@ -316,7 +318,7 @@ def run():
     # otherwise it's the new API method and default
     else:
         cuckoo = CuckooApi(job_queue, config.cuckoo_url,
-                config.cuckoo_poll_interval)
+                           config.cuckoo_poll_interval)
 
     sig_handler = SignalHandler()
     sig_handler.register_listener(cuckoo)
@@ -324,9 +326,9 @@ def run():
     # Factory producing almost identical samples providing them with global
     # config values and references to other objects they need, such as cuckoo,
     # database connection and connection map.
-    sample_factory = SampleFactory(cuckoo,
-                config.sample_base_dir, config.job_hash_regex,
-                config.keep_mail_data)
+    sample_factory = SampleFactory(
+        cuckoo, config.sample_base_dir, config.job_hash_regex,
+        config.keep_mail_data)
 
     # We only want to accept 2 * worker_count connections.
     try:
@@ -341,13 +343,13 @@ def run():
             debugger.shut_down()
         sys.exit(1)
 
-    rc = 1
+    exit_code = 1
     try:
         systemd.notify("READY=1")
         # If this dies Peekaboo dies, since this is the main thread. (legacy)
-        rc = cuckoo.do()
+        exit_code = cuckoo.do()
     except Exception as error:
-        logger.critical('Main thread aborted: %s' % error)
+        logger.critical('Main thread aborted: %s', error)
     finally:
         server.shutdown()
         job_queue.shut_down()
@@ -356,7 +358,7 @@ def run():
         if debugger is not None:
             debugger.shut_down()
 
-    sys.exit(rc)
+    sys.exit(exit_code)
 
 if __name__ == '__main__':
     run()
