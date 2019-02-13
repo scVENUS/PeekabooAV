@@ -125,10 +125,29 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
         self.sample_factory = self.server.sample_factory
         self.status_change_timeout = self.server.status_change_timeout
 
+        # create an event we will give to all the samples and our server to
+        # wake us if they need out attention
+        self.status_change = Event()
+        self.status_change.clear()
+
     def handle(self):
-        """
-        Handles an analysis request. This is expected to be a JSON structure
-        containing the path of the directory / file to analyse. Structure::
+        """ Handles an analysis request. """
+        self.request.sendall('Hallo das ist Peekaboo\n\n')
+
+        samples_to_analyse = self.parse()
+        if not samples_to_analyse:
+            return
+
+        # separation of parsing and submission introduced after an issue where
+        # results were reported before all files could be added.
+        self.submit_and_wait(samples_to_analyse)
+        # here we know that all samples have reported back
+        self.report(samples_to_analyse)
+
+    def parse(self):
+        """ Reads and parses an analysis request. This is expected to be a JSON
+        structure containing the path of the directory / file to analyse.
+        Structure::
 
             [ { "full_name": "<path>",
                 "name_declared": ...,
@@ -138,7 +157,6 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
 
         The maximum buffer size is 16 KiB, because JSON incurs some bloat.
         """
-        self.request.sendall('Hallo das ist Peekaboo\n\n')
         request = self.request.recv(1024 * 16).rstrip()
 
         try:
@@ -146,24 +164,19 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
         except ValueError as error:
             self.request.sendall('FEHLER: Ungueltiges JSON.')
             logger.error('Invalid JSON in request: %s', error)
-            return
+            return None
 
         if not isinstance(parts, (list, tuple)):
             self.request.sendall('FEHLER: Ungueltiges Datenformat.')
             logger.error('Invalid data structure.')
-            return
-
-        # create an event we will give to all the samples to wake us if their
-        # status changes
-        status_change = Event()
-        status_change.clear()
+            return None
 
         to_be_analysed = []
         for part in parts:
             if not part.has_key('full_name'):
                 self.request.sendall('FEHLER: Unvollstaendige Datenstruktur.')
                 logger.error('Incomplete data structure.')
-                return
+                return None
 
             path = part['full_name']
             logger.info("Got run_analysis request for %s", path)
@@ -172,20 +185,28 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
                                      'Zugriff verweigert.')
                 logger.error('Path does not exist or no permission '
                              'to access it.')
-                return
+                return None
 
             if not os.path.isfile(path):
                 self.request.sendall('FEHLER: Eingabe ist keine Datei.')
                 logger.error('Input is not a file')
-                return
+                return None
 
             sample = self.sample_factory.make_sample(
-                path, status_change=status_change, metainfo=part)
+                path, status_change=self.status_change, metainfo=part)
             to_be_analysed.append(sample)
             logger.debug('Created sample %s', sample)
 
-        # introduced after an issue where results were reported
-        # before all files could be added.
+        return to_be_analysed
+
+    def submit_and_wait(self, to_be_analysed):
+        """ Wait for submitted analysis jobs to finished.
+
+        @param to_be_analysed: samples that have been submitted for analysis
+                               and which will report back to us when they're
+                               finished.
+        @type to_be_analysed: List of Sample objects
+        """
         for sample in to_be_analysed:
             self.job_queue.submit(sample, self.__class__)
 
@@ -195,14 +216,13 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
         # request from the server to avoid memory leaks. Unfortunately, the
         # server cannot do this iteself on shutdown_request() because it does
         # not have any thread ID available there.
-        self.server.register_request(self, status_change)
+        self.server.register_request(self, self.status_change)
 
         # wait for results to come in
-        done = []
         while to_be_analysed:
             # wait for an event to signal that its status has changed or
             # timeout expires
-            if not status_change.wait(self.status_change_timeout):
+            if not self.status_change.wait(self.status_change_timeout):
                 # keep our client engaged
                 # TODO: Impose maximum processing time of our own?
                 try:
@@ -246,13 +266,13 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
                 self.server.deregister_request(self)
                 return
 
-            status_change.clear()
+            self.status_change.clear()
 
             # see which samples are done and which are still processing
             still_analysing = []
             for sample in to_be_analysed:
+                # remove samples that are done
                 if sample.done:
-                    done.append(sample)
                     continue
 
                 still_analysing.append(sample)
@@ -262,6 +282,13 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
         # deregister notification from server since we've exited our wait loop
         self.server.deregister_request(self)
 
+    def report(self, done):
+        """ Report individual files' and overall verdict to client.
+
+        @param done: List of samples that are done processing and need
+                     reporting.
+        @type done: List of Sample objects.
+        """
         # evaluate results into an overall result: We want to present the
         # client with an overall result instead of confusing them with
         # assertions about individual files. Particularly in the case of
