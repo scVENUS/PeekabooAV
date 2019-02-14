@@ -291,7 +291,7 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
         logger.debug('Determining final verdict to report to client.')
         for sample in done:
             # check if result of this rule is worse than what we know so far
-            sample_result = sample.get_result()
+            sample_result = sample.result
             logger.debug('Current overall result: %s, Sample result: %s',
                          result.name, sample_result.name)
             if sample_result >= result:

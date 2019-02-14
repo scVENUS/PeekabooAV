@@ -98,7 +98,13 @@ class Sample(object):
         self.__internal_report = []
         # Additional attributes for a sample object (e. g. meta info)
         self.__attributes = {}
+        self.__file_stat = None
+        self.__sha256sum = None
+        self.__mimetypes = None
+        self.__file_extension = None
+        self.__office_macros = None
         self.__base_dir = base_dir
+        self.__job_hash = None
         self.__job_hash_regex = job_hash_regex
         self.__keep_mail_data = keep_mail_data
         self.initialized = False
@@ -135,10 +141,10 @@ class Sample(object):
         if file_ext:
             # create a temporary directory where mkdtemp makes sure that
             # creation is atomic, i.e. no other process is using it
-            self.__wd = tempfile.mkdtemp(prefix = self.get_job_hash(),
-                    dir = self.__base_dir)
-            self.__submit_path = os.path.join(self.__wd,
-                    '%s.%s' % (self.sha256sum, file_ext))
+            self.__wd = tempfile.mkdtemp(
+                prefix=self.job_hash, dir=self.__base_dir)
+            self.__submit_path = os.path.join(
+                self.__wd, '%s.%s' % (self.sha256sum, file_ext))
 
             logger.debug('ln -s %s %s' % (self.__path, self.__submit_path))
             os.symlink(self.__path, self.__submit_path)
@@ -204,16 +210,31 @@ class Sample(object):
             del self.__attributes[key]
         raise ValueError('No attribute named "%s" found.' % key)
 
-    def get_file_path(self):
+    @property
+    def file_path(self):
+        """ Returns the path to the sample given on creation including
+        directories and filename. """
         return self.__path
 
-    def get_filename(self):
+    @property
+    def filename(self):
+        """ Returns the name of the sample file, i.e. the basename without path
+        but including the file extension. """
         return self.__filename
 
-    def get_result(self):
+    @property
+    def result(self):
+        """ Returns the overall evaluation result for this sample.
+
+        @returns: peekaboo.ruleset.Result """
         return self.__result
 
-    def get_reason(self):
+    @property
+    def reason(self):
+        """ Gets the reason given by the rule determining the result which
+        ended up as the overall evaluation result of this sample.
+
+        @returns: string """
         return self.__reason
 
     @property
@@ -221,7 +242,7 @@ class Sample(object):
         """ Return Peekaboo's report meant for the client, detailing what's
         been found on this sample.
 
-        @type: List of strings.
+        @returns: List of strings.
         """
         return self.__report
 
@@ -265,7 +286,14 @@ class Sample(object):
                           + string.ascii_uppercase) for _ in range(size))
         return job_hash
 
-    def get_job_hash(self):
+    @property
+    def job_hash(self):
+        """ Returns a job identifier extracted from the file path using a
+        configurable regular expression for use in other temporary or permanent
+        (dump) path names to keep correlation to the original input job. """
+        if self.__job_hash:
+            return self.__job_hash
+
         job_hash = re.sub('.*%s.*' % self.__job_hash_regex, r'\1',
                           self.__path)
         if job_hash == self.__path:
@@ -275,6 +303,7 @@ class Sample(object):
             job_hash = self.generate_job_hash()
 
         logger.debug("Job hash for this sample: %s" % job_hash)
+        self.__job_hash = job_hash
         return job_hash
 
     def add_rule_result(self, res):
@@ -293,8 +322,8 @@ class Sample(object):
         Saves the Cuckoo report as HTML + JSON
         to a directory named after the job hash.
         """
-        job_hash = self.get_job_hash()
-        dump_dir = os.path.join(os.environ['HOME'], 'malware_reports', job_hash)
+        dump_dir = os.path.join(os.environ['HOME'], 'malware_reports',
+                                self.job_hash)
         if not os.path.isdir(dump_dir):
             os.makedirs(dump_dir, 0o770)
         filename = self.__filename + '-' + self.sha256sum
@@ -351,17 +380,21 @@ class Sample(object):
 
     @property
     def sha256sum(self):
-        if not self.has_attr('sha256sum'):
+        """ Returns the SHA256 checksum/fingerprint of this sample. Determines
+        it automatically on first call. """
+
+        if not self.__sha256sum:
             with open(self.__path, 'rb') as f:
                 checksum = hashlib.sha256(f.read()).hexdigest()
-                self.set_attr('sha256sum', checksum)
-                return checksum
-        return self.get_attr('sha256sum')
+                self.__sha256sum = checksum
+
+        return self.__sha256sum
 
     @property
     def file_extension(self):
-        if self.has_attr('file_extension'):
-            return self.get_attr('file_extension')
+        """ Determines the file extension of this sample. """
+        if self.__file_extension:
+            return self.__file_extension
 
         # try to find a file name containing an extension. Using
         # self.__filename will almost never yield anything useful because
@@ -372,14 +405,14 @@ class Sample(object):
             filename = self.get_attr('meta_info_name_declared')
 
         # extension or the empty string if none found
-        file_ext = os.path.splitext(filename)[1][1:]
-        self.set_attr('file_extension', file_ext)
-        return file_ext
+        self.__file_extension = os.path.splitext(filename)[1][1:]
+        return self.__file_extension
 
     @property
     def mimetypes(self):
-        if self.has_attr('mimetypes'):
-            return self.get_attr('mimetypes')
+        """ Determines the mimetypes of this sample. """
+        if self.__mimetypes:
+            return self.__mimetypes
 
         mime_types = set()
 
@@ -411,9 +444,8 @@ class Sample(object):
 
         if declared_filename == 'smime.p7s' and declared_mt in leave_alone_types['p7s']:
             logger.info('S/MIME signature detected. Using declared MIME type over detected ones.')
-            mime_types = set([declared_mt])
-            self.set_attr('mimetypes', mime_types)
-            return mime_types
+            self.__mimetypes = set([declared_mt])
+            return self.__mimetypes
 
         # determine mime on original p[0-9]* file
         # result of __submit_path would be "inode/symlink"
@@ -426,7 +458,7 @@ class Sample(object):
             mime_types.add(name_based_mime_type)
 
         logger.debug('Determined MIME Types: %s' % mime_types)
-        self.set_attr('mimetypes', mime_types)
+        self.__mimetypes = mime_types
         return mime_types
 
     @property
@@ -435,15 +467,18 @@ class Sample(object):
 
     @property
     def office_macros(self):
-        if not self.has_attr('office_macros'):
-            self.set_attr('office_macros', has_office_macros(self.__path))
-        return self.get_attr('office_macros')
+        """ Determines if this sample contains any office macros. """
+        if not self.__office_macros:
+            self.__office_macros = has_office_macros(self.__path)
+
+        return self.__office_macros
 
     @property
     def file_size(self):
-        if not self.has_attr('file_stat'):
-            self.set_attr('file_stat', os.stat(self.__path))
-        return self.get_attr('file_stat').st_size
+        if not self.__file_stat:
+            self.__file_stat = os.stat(self.__path)
+
+        return self.__file_stat.st_size
 
     @property
     def cuckoo_report(self):

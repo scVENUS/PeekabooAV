@@ -310,10 +310,10 @@ class Worker(Thread):
                 engine.run()
 
                 sample.report()
-                if sample.get_result() >= Result.failed:
+                if sample.result >= Result.failed:
                     sample.dump_processing_info()
 
-                if sample.get_result() != Result.failed:
+                if sample.result != Result.failed:
                     logger.debug('Saving results to database')
                     self.db_con.analysis_save(sample)
                 else:

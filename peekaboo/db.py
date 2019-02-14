@@ -183,17 +183,17 @@ class PeekabooDatabase(object):
         @param sample: The sample object for this analysis task.
         """
         analysis = AnalysisJournal()
-        analysis.job_hash = sample.get_job_hash()
+        analysis.job_hash = sample.job_hash
         analysis.cuckoo_job_id = sample.job_id
-        analysis.filename = sample.get_filename()
+        analysis.filename = sample.filename
         analysis.analyses_time = datetime.now()
         sample_info = self.sample_info_fetch(sample)
         if sample_info is None:
             sample_info = SampleInfo(
                 sha256sum=sample.sha256sum,
                 file_extension=sample.file_extension,
-                result=sample.get_result(),
-                reason=sample.get_reason())
+                result=sample.result,
+                reason=sample.reason)
 
         analysis.sample = sample_info
 
