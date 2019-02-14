@@ -83,7 +83,7 @@ class TestDefaultConfig(TestConfig):
         self.assertEqual(self.config.worker_count, 3)
         self.assertEqual(self.config.sample_base_dir, '/tmp')
         self.assertEqual(
-            self.config.job_hash_regex, '/var/lib/amavis/tmp/([^/]+)/parts.*')
+            self.config.job_hash_regex, '/amavis/tmp/([^/]+)/parts/')
         self.assertEqual(self.config.use_debug_module, False)
         self.assertEqual(self.config.keep_mail_data, False)
         self.assertEqual(
@@ -299,7 +299,7 @@ class PeekabooDummyConfig(object):
     """ A dummy configuration for the test cases. """
     def __init__(self):
         """ Initialize dummy configuration """
-        self.job_hash_regex = r'/var/lib/amavis/tmp/([^/]+)/parts.*'
+        self.job_hash_regex = r'/amavis/tmp/([^/]+)/parts/'
         self.sample_base_dir = '/tmp'
 
     def get(self, option, default):
@@ -488,11 +488,20 @@ class TestSample(unittest.TestCase):
     def test_job_hash_regex(self):
         """ Test extraction of the job hash from the working directory path.
         """
-        path_with_job_hash = '/var/lib/amavis/tmp/amavis-20170831T132736-07759-iSI0rJ4b/parts'
+        job_hash = 'amavis-20170831T132736-07759-iSI0rJ4b'
+        path_with_job_hash = '/d/var/lib/amavis/tmp/%s/parts/file' % job_hash
         sample = self.factory.make_sample(path_with_job_hash)
-        job_hash = sample.get_job_hash()
-        self.assertEqual(job_hash, 'amavis-20170831T132736-07759-iSI0rJ4b',
+        self.assertEqual(job_hash, sample.get_job_hash(),
                          'Job hash regex is not working')
+
+        legacy_factory = SampleFactory(
+            cuckoo=None, base_dir=self.conf.sample_base_dir,
+            job_hash_regex=r'/var/lib/amavis/tmp/([^/]+)/parts.*',
+            keep_mail_data=False)
+        sample = legacy_factory.make_sample(path_with_job_hash)
+        self.assertEqual(job_hash, sample.get_job_hash(),
+                         'Job hash regex is not working')
+
         job_hash = self.sample.get_job_hash()
         self.assertIn('peekaboo-run_analysis', job_hash)
 

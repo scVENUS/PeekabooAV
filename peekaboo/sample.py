@@ -266,7 +266,7 @@ class Sample(object):
         return job_hash
 
     def get_job_hash(self):
-        job_hash = re.sub(self.__job_hash_regex, r'\1',
+        job_hash = re.sub('.*%s.*' % self.__job_hash_regex, r'\1',
                           self.__path)
         if job_hash == self.__path:
             # regex did not match.
