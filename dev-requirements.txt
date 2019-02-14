@@ -1,3 +1,4 @@
 Sphinx
 twine
 pydoctor
+babel

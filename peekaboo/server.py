@@ -140,7 +140,7 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
         """ Handles an analysis request. """
         # catch wavering clients early on
         logger.debug('New connection incoming.')
-        if not self.talk_back('Hallo das ist Peekaboo\n'):
+        if not self.talk_back([_('Hello, this is Peekaboo.'), '']):
             return
 
         submitted = self.parse()
@@ -173,33 +173,33 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
         try:
             parts = json.loads(request)
         except ValueError as error:
-            self.talk_back('FEHLER: Ungueltiges JSON.')
+            self.talk_back(_('Error: Invalid JSON in request.'))
             logger.error('Invalid JSON in request: %s', error)
             return None
 
         if not isinstance(parts, (list, tuple)):
-            self.talk_back('FEHLER: Ungueltiges Datenformat.')
+            self.talk_back(_('ERROR: Invalid data structure.'))
             logger.error('Invalid data structure.')
             return None
 
         submitted = []
         for part in parts:
             if not part.has_key('full_name'):
-                self.talk_back('FEHLER: Unvollstaendige Datenstruktur.')
+                self.talk_back(_('ERROR: Incomplete data structure.'))
                 logger.error('Incomplete data structure.')
                 return None
 
             path = part['full_name']
             logger.info("Got run_analysis request for %s", path)
             if not os.path.exists(path):
-                self.talk_back('FEHLER: Pfad existiert nicht oder '
-                               'Zugriff verweigert.')
+                self.talk_back(_('ERROR: Path does not exist or no '
+                                 'permission to access it.'))
                 logger.error('Path does not exist or no permission '
                              'to access it.')
                 return None
 
             if not os.path.isfile(path):
-                self.talk_back('FEHLER: Eingabe ist keine Datei.')
+                self.talk_back(_('ERRROR: Input is not a file'))
                 logger.error('Input is not a file')
                 return None
 
@@ -234,7 +234,7 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
             if not self.status_change.wait(self.status_change_timeout):
                 # keep our client engaged
                 # TODO: Impose maximum processing time of our own?
-                if not self.talk_back('Dateien werden analysiert...'):
+                if not self.talk_back(_('Files are being analyzed...')):
                     # Abort handling this request since no-one's interested
                     # any more. We could dequeue the samples here to avoid
                     # unnecessary work. Instead we'll have them run their
@@ -257,7 +257,7 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
 
             # see if our server is shutting down and follow it if so
             if self.server.shutting_down:
-                self.talk_back('Peekaboo wird beendet.')
+                self.talk_back(_('Peekaboo is shutting down.'))
                 logger.debug('Request shutting down with server.')
                 self.server.deregister_request(self)
                 return False
@@ -302,14 +302,27 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
             if sample_result >= result:
                 result = sample_result
 
-            # and unconditionally send out its report to the client
-            if not self.talk_back(sample.peekaboo_report):
+            # and unconditionally send out its report to the client (plus an
+            # empty line)
+            if not self.talk_back(sample.peekaboo_report + ['']):
                 return
 
-        # report overall result
+        # report overall result.
         logger.debug('Reporting batch as "%s" to client', result.name)
-        if not self.talk_back('Die Datensammlung wurde als "%s" eingestuft\n'
-                              % result.name):
+        loc_verdict = _('The file collection has been categorized "%s"')
+        overall = [loc_verdict % result.name]
+
+        # Add untranslated verdict (if the above actually got translated) for
+        # potential pattern matching of the client to reliably latch on to.
+        # Need to duplicate strings here for pygettext and pybabel extract to
+        # find the translatable one in the above _().
+        verdict = 'The file collection has been categorized "%s"'
+        if verdict != loc_verdict:
+            overall.append(verdict % result.name)
+
+        # append newline and send
+        overall.append('')
+        if not self.talk_back(overall):
             return
 
         # shut down connection

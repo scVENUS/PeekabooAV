@@ -28,4 +28,5 @@ For news and announcements follow us on twitter [@peekabooAV](https://twitter.co
    install
    config
    development
+   l18n
    :maxdepth: 3

@@ -28,6 +28,7 @@
 
 from future.builtins import super  # pylint: disable=wrong-import-order
 
+import gettext
 import sys
 import os
 import tempfile
@@ -554,7 +555,7 @@ class TestSample(unittest.TestCase):
         self.assertEqual(self.sample.reason, None)
         self.assertRegexpMatches(
             self.sample.peekaboo_report[0],
-            'Die Datei "%s" wird als "unchecked" betrachtet'
+            'File "%s" is considered "unchecked"'
             % self.sample.filename)
         self.assertEqual(self.sample.cuckoo_report, None)
         self.assertEqual(self.sample.done, False)
@@ -577,11 +578,11 @@ class TestSample(unittest.TestCase):
         self.assertEqual(self.sample.result, Result.unchecked)
         self.assertEqual(self.sample.reason, None)
         self.assertRegexpMatches(
-            self.sample.peekaboo_report[0], 'Datei "%s" %s wird analysiert'
+            self.sample.peekaboo_report[0], 'File "%s" %s is being analyzed'
             % (self.sample.filename, self.sample.sha256sum))
         self.assertRegexpMatches(
             self.sample.peekaboo_report[1],
-            'Die Datei "%s" wird als "unchecked" betrachtet'
+            'File "%s" is considered "unchecked"'
             % self.sample.filename)
         self.assertEqual(self.sample.cuckoo_report, None)
         self.assertEqual(self.sample.done, False)
@@ -722,6 +723,8 @@ class PeekabooTestResult(unittest.TextTestResult):
 
 def main():
     """ Run the testsuite. """
+    gettext.NullTranslations().install()
+
     suite = unittest.TestSuite()
     suite.addTest(unittest.makeSuite(TestDefaultConfig))
     suite.addTest(unittest.makeSuite(TestValidConfig))

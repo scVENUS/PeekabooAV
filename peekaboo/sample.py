@@ -168,7 +168,7 @@ class Sample(object):
 
         self.initialized = True
 
-        self.__report.append("Datei \"%s\" %s wird analysiert"
+        self.__report.append(_("File \"%s\" %s is being analyzed")
                              % (self.__filename, self.sha256sum))
 
         # log some additional info to report to aid debugging
@@ -219,7 +219,7 @@ class Sample(object):
         # Changed intentionally to not trigger configured god/bad matching
         # patterns in clients (e.g. AMaViS) any more since we switched to
         # reporting an overall analysis batch result.
-        return self.__report + ["Die Datei \"%s\" wird als \"%s\" betrachtet\n"
+        return self.__report + [_("File \"%s\" is considered \"%s\"")
                                 % (self.__filename, self.__result.name)]
 
     @property
@@ -288,7 +288,7 @@ class Sample(object):
             self.__reason = res.reason
 
         # also append a report message right away
-        self.__report.append("Datei \"%s\": %s" % (self.__filename, str(res)))
+        self.__report.append(_("File \"%s\": %s") % (self.__filename, str(res)))
 
     def dump_processing_info(self):
         """

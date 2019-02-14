@@ -20,6 +20,14 @@
 #keep_mail_data   :    no
 #processing_info_dir : /var/lib/peekaboo/malware_reports
 
+# Configure the language to use for messages in the report returned to the
+# client. If unset, falls back to system configuration using environment
+# variables such as LANG. Defaults to English messages if neither is
+# configured or no translation is found. Standard LANG variable identifiers
+# such as de, de_DE or de_DE.ISO-8859-1 can be used. Standard gettext search
+# order applies.
+#report_locale    :    <unset>
+
 
 #[ruleset]
 #config           :    /opt/peekaboo/etc/ruleset.conf

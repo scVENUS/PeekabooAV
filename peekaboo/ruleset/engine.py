@@ -83,9 +83,10 @@ class RulesetEngine(object):
                 result = rule.evaluate(sample)
             else:
                 logger.debug("Rule '%s' is disabled." % rule_name)
-                result = RuleResult(rule_name, result=Result.unchecked,
-                                    reason="Regel '%s' ist deaktiviert." % rule_name,
-                                    further_analysis=True)
+                result = RuleResult(
+                    rule_name, result=Result.unchecked,
+                    reason=_("Rule '%s' is disabled.") % rule_name,
+                    further_analysis=True)
 
             sample.add_rule_result(result)
         except CuckooReportPendingException as e:
@@ -98,7 +99,7 @@ class RulesetEngine(object):
             logger.exception(e)
             # create "fake" RuleResult
             result = RuleResult("RulesetEngine", result=Result.unknown,
-                                reason="Regel mit Fehler abgebrochen",
+                                reason=_("Rule aborted with error"),
                                 further_analysis=True)
             sample.add_rule_result(result)
 

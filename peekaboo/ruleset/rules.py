@@ -81,7 +81,7 @@ class KnownRule(Rule):
             return self.result(sample_info.result, sample_info.reason, False)
 
         return self.result(Result.unknown,
-                           "Datei ist dem System noch nicht bekannt",
+                           _("File is not yet known to the system"),
                            True)
 
 
@@ -98,12 +98,13 @@ class FileLargerThanRule(Rule):
 
         if sample.file_size > size:
             return self.result(Result.unknown,
-                               "Datei hat mehr als %d bytes" % size,
+                               _("File has more than %d bytes") % size,
                                True)
 
-        return self.result(Result.ignored,
-                           "Datei ist nur %d bytes lang" % sample.file_size,
-                           False)
+        return self.result(
+            Result.ignored,
+            _("File is more than %d bytes long") % sample.file_size,
+            False)
 
 
 class FileTypeOnWhitelistRule(Rule):
@@ -116,16 +117,16 @@ class FileTypeOnWhitelistRule(Rule):
         whitelist and we could determine at least one. """
         whitelist = self.config.get('whitelist', ())
         if not whitelist:
-            logger.warn("Empty whitelist, check ruleset config.")
+            logger.warning("Empty whitelist, check ruleset config.")
             return self.result(Result.unknown, "Whitelist ist leer", True)
 
         if sample.mimetypes and sample.mimetypes.issubset(set(whitelist)):
             return self.result(Result.ignored,
-                               "Dateityp ist auf Whitelist",
+                               _("File type is on whitelist"),
                                False)
 
         return self.result(Result.unknown,
-                           "Dateityp ist nicht auf Whitelist",
+                           _("File type is not on whitelist"),
                            True)
 
 
@@ -139,19 +140,18 @@ class FileTypeOnGreylistRule(Rule):
         greylist or in case we don't have one. """
         greylist = self.config.get('greylist', ())
         if not greylist:
-            logger.warn("Empty greylist, check ruleset config.")
+            logger.warning("Empty greylist, check ruleset config.")
             return self.result(Result.unknown, "Greylist is leer", False)
 
         if not sample.mimetypes or sample.mimetypes.intersection(set(greylist)):
             return self.result(Result.unknown,
-                               "Dateityp ist auf der Liste der zu "
-                               "analysiserenden Typen",
+                               _("File type is on the list of types to "
+                                 "analyze"),
                                True)
 
         return self.result(Result.unknown,
-                           "Dateityp ist nicht auf der Liste der zu "
-                           "analysierenden Typen (%s)" %
-                           (str(sample.mimetypes)),
+                           _("File type is not on the list of types to "
+                             "analyse (%s)") % (str(sample.mimetypes)),
                            False)
 
 
@@ -163,12 +163,12 @@ class OfficeMacroRule(Rule):
         """ Report the sample as bad if it contains a macro. """
         if sample.office_macros:
             return self.result(Result.bad,
-                               "Die Datei beinhaltet ein Office-Makro",
+                               _("The file contains an Office macro"),
                                False)
 
         return self.result(Result.unknown,
-                           "Die Datei beinhaltet kein erkennbares "
-                           "Office-Makro",
+                           _("The file does not contain a recognizable "
+                             "Office macro"),
                            True)
 
 
@@ -194,9 +194,8 @@ class CuckooRule(Rule):
             except CuckooAnalysisFailedException:
                 return self.result(
                     Result.failed,
-                    "Die Verhaltensanalyse durch Cuckoo hat einen "
-                    "Fehler produziert und konnte nicht erfolgreich "
-                    "abgeschlossen werden",
+                    _("Behavioral analysis by Cuckoo has produced an error "
+                      "and did not finish successfully"),
                     False)
 
             logger.info('Sample submitted to Cuckoo. Job ID: %s. '
@@ -227,9 +226,9 @@ class CuckooEvilSigRule(CuckooRule):
         # grep -o "description.*" -R . ~/cuckoo2.0/modules/signatures/
         bad_sigs = self.config.get('signature', ())
         if not bad_sigs:
-            logger.warn("Empty bad signature list, check ruleset config.")
+            logger.warning("Empty bad signature list, check ruleset config.")
             return self.result(Result.unknown,
-                               "Leere Liste schaedlicher Signaturen",
+                               _("Empty list of malicious signatures"),
                                True)
 
         # look through matched signatures
@@ -247,13 +246,13 @@ class CuckooEvilSigRule(CuckooRule):
 
         if not matched_bad_sigs:
             return self.result(Result.unknown,
-                               "Keine Signatur erkannt die auf Schadcode "
-                               "hindeutet",
+                               _("No signature suggesting malware detected"),
                                True)
 
         matched = ''.ljust(8).join(["%s\n" % s for s in matched_bad_sigs])
         return self.result(Result.bad,
-                           "Folgende Signaturen wurden erkannt: %s" % matched,
+                           _("The following signatures have been recognized: "
+                             "%s") % matched,
                            False)
 
 
@@ -269,12 +268,12 @@ class CuckooScoreRule(CuckooRule):
 
         if report.score >= threshold:
             return self.result(Result.bad,
-                               "Cuckoo score >= %s: %s" %
+                               _("Cuckoo score >= %s: %s") %
                                (threshold, report.score),
                                False)
 
         return self.result(Result.unknown,
-                           "Cuckoo score < %s: %s" %
+                           _("Cuckoo score < %s: %s") %
                            (threshold, report.score),
                            True)
 
@@ -289,20 +288,20 @@ class RequestsEvilDomainRule(CuckooRule):
         list of evil domains. """
         evil_domains = self.config.get('domain', ())
         if not evil_domains:
-            logger.warn("Empty evil domain list, check ruleset config.")
-            return self.result(Result.unknown, "Leere Domainliste", True)
+            logger.warning("Empty evil domain list, check ruleset config.")
+            return self.result(Result.unknown, _("Empty domain list"), True)
 
         for domain in report.requested_domains:
             if domain in evil_domains:
                 return self.result(Result.bad,
-                                   "Die Datei versucht mindestens eine Domain "
-                                   "aus der Blacklist zu kontaktieren "
-                                   "(%s)" % domain,
+                                   _("The file attempts to contact at least "
+                                     "one domain on the blacklist (%s)")
+                                   % domain,
                                    False)
 
         return self.result(Result.unknown,
-                           "Datei scheint keine Domains aus der Blacklist "
-                           "kontaktieren zu wollen",
+                           _("File does not seem to attempt contact with "
+                             "domains on the blacklist"),
                            True)
 
 
@@ -320,14 +319,13 @@ class CuckooAnalysisFailedRule(CuckooRule):
         for entry in report.cuckoo_server_messages:
             if 'analysis completed successfully' in entry:
                 return self.result(Result.unknown,
-                                   "Die Verhaltensanalyse durch Cuckoo wurde "
-                                   "erfolgreich abgeschlossen",
+                                   _("Behavioral analysis by Cuckoo "
+                                     "completed successfully"),
                                    True)
 
         return self.result(Result.failed,
-                           "Die Verhaltensanalyse durch Cuckoo hat einen "
-                           "Fehler produziert und konnte nicht erfolgreich "
-                           "abgeschlossen werden",
+                           _("Behavioral analysis by Cuckoo has produced "
+                             "an error and did not finish successfully"),
                            False)
 
 
@@ -339,6 +337,6 @@ class FinalRule(Rule):
         """ Report an unknown analysis result indicating that nothing much can
         be said about the sample. """
         return self.result(Result.unknown,
-                           "Datei scheint keine erkennbaren Schadroutinen "
-                           "zu starten",
+                           _("File does not seem to exhibit recognizable "
+                             "malicious behaviour"),
                            True)

@@ -26,6 +26,7 @@
 components. """
 
 import errno
+import gettext
 import os
 import sys
 import grp
@@ -252,6 +253,24 @@ def run():
     except PeekabooConfigException as error:
         logging.critical(error)
         sys.exit(1)
+
+    # find localisation in our package directory
+    locale_domain = 'peekaboo'
+    locale_dir = os.path.join(os.path.dirname(__file__), 'locale')
+    languages = None
+    if config.report_locale:
+        logger.debug('Looking for translations for preconfigured locale "%s"',
+                     config.report_locale)
+        languages = [config.report_locale]
+        if not gettext.find(locale_domain, locale_dir, languages):
+            logger.warning('Translation file not found - falling back to '
+                           'system configuration.')
+            languages = None
+
+    logger.debug('Installing report message translations')
+    translation = gettext.translation(locale_domain, locale_dir, languages,
+                                      fallback=True)
+    translation.install()
 
     # establish a connection to the database
     try:
