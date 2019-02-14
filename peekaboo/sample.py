@@ -154,9 +154,8 @@ class Sample(object):
 
         self.initialized = True
 
-        message = "Datei \"%s\" %s wird analysiert" % (self.__filename,
-                                                         self.sha256sum)
-        self.__report.append(message)
+        self.__report.append("Datei \"%s\" %s wird analysiert"
+                             % (self.__filename, self.sha256sum))
 
         # log some additional info to report to aid debugging
         if self.has_attr('meta_info_name_declared'):
@@ -248,7 +247,7 @@ class Sample(object):
         @returns: List of strings.
         """
         # This message used to be:
-        # message = "Die Datei \"%s\" wurde als \"%s\" eingestuft\n\n"
+        # "Die Datei \"%s\" wurde als \"%s\" eingestuft\n\n"
         # Changed intentionally to not trigger configured god/bad matching
         # patterns in clients (e.g. AMaViS) any more since we switched to
         # reporting an overall analysis batch result.
@@ -490,9 +489,8 @@ class Sample(object):
         """
         logger.debug("Submitting %s to Cuckoo", self.__submit_path)
         self.__cuckoo_job_id = self.__cuckoo.submit(self)
-        message = 'Erfolgreich an Cuckoo gegeben %s als Job %d' \
-                  % (self, self.__cuckoo_job_id)
-        self.__internal_report.append(message)
+        self.__internal_report.append('Erfolgreich an Cuckoo gegeben %s als '
+                                      'Job %d' % (self, self.__cuckoo_job_id))
         return self.__cuckoo_job_id
 
     def register_cuckoo_report(self, report):
