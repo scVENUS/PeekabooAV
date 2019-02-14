@@ -517,14 +517,6 @@ class TestSample(unittest.TestCase):
             processing_info_dir=None)
         cls.sample = cls.factory.create_sample('test.py', 'test')
 
-    def test_attribute_dict(self):
-        """ Test the attribute functions. """
-        self.sample.set_attr('Unittest', 'Hello World!')
-        self.assertTrue(self.sample.has_attr('Unittest'))
-        self.assertEqual(self.sample.get_attr('Unittest'), 'Hello World!')
-        self.sample.set_attr('Unittest', 'Test', override=True)
-        self.assertEqual(self.sample.get_attr('Unittest'), 'Test')
-
     def test_job_hash_regex(self):
         """ Test extraction of the job hash from the working directory path.
         """

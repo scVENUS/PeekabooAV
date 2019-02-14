@@ -69,12 +69,12 @@ class Sample(object):
     """
     This class handles and describes samples to be analysed by Peekaboo.
 
-    A sample has attributes like:
-    filename, MIME type, sha256, ...
-    Those attributes are determined on demand kept in a dictionary, which is
-    accessible through the methods has_attr, get_attr, and set_attr.
+    A sample has properties like filename, MIME type, checksum or file size.
+    These are accessible as properties. Most properties determine their value
+    on first access, especially if that determination is somewhat expensive
+    such as the file checksum.
 
-    The data structure works together with Cuckoo to run behavioral attributes.
+    The data structure works together with Cuckoo to run behavioral analysis.
 
     @author: Felix Bauer
     @author: Sebastian Deiss
@@ -98,8 +98,6 @@ class Sample(object):
         self.__reason = None
         self.__report = []  # Peekaboo's own report
         self.__internal_report = []
-        # Additional attributes for a sample object (e. g. meta info)
-        self.__attributes = {}
         self.__file_stat = None
         self.__sha256sum = None
         self.__mimetypes = None
@@ -110,16 +108,32 @@ class Sample(object):
         self.__job_hash_regex = job_hash_regex
         self.__keep_mail_data = keep_mail_data
         self.__processing_info_dir = processing_info_dir
+
+        # Additional attributes for a sample object (i.e. meta info)
+        # We do not make these private for the following reasons:
+        # - this way they still somewhat resemble the previous arbitrary
+        #   attribute dictionary idea
+        # - we'd have to implement the name mangling for setting blow
+        #
+        # Security: Add more below to allow them to be accepted from the
+        # client. We don't want anyone to be able to pollute our sample
+        # objects from the outside. This also serves as a registry of what we
+        # actually use and know how to deal with.
+        self.meta_info_name_declared = None
+        self.meta_info_type_declared = None
+
         self.initialized = False
 
         if metainfo:
+            member_variables = vars(self)
             for field in metainfo:
                 logger.debug('meta_info_%s = %s', field, metainfo[field])
 
                 # JSON will transfer null/None values but we don't want them as
                 # attributes in that case
-                if metainfo[field] is not None:
-                    self.set_attr('meta_info_' + field, metainfo[field])
+                member = 'meta_info_%s' % field
+                if member in member_variables and metainfo[field] is not None:
+                    member_variables[member] = metainfo[field]
 
     def init(self):
         """
@@ -158,59 +172,13 @@ class Sample(object):
                              % (self.__filename, self.sha256sum))
 
         # log some additional info to report to aid debugging
-        if self.has_attr('meta_info_name_declared'):
-            self.__internal_report.append(
-                "meta info: name_declared: %s" %
-                self.get_attr('meta_info_name_declared'))
+        if self.meta_info_name_declared:
+            self.__internal_report.append("meta info: name_declared: %s"
+                                          % self.meta_info_name_declared)
 
-        if self.has_attr('meta_info_type_declared'):
-            self.__internal_report.append(
-                "meta info: type_declared: %s" %
-                self.get_attr('meta_info_type_declared'))
-
-    def get_attr(self, key):
-        """
-        Get a sample attribute by a specified key.
-
-        @param key: The identifier of the sample attribute to get.
-        """
-        if self.has_attr(key):
-            return self.__attributes[key]
-        raise KeyError("Attribute for key '%s' not found." % key)
-
-    def set_attr(self, key, val, override=True):
-        """
-        Add an attribute to a sample.
-
-        @param key: The identifier of the attribute.
-        @param val: The attribute to add.
-        @param override: Whether the existing attribute shall be overwritten or not.
-        """
-        if self.has_attr(key) and override is False:
-            raise KeyError("Key '%s' already exists." % key)
-        self.__attributes[key] = val
-
-    def has_attr(self, key):
-        """
-        Check if an attribute exists for this sample.
-
-        @param key: The identifier of the attribute.
-        """
-        if key in self.__attributes.keys():
-            return True
-        return False
-
-    def remove_attr(self, key):
-        """
-        Delete an attribute for this sample.
-
-        @param key: The identifier of the attribute
-        @raises ValueError: if the given key was not found in
-                            the attributes dictionary.
-        """
-        if key in self.__attributes.keys():
-            del self.__attributes[key]
-        raise ValueError('No attribute named "%s" found.' % key)
+        if self.meta_info_type_declared:
+            self.__internal_report.append("meta info: type_declared: %s"
+                                          % self.meta_info_type_declared)
 
     @property
     def file_path(self):
@@ -392,8 +360,8 @@ class Sample(object):
         # amavis intentionally hands us files named only p001, p002 and so on.
         # But we still try it in case there's no declared name.
         filename = self.__filename
-        if self.has_attr('meta_info_name_declared'):
-            filename = self.get_attr('meta_info_name_declared')
+        if self.meta_info_name_declared:
+            filename = self.meta_info_name_declared
 
         # extension or the empty string if none found
         self.__file_extension = os.path.splitext(filename)[1][1:]
@@ -409,15 +377,15 @@ class Sample(object):
 
         # get MIME type from meta info
         declared_mt = None
-        if self.has_attr('meta_info_type_declared'):
-            declared_mt = self.get_attr('meta_info_type_declared')
+        if self.meta_info_type_declared:
+            declared_mt = self.meta_info_type_declared
             if declared_mt is not None:
                 logger.debug('Sample declared as "%s"' % declared_mt)
                 mime_types.add(declared_mt)
 
         declared_filename = self.__filename
-        if self.has_attr('meta_info_name_declared'):
-            declared_filename = self.get_attr('meta_info_name_declared')
+        if self.meta_info_name_declared:
+            declared_filename = self.meta_info_name_declared
 
         # check if the sample is an S/MIME signature (smime.p7s)
         # If so, don't overwrite the MIME type since we do not want to analyse
