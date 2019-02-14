@@ -26,7 +26,7 @@
 
 """ The testsuite. """
 
-from future.builtins import super
+from future.builtins import super  # pylint: disable=wrong-import-order
 
 import sys
 import os
@@ -38,14 +38,18 @@ from datetime import datetime, timedelta
 
 
 # Add Peekaboo to PYTHONPATH
+# pylint: disable=wrong-import-position
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from peekaboo.exceptions import PeekabooConfigException
 from peekaboo.config import PeekabooConfig, PeekabooRulesetConfig
 from peekaboo.sample import SampleFactory
 from peekaboo.ruleset import RuleResult, Result
-from peekaboo.ruleset.rules import FileTypeOnWhitelistRule, FileTypeOnGreylistRule
+from peekaboo.ruleset.rules import FileTypeOnWhitelistRule, \
+        FileTypeOnGreylistRule, CuckooAnalysisFailedRule
+from peekaboo.toolbox.cuckoo import CuckooReport
 from peekaboo.db import PeekabooDatabase, PeekabooDatabaseError
+# pylint: enable=wrong-import-position
 
 
 class TestConfig(unittest.TestCase):
@@ -648,6 +652,12 @@ class MimetypeSample(object):  # pylint: disable=too-few-public-methods
         self.mimetypes = set(types)
 
 
+class CuckooReportSample(object):  # pylint: disable=too-few-public-methods
+    """ A dummy sample that only contains a configurable cuckoo report. """
+    def __init__(self, report):
+        self.cuckoo_report = CuckooReport(report)
+
+
 class TestRules(unittest.TestCase):
     """
     Unittests for Rules.
@@ -689,6 +699,18 @@ class TestRules(unittest.TestCase):
         for expected, types in combinations:
             result = rule.evaluate(MimetypeSample(types))
             self.assertEqual(result.further_analysis, expected)
+
+    def test_rule_analysis_failed(self):
+        """ Test the Cuckoo analysis failed rule """
+        rule = CuckooAnalysisFailedRule(self.conf)
+        result = rule.evaluate(CuckooReportSample(
+            {'debug': {'cuckoo': ['analysis completed successfully']}}))
+        self.assertEqual(result.result, Result.unknown)
+        self.assertEqual(result.further_analysis, True)
+        result = rule.evaluate(CuckooReportSample(
+            {'debug': {'cuckoo': ['analysis failed']}}))
+        self.assertEqual(result.result, Result.failed)
+        self.assertEqual(result.further_analysis, False)
 
     @classmethod
     def tearDownClass(cls):

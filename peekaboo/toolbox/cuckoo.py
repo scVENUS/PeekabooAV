@@ -448,19 +448,16 @@ class CuckooReport(object):
             return []
 
     @property
-    def analysis_failed(self):
+    def cuckoo_server_messages(self):
         """
-        Has the Cuckoo analysis failed?
+        Messages logged by the Cuckoo server (as opposed to those logged by the
+        agent inside the analysis VM).
 
-        @returns: True if the Cuckoo analysis failed, otherwise False.
+        @returns: List of messages.
         """
         if self.errors:
             logger.warning('Cuckoo produced %d error(s) during processing.' % len(self.errors))
         try:
-            log = self.report['debug']['cuckoo']
-            for entry in log:
-                if 'analysis completed successfully' in entry:
-                    return False
-            return True
+            return self.report['debug']['cuckoo']
         except KeyError:
-            return True
+            return []

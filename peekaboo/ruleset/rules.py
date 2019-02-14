@@ -313,17 +313,22 @@ class CuckooAnalysisFailedRule(CuckooRule):
     def evaluate_report(self, report):
         """ Report the sample as bad if the Cuckoo indicates that the analysis
         has failed. """
-        if report.analysis_failed:
-            return self.result(Result.failed,
-                               "Die Verhaltensanalyse durch Cuckoo hat einen "
-                               "Fehler produziert und konnte nicht erfolgreich "
-                               "abgeschlossen werden",
-                               False)
+        if report.errors:
+            logger.warning('Cuckoo produced %d error(s) during processing.',
+                           len(report.errors))
 
-        return self.result(Result.unknown,
-                           "Die Verhaltensanalyse durch Cuckoo wurde "
-                           "erfolgreich abgeschlossen",
-                           True)
+        for entry in report.cuckoo_server_messages:
+            if 'analysis completed successfully' in entry:
+                return self.result(Result.unknown,
+                                   "Die Verhaltensanalyse durch Cuckoo wurde "
+                                   "erfolgreich abgeschlossen",
+                                   True)
+
+        return self.result(Result.failed,
+                           "Die Verhaltensanalyse durch Cuckoo hat einen "
+                           "Fehler produziert und konnte nicht erfolgreich "
+                           "abgeschlossen werden",
+                           False)
 
 
 class FinalRule(Rule):
