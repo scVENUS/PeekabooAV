@@ -553,7 +553,6 @@ class TestSample(unittest.TestCase):
             self.sample.peekaboo_report[0],
             'Die Datei "%s" wird als "unchecked" betrachtet'
             % self.sample.filename)
-        self.assertListEqual(self.sample.internal_peekaboo_report, [])
         self.assertEqual(self.sample.cuckoo_report, None)
         self.assertEqual(self.sample.done, False)
         self.assertEqual(self.sample.submit_path, None)
@@ -581,7 +580,6 @@ class TestSample(unittest.TestCase):
             self.sample.peekaboo_report[1],
             'Die Datei "%s" wird als "unchecked" betrachtet'
             % self.sample.filename)
-        self.assertListEqual(self.sample.internal_peekaboo_report, [])
         self.assertEqual(self.sample.cuckoo_report, None)
         self.assertEqual(self.sample.done, False)
         self.assertRegexpMatches(

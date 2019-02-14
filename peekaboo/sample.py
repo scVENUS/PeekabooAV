@@ -253,15 +253,6 @@ class Sample(object):
                                 % (self.__filename, self.__result.name)]
 
     @property
-    def internal_peekaboo_report(self):
-        """ Return Peekaboo's internal report, some extra messages not meant
-        for the client but useful for debugging.
-
-        @type: List of strings.
-        """
-        return self.__internal_report
-
-    @property
     def done(self):
         """ Tells whether the analysis of the sample is done, i.e. a final
         verdict has been reached and a result and reason are available. """
