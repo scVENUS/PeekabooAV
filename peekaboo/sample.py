@@ -244,7 +244,13 @@ class Sample(object):
 
         @returns: List of strings.
         """
-        return self.__report
+        # This message used to be:
+        # message = "Die Datei \"%s\" wurde als \"%s\" eingestuft\n\n"
+        # Changed intentionally to not trigger configured god/bad matching
+        # patterns in clients (e.g. AMaViS) any more since we switched to
+        # reporting an overall analysis batch result.
+        return self.__report + ["Die Datei \"%s\" wird als \"%s\" betrachtet\n"
+                                % (self.__filename, self.__result.name)]
 
     @property
     def internal_peekaboo_report(self):
@@ -307,6 +313,9 @@ class Sample(object):
         return job_hash
 
     def add_rule_result(self, res):
+        """ Add a rule result to the sample. This also adds a message about
+        this to the report and updates the overall analysis result (so far).
+        """
         logger.debug('Adding rule result %s' % str(res))
         self.__rule_results.append(res)
 
@@ -316,6 +325,9 @@ class Sample(object):
         if res.result >= self.__result:
             self.__result = res.result
             self.__reason = res.reason
+
+        # also append a report message right away
+        self.__report.append("Datei \"%s\": %s" % (self.__filename, str(res)))
 
     def dump_processing_info(self):
         """
@@ -359,24 +371,6 @@ class Sample(object):
                     json.dump(self.__cuckoo_report.raw, f, indent=1)
             except IOError as ioerror:
                 logger.exception(ioerror)
-
-    def report(self):
-        """
-        Create the report for this sample. The report is saved as a list of
-        strings and is available via get_peekaboo_report().
-        """
-        for rule_result in self.__rule_results:
-            message = "Datei \"%s\": %s" % (self.__filename, str(rule_result))
-            self.__report.append(message)
-
-        # This message used to be:
-        # message = "Die Datei \"%s\" wurde als \"%s\" eingestuft\n\n"
-        # Changed intentionally to not trigger configured god/bad matching
-        # patterns in clients (e.g. AMaViS) any more since we switched to
-        # reporting an overall analysis batch result.
-        message = "Die Datei \"%s\" wird als \"%s\" betrachtet\n" \
-                  % (self.__filename, self.__result.name)
-        self.__report.append(message)
 
     @property
     def sha256sum(self):

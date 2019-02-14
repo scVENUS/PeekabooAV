@@ -309,7 +309,6 @@ class Worker(Thread):
                 engine = RulesetEngine(sample, self.ruleset_config, self.db_con)
                 engine.run()
 
-                sample.report()
                 if sample.result >= Result.failed:
                     sample.dump_processing_info()
 

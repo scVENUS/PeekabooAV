@@ -549,7 +549,10 @@ class TestSample(unittest.TestCase):
         self.assertEqual(self.sample.job_id, -1)
         self.assertEqual(self.sample.result, Result.unchecked)
         self.assertEqual(self.sample.reason, None)
-        self.assertListEqual(self.sample.peekaboo_report, [])
+        self.assertRegexpMatches(
+            self.sample.peekaboo_report[0],
+            'Die Datei "%s" wird als "unchecked" betrachtet'
+            % self.sample.filename)
         self.assertListEqual(self.sample.internal_peekaboo_report, [])
         self.assertEqual(self.sample.cuckoo_report, None)
         self.assertEqual(self.sample.done, False)
@@ -574,6 +577,10 @@ class TestSample(unittest.TestCase):
         self.assertRegexpMatches(
             self.sample.peekaboo_report[0], 'Datei "%s" %s wird analysiert'
             % (self.sample.filename, self.sample.sha256sum))
+        self.assertRegexpMatches(
+            self.sample.peekaboo_report[1],
+            'Die Datei "%s" wird als "unchecked" betrachtet'
+            % self.sample.filename)
         self.assertListEqual(self.sample.internal_peekaboo_report, [])
         self.assertEqual(self.sample.cuckoo_report, None)
         self.assertEqual(self.sample.done, False)
