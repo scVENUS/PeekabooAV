@@ -273,7 +273,6 @@ class Sample(object):
             # so we generate our own job hash and create the
             # working directory.
             job_hash = self.generate_job_hash()
-            os.mkdir(os.path.join(self.__base_dir, job_hash))
 
         logger.debug("Job hash for this sample: %s" % job_hash)
         return job_hash
