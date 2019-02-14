@@ -47,7 +47,7 @@ class SampleFactory(object):
     sample needs and thus serves as a registry of potential API breakage
     perhaps deserving looking into. """
     def __init__(self, cuckoo, base_dir, job_hash_regex,
-                 keep_mail_data):
+                 keep_mail_data, processing_info_dir):
         # object references for interaction
         self.cuckoo = cuckoo
 
@@ -55,12 +55,14 @@ class SampleFactory(object):
         self.base_dir = base_dir
         self.job_hash_regex = job_hash_regex
         self.keep_mail_data = keep_mail_data
+        self.processing_info_dir = processing_info_dir
 
     def make_sample(self, file_path, status_change=None, metainfo=None):
         """ Create a new Sample object based on the factory's configured
         defaults and variable parameters. """
         return Sample(file_path, self.cuckoo, status_change, metainfo,
-                      self.base_dir, self.job_hash_regex, self.keep_mail_data)
+                      self.base_dir, self.job_hash_regex, self.keep_mail_data,
+                      self.processing_info_dir)
 
 
 class Sample(object):
@@ -79,7 +81,7 @@ class Sample(object):
     """
     def __init__(self, file_path, cuckoo=None, status_change=None,
                  metainfo=None, base_dir=None, job_hash_regex=None,
-                 keep_mail_data=False):
+                 keep_mail_data=False, processing_info_dir=None):
         self.__path = file_path
         self.__cuckoo = cuckoo
         self.__wd = None
@@ -107,6 +109,7 @@ class Sample(object):
         self.__job_hash = None
         self.__job_hash_regex = job_hash_regex
         self.__keep_mail_data = keep_mail_data
+        self.__processing_info_dir = processing_info_dir
         self.initialized = False
 
         if metainfo:
@@ -325,8 +328,12 @@ class Sample(object):
         Saves the Cuckoo report as HTML + JSON
         to a directory named after the job hash.
         """
-        dump_dir = os.path.join(os.environ['HOME'], 'malware_reports',
-                                self.job_hash)
+        if not self.__processing_info_dir:
+            logger.debug('Not dumping processing info because no path for the '
+                         'data is unconfigured.')
+            return
+
+        dump_dir = os.path.join(self.__processing_info_dir, self.job_hash)
         if not os.path.isdir(dump_dir):
             os.makedirs(dump_dir, 0o770)
         filename = self.__filename + '-' + self.sha256sum

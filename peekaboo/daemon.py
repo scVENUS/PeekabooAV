@@ -328,7 +328,7 @@ def run():
     # database connection and connection map.
     sample_factory = SampleFactory(
         cuckoo, config.sample_base_dir, config.job_hash_regex,
-        config.keep_mail_data)
+        config.keep_mail_data, config.processing_info_dir)
 
     # We only want to accept 2 * worker_count connections.
     try:

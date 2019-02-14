@@ -89,6 +89,9 @@ class TestDefaultConfig(TestConfig):
         self.assertEqual(self.config.use_debug_module, False)
         self.assertEqual(self.config.keep_mail_data, False)
         self.assertEqual(
+            self.config.processing_info_dir,
+            '/var/lib/peekaboo/malware_reports')
+        self.assertEqual(
             self.config.ruleset_config, '/opt/peekaboo/etc/ruleset.conf')
         self.assertEqual(self.config.log_level, logging.INFO)
         self.assertEqual(
@@ -119,6 +122,7 @@ sample_base_dir  :    /tmp/1
 job_hash_regex   :    /var/2
 use_debug_module :    yes
 keep_mail_data   :    yes
+processing_info_dir : /var/3
 
 [ruleset]
 config           :    /rules/1
@@ -157,6 +161,7 @@ duplicate_check_interval: 61
         self.assertEqual(self.config.job_hash_regex, '/var/2')
         self.assertEqual(self.config.use_debug_module, True)
         self.assertEqual(self.config.keep_mail_data, True)
+        self.assertEqual(self.config.processing_info_dir, '/var/3')
         self.assertEqual(self.config.ruleset_config, '/rules/1')
         self.assertEqual(self.config.log_level, logging.DEBUG)
         self.assertEqual(self.config.log_format, 'format%foo1')
@@ -359,7 +364,8 @@ class TestDatabase(unittest.TestCase):
                                              instance_id=0)
         cls.factory = CreatingSampleFactory(
             cuckoo=None, base_dir=cls.conf.sample_base_dir,
-            job_hash_regex=cls.conf.job_hash_regex, keep_mail_data=False)
+            job_hash_regex=cls.conf.job_hash_regex, keep_mail_data=False,
+            processing_info_dir=None)
         cls.sample = cls.factory.create_sample('test.py', 'test')
         result = RuleResult('Unittest',
                             Result.failed,
@@ -503,7 +509,8 @@ class TestSample(unittest.TestCase):
         cls.db_con = PeekabooDatabase('sqlite:///' + cls.test_db)
         cls.factory = CreatingSampleFactory(
             cuckoo=None, base_dir=cls.conf.sample_base_dir,
-            job_hash_regex=cls.conf.job_hash_regex, keep_mail_data=False)
+            job_hash_regex=cls.conf.job_hash_regex, keep_mail_data=False,
+            processing_info_dir=None)
         cls.sample = cls.factory.create_sample('test.py', 'test')
 
     def test_attribute_dict(self):
@@ -531,7 +538,7 @@ class TestSample(unittest.TestCase):
         legacy_factory = CreatingSampleFactory(
             cuckoo=None, base_dir=self.conf.sample_base_dir,
             job_hash_regex=r'/var/lib/amavis/tmp/([^/]+)/parts.*',
-            keep_mail_data=False)
+            keep_mail_data=False, processing_info_dir=None)
         sample = legacy_factory.make_sample(path_with_job_hash, 'file')
         self.assertEqual(job_hash, sample.job_hash,
                          'Job hash regex is not working')
