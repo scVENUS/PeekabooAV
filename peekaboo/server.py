@@ -147,7 +147,11 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
         if not submitted:
             return
 
-        self.wait(submitted)
+        if not self.wait(submitted):
+            # something went wrong while waiting, i.e. client closed connection
+            # or we're shutting down
+            return
+
         # here we know that all samples have reported back
         self.report(submitted)
 
@@ -237,7 +241,7 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
                     # course, assuming that we'll be much quicker
                     # responding if the client decides to resubmit them.
                     self.server.deregister_request(self)
-                    return
+                    return False
 
                 logger.debug('Client updated that samples are still '
                              'processing.')
@@ -256,7 +260,7 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
                 self.talk_back('Peekaboo wird beendet.')
                 logger.debug('Request shutting down with server.')
                 self.server.deregister_request(self)
-                return
+                return False
 
             self.status_change.clear()
 
@@ -273,6 +277,7 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
 
         # deregister notification from server since we've exited our wait loop
         self.server.deregister_request(self)
+        return True
 
     def report(self, done):
         """ Report individual files' and overall verdict to client.
