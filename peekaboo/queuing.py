@@ -41,9 +41,9 @@ class JobQueue:
 
     @author: Sebastian Deiss
     """
-    def __init__(self, ruleset_config, db_con, worker_count = 4,
-            queue_timeout = 300, dequeue_timeout = 5, shutdown_timeout = 600,
-            cluster_duplicate_check_interval = 5):
+    def __init__(self, ruleset_config, db_con, worker_count=4,
+                 queue_timeout=300, shutdown_timeout=60,
+                 cluster_duplicate_check_interval=5):
         """ Initialise job queue by creating n Peekaboo worker threads to
         process samples.
 
@@ -57,7 +57,6 @@ class JobQueue:
         self.workers = []
         self.worker_count = worker_count
         self.queue_timeout = queue_timeout
-        self.dequeue_timeout = dequeue_timeout
         self.shutdown_timeout = shutdown_timeout
 
         # keep a backlog of samples with hashes identical to samples currently
@@ -219,8 +218,12 @@ class JobQueue:
         if len(submitted_duplicates) > 0:
             logger.debug("Submitted duplicates from backlog: %s" % submitted_duplicates)
 
-    def dequeue(self, timeout):
-        return self.jobs.get(True, timeout)
+    def dequeue(self):
+        """ Remove a sample from the queue. Used by the workers to get their
+        work. Blocks indefinitely until some work is available. If we want to
+        wake the workers for some other reason, we send them a None item as
+        ping. """
+        return self.jobs.get(True)
 
     def shut_down(self, timeout = None):
         if not timeout:
@@ -231,21 +234,32 @@ class JobQueue:
         if self.cluster_duplicate_handler:
             self.cluster_duplicate_handler.shut_down()
 
-        for w in self.workers:
-            w.shut_down()
+        # tell all workers to shut down
+        for worker in self.workers:
+            worker.shut_down()
+
+        # put a ping for each worker on the queue. Since they already all know
+        # that they're supposed to shut down, each of them will only remove
+        # one item from the queue and then exit, leaving the others for their
+        # colleagues. For this reason this loop can't be folded into the above!
+        for worker in self.workers:
+            self.jobs.put(None)
 
         # wait for workers to end
-        for t in range(0, timeout):
+        interval = 1
+        for attempt in range(1, timeout / interval + 1):
             still_running = []
-            for w in self.workers:
-                if w.running:
-                    still_running.append(w)
+            for worker in self.workers:
+                if worker.running:
+                    still_running.append(worker)
 
             self.workers = still_running
             if len(self.workers) == 0:
                 break
 
-            sleep(1)
+            sleep(interval)
+            logger.debug('%d: %d workers still running', attempt,
+                         len(self.workers))
 
         if len(self.workers) > 0:
             logger.error("Some workers refused to stop.")
@@ -279,7 +293,7 @@ class Worker(Thread):
 
     @author: Sebastian Deiss
     """
-    def __init__(self, wid, job_queue, ruleset_config, db_con, dequeue_timeout = 5):
+    def __init__(self, wid, job_queue, ruleset_config, db_con):
         # whether we should run
         self.shutdown_requested = Event()
         self.shutdown_requested.clear()
@@ -290,7 +304,6 @@ class Worker(Thread):
         self.job_queue = job_queue
         self.ruleset_config = ruleset_config
         self.db_con = db_con
-        self.dequeue_timeout = dequeue_timeout
         Thread.__init__(self)
 
     def run(self):
@@ -298,9 +311,14 @@ class Worker(Thread):
         while not self.shutdown_requested.is_set():
             try:
                 # wait blocking for next job (thread safe) with timeout
-                sample = self.job_queue.dequeue(self.dequeue_timeout)
+                sample = self.job_queue.dequeue()
             except Empty:
                 continue
+
+            if sample is None:
+                # we just got pinged
+                continue
+
             logger.info('Worker %d: Processing sample %s' % (self.worker_id, sample))
 
             try:
