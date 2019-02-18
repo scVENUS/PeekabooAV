@@ -98,9 +98,9 @@ class RulesetEngine(object):
                                                                 sample))
             logger.exception(e)
             # create "fake" RuleResult
-            result = RuleResult("RulesetEngine", result=Result.unknown,
+            result = RuleResult("RulesetEngine", result=Result.failed,
                                 reason=_("Rule aborted with error"),
-                                further_analysis=True)
+                                further_analysis=False)
             sample.add_rule_result(result)
 
         logger.info("Rule '%s' processed for %s" % (rule_name, sample))
