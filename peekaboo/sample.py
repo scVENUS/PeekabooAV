@@ -261,9 +261,10 @@ class Sample(object):
         if self.__job_hash:
             return self.__job_hash
 
-        job_hash = re.sub('.*%s.*' % self.__job_hash_regex, r'\1',
-                          self.__path)
-        if job_hash == self.__path:
+        match = re.search(self.__job_hash_regex, self.__path)
+        if match is not None:
+            job_hash = match.group(1)
+        else:
             # regex did not match.
             # so we generate our own job hash and create the
             # working directory.
