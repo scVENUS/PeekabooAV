@@ -93,7 +93,6 @@ class Sample(object):
         self.__cuckoo_report = None
         self.__done = False
         self.__status_change = status_change
-        self.__rule_results = []
         self.__result = Result.unchecked
         self.__reason = None
         self.__report = []  # Peekaboo's own report
@@ -297,7 +296,7 @@ class Sample(object):
         this to the report and updates the overall analysis result (so far).
         """
         logger.debug('Adding rule result %s' % str(res))
-        self.__rule_results.append(res)
+        self.__report.append(_("File \"%s\": %s") % (self.__filename, str(res)))
 
         logger.debug("Current overall result: %s, new rule result: %s",
                      self.__result, res.result)
@@ -305,9 +304,6 @@ class Sample(object):
         if res.result >= self.__result:
             self.__result = res.result
             self.__reason = res.reason
-
-        # also append a report message right away
-        self.__report.append(_("File \"%s\": %s") % (self.__filename, str(res)))
 
     def dump_processing_info(self):
         """
