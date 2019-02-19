@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2019-02-15 12:33+0000\n"
+"POT-Creation-Date: 2019-02-19 13:11+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -17,17 +17,17 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.4.0\n"
 
-#: peekaboo/sample.py:171
+#: peekaboo/sample.py:187
 #, python-format
 msgid "File \"%s\" %s is being analyzed"
 msgstr ""
 
-#: peekaboo/sample.py:222
+#: peekaboo/sample.py:240
 #, python-format
 msgid "File \"%s\" is considered \"%s\""
 msgstr ""
 
-#: peekaboo/sample.py:291
+#: peekaboo/sample.py:310
 #, python-format
 msgid "File \"%s\": %s"
 msgstr ""
@@ -56,15 +56,19 @@ msgstr ""
 msgid "ERRROR: Input is not a file"
 msgstr ""
 
-#: peekaboo/server.py:237
+#: peekaboo/server.py:209
+msgid "Error submitting sample to job queue"
+msgstr ""
+
+#: peekaboo/server.py:241
 msgid "Files are being analyzed..."
 msgstr ""
 
-#: peekaboo/server.py:260
+#: peekaboo/server.py:264
 msgid "Peekaboo is shutting down."
 msgstr ""
 
-#: peekaboo/server.py:314
+#: peekaboo/server.py:316
 #, python-format
 msgid "The file collection has been categorized \"%s\""
 msgstr ""

@@ -269,8 +269,8 @@ class PeekabooDatabase(object):
                          sha256sum)
         except SQLAlchemyError as error:
             session.rollback()
-            raise PeekabooDatabaseError('Unable to mark sample as in flight' %
-                                        error)
+            raise PeekabooDatabaseError('Unable to mark sample as in flight: '
+                                        '%s' % error)
         finally:
             session.close()
 
@@ -297,11 +297,13 @@ class PeekabooDatabase(object):
 
         # clear in-flight marker from database
         sha256sum = sample.sha256sum
-        cleared = session.query(InFlightSample).filter(
+        query = session.query(InFlightSample).filter(
             InFlightSample.sha256sum == sha256sum).filter(
-                InFlightSample.instance_id == instance_id).delete()
+                InFlightSample.instance_id == instance_id)
 
         try:
+            # delete() is not queued and goes to the DB before commit()
+            cleared = query.delete()
             session.commit()
         except SQLAlchemyError as error:
             session.rollback()
@@ -347,16 +349,17 @@ class PeekabooDatabase(object):
 
         if instance_id < 0:
             # delete all locks
-            session.query(InFlightSample).delete()
+            query = session.query(InFlightSample)
             logger.debug('Clearing database of all in-flight samples.')
         else:
             # delete only the locks of a specific instance
-            session.query(InFlightSample).filter(
-                InFlightSample.instance_id == instance_id).delete()
+            query = session.query(InFlightSample).filter(
+                InFlightSample.instance_id == instance_id)
             logger.debug('Clearing database of all in-flight samples of '
                          'instance %d.', instance_id)
-
         try:
+            # delete() is not queued and goes to the DB before commit()
+            query.delete()
             session.commit()
         except SQLAlchemyError as error:
             session.rollback()
@@ -378,14 +381,16 @@ class PeekabooDatabase(object):
         session = self.__session()
 
         # delete only the locks of a specific instance
-        cleared = session.query(InFlightSample).filter(
+        query = session.query(InFlightSample).filter(
             InFlightSample.start_time <= datetime.utcnow() - timedelta(
-                seconds=self.stale_in_flight_threshold)).delete()
+                seconds=self.stale_in_flight_threshold))
         logger.debug(
             'Clearing database of all stale in-flight samples '
             '(%d seconds)', self.stale_in_flight_threshold)
 
         try:
+            # delete() is not queued and goes to the DB before commit()
+            cleared = query.delete()
             session.commit()
             if cleared > 0:
                 logger.warn('%d stale in-flight samples cleared.', cleared)

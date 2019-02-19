@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PeekabooAV 1.6.2\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2019-02-15 12:33+0000\n"
+"POT-Creation-Date: 2019-02-19 13:11+0000\n"
 "PO-Revision-Date: 2019-02-14 22:02+0000\n"
 "Last-Translator: Michael Weiser <michael.weiser@gmx.de>\n"
 "Language: de\n"
@@ -17,17 +17,17 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.4.0\n"
 
-#: peekaboo/sample.py:171
+#: peekaboo/sample.py:187
 #, python-format
 msgid "File \"%s\" %s is being analyzed"
 msgstr "Datei \"%s\" %s wird analysiert"
 
-#: peekaboo/sample.py:222
+#: peekaboo/sample.py:240
 #, python-format
 msgid "File \"%s\" is considered \"%s\""
 msgstr "Die Datei \"%s\" wird als \"%s\" betrachtet"
 
-#: peekaboo/sample.py:291
+#: peekaboo/sample.py:310
 #, python-format
 msgid "File \"%s\": %s"
 msgstr "Datei \"%s\": %s"
@@ -55,17 +55,21 @@ msgstr "FEHLER: Pfad existiert nicht oder Zugriff verweigert."
 
 #: peekaboo/server.py:202
 msgid "ERRROR: Input is not a file"
-msgstr "FEHLER: Eingabe ist keine Datei."
+msgstr "FEHLER: Eingabe ist keine Datei"
 
-#: peekaboo/server.py:237
+#: peekaboo/server.py:209
+msgid "Error submitting sample to job queue"
+msgstr "Fehler beim Einstellen in Warteschlange"
+
+#: peekaboo/server.py:241
 msgid "Files are being analyzed..."
 msgstr "Dateien werden analysiert..."
 
-#: peekaboo/server.py:260
+#: peekaboo/server.py:264
 msgid "Peekaboo is shutting down."
 msgstr "Peekaboo wird beendet."
 
-#: peekaboo/server.py:314
+#: peekaboo/server.py:316
 #, python-format
 msgid "The file collection has been categorized \"%s\""
 msgstr "Die Datensammlung wurde als \"%s\" eingestuft"

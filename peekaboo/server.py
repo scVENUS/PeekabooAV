@@ -205,7 +205,11 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
 
             sample = self.sample_factory.make_sample(
                 path, status_change=self.status_change, metainfo=part)
-            self.job_queue.submit(sample, self.__class__)
+            if not self.job_queue.submit(sample, self.__class__):
+                self.talk_back(_('Error submitting sample to job queue'))
+                # submit will have logged an error
+                return None
+
             submitted.append(sample)
             logger.debug('Created and submitted sample %s', sample)
 

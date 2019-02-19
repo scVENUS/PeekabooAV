@@ -36,6 +36,7 @@ import signal
 import socket
 from argparse import ArgumentParser
 from sdnotify import SystemdNotifier
+from sqlalchemy.exc import SQLAlchemyError
 from peekaboo import PEEKABOO_OWL, __version__
 from peekaboo.config import PeekabooConfig, PeekabooRulesetConfig
 from peekaboo.db import PeekabooDatabase
@@ -280,9 +281,9 @@ def run():
     except PeekabooDatabaseError as error:
         logging.critical(error)
         sys.exit(1)
-    except Exception as error:
+    except SQLAlchemyError as dberr:
         logger.critical('Failed to establish a connection to the database '
-                        'at %s: %s', config.db_url, error)
+                        'at %s: %s', config.db_url, dberr)
         sys.exit(1)
 
     # Import debug module if we are in debug mode
@@ -372,8 +373,12 @@ def run():
     finally:
         server.shutdown()
         job_queue.shut_down()
-        db_con.clear_in_flight_samples()
-        db_con.clear_stale_in_flight_samples()
+        try:
+            db_con.clear_in_flight_samples()
+            db_con.clear_stale_in_flight_samples()
+        except PeekabooDatabaseError as dberr:
+            logger.error(dberr)
+
         if debugger is not None:
             debugger.shut_down()
 

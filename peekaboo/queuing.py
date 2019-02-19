@@ -124,7 +124,13 @@ class JobQueue:
             else:
                 # are we the first of potentially multiple instances working on
                 # this sample?
-                if self.db_con.mark_sample_in_flight(sample):
+                try:
+                    locked = self.db_con.mark_sample_in_flight(sample)
+                except PeekabooDatabaseError as dberr:
+                    logger.error(dberr)
+                    return False
+
+                if locked:
                     # initialise a per-duplicate backlog for this sample which
                     # also serves as in-flight marker and submit to queue
                     self.duplicates[sample_hash] = {
@@ -153,9 +159,11 @@ class JobQueue:
             logger.debug("New sample submitted to job queue by %s. %s" %
                     (submitter, sample_str))
 
+        return True
+
     def submit_cluster_duplicates(self):
         if not self.cluster_duplicates.keys():
-            return
+            return True
 
         submitted_cluster_duplicates = []
 
@@ -164,7 +172,14 @@ class JobQueue:
             # processed by another instance concurrently
             for sample_hash, sample_duplicates in self.cluster_duplicates.items():
                 # try to mark as in-flight
-                if self.db_con.mark_sample_in_flight(sample_duplicates[0]):
+                try:
+                    locked = self.db_con.mark_sample_in_flight(
+                        sample_duplicates[0])
+                except PeekabooDatabaseError as dberr:
+                    logger.error(dberr)
+                    return False
+
+                if locked:
                     sample_str = str(sample_duplicates[0])
                     if self.duplicates.get(sample_hash) is not None:
                         logger.error("Possible backlog corruption for sample "
@@ -191,8 +206,16 @@ class JobQueue:
                     "their duplicates) from backlog: %s" %
                     submitted_cluster_duplicates)
 
+        return True
+
     def clear_stale_in_flight_samples(self):
-        return self.db_con.clear_stale_in_flight_samples()
+        try:
+            cleared = self.db_con.clear_stale_in_flight_samples()
+        except PeekabooDatabaseError as dberr:
+            logger.error(dberr)
+            cleared = False
+
+        return cleared
 
     def done(self, sample_hash):
         submitted_duplicates = []
@@ -211,7 +234,11 @@ class JobQueue:
                 self.jobs.put(s, True, self.queue_timeout)
 
             sample = self.duplicates[sample_hash]['master']
-            self.db_con.clear_sample_in_flight(sample)
+            try:
+                self.db_con.clear_sample_in_flight(sample)
+            except PeekabooDatabaseError as dberr:
+                logger.error(dberr)
+
             sample_str = str(sample)
             del self.duplicates[sample_hash]
 
@@ -279,6 +306,9 @@ class ClusterDuplicateHandler(Thread):
         while not self.shutdown_requested.wait(self.interval):
             logger.debug("Checking for samples in processing by other "
                          "instances to submit")
+            # TODO: Error handling: How do we cause Peekaboo to exit with an
+            # error from here? For now just keep trying and hope (database)
+            # failure is transient.
             self.job_queue.clear_stale_in_flight_samples()
             self.job_queue.submit_cluster_duplicates()
 
