@@ -657,11 +657,6 @@ class TestRules(unittest.TestCase):
 
     @author: Felix Bauer
     """
-    @classmethod
-    def setUpClass(cls):
-        """ Set up common test case resources. """
-        cls.conf = PeekabooDummyConfig()
-
     def test_rule_file_type_on_whitelist(self):
         """ Test whitelist rule. """
         combinations = [
@@ -672,7 +667,7 @@ class TestRules(unittest.TestCase):
             [True, ['', 'asdfjkl', '93219843298']],
             [True, []],
         ]
-        rule = FileTypeOnWhitelistRule(self.conf)
+        rule = FileTypeOnWhitelistRule({'whitelist': ['text/plain']})
         for expected, types in combinations:
             result = rule.evaluate(MimetypeSample(types))
             self.assertEqual(result.further_analysis, expected)
@@ -688,14 +683,19 @@ class TestRules(unittest.TestCase):
             [False, ['', 'asdfjkl', '93219843298']],
             [True, []],
         ]
-        rule = FileTypeOnGreylistRule(self.conf)
+        rule = FileTypeOnGreylistRule({
+            'greylist': [
+                'application/x-dosexec',
+                'application/zip',
+                'application/msword']})
         for expected, types in combinations:
             result = rule.evaluate(MimetypeSample(types))
             self.assertEqual(result.further_analysis, expected)
 
     def test_rule_analysis_failed(self):
         """ Test the Cuckoo analysis failed rule """
-        rule = CuckooAnalysisFailedRule(self.conf)
+        # test defaults
+        rule = CuckooAnalysisFailedRule()
         result = rule.evaluate(CuckooReportSample(
             {'debug': {'cuckoo': ['analysis completed successfully']}}))
         self.assertEqual(result.result, Result.unknown)
@@ -705,10 +705,23 @@ class TestRules(unittest.TestCase):
         self.assertEqual(result.result, Result.failed)
         self.assertEqual(result.further_analysis, False)
 
-    @classmethod
-    def tearDownClass(cls):
-        """ Clean up after the tests. """
-        pass
+        # test with config
+        rule = CuckooAnalysisFailedRule({
+            'failure': ['end of analysis reached!'],
+            'success': ['analysis completed successfully']})
+        result = rule.evaluate(CuckooReportSample(
+            {'debug': {'cuckoo': ['analysis completed successfully']}}))
+        self.assertEqual(result.result, Result.unknown)
+        self.assertEqual(result.further_analysis, True)
+        result = rule.evaluate(CuckooReportSample(
+            {'debug': {'cuckoo': ['end of analysis reached!']}}))
+        self.assertEqual(result.result, Result.failed)
+        self.assertEqual(result.further_analysis, False)
+        result = rule.evaluate(CuckooReportSample(
+            {'debug': {'cuckoo': ['analysis failed']}}))
+        self.assertEqual(result.result, Result.failed)
+        self.assertEqual(result.further_analysis, False)
+
 
 class PeekabooTestResult(unittest.TextTestResult):
     """ Subclassed test result for custom formatting. """

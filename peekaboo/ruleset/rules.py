@@ -316,17 +316,33 @@ class CuckooAnalysisFailedRule(CuckooRule):
             logger.warning('Cuckoo produced %d error(s) during processing.',
                            len(report.errors))
 
-        for entry in report.cuckoo_server_messages:
-            if 'analysis completed successfully' in entry:
-                return self.result(Result.unknown,
-                                   _("Behavioral analysis by Cuckoo "
-                                     "completed successfully"),
-                                   True)
+        failure_reason = _("Behavioral analysis by Cuckoo has produced "
+                           "an error and did not finish successfully")
 
-        return self.result(Result.failed,
-                           _("Behavioral analysis by Cuckoo has produced "
-                             "an error and did not finish successfully"),
-                           False)
+        failure_matches = self.config.get('failure')
+        if failure_matches is not None:
+            for entry in report.cuckoo_server_messages:
+                for failure in failure_matches:
+                    if failure in entry:
+                        logger.debug('Failure indicator "%s" found in Cuckoo '
+                                     'messages', failure)
+                        return self.result(Result.failed, failure_reason, False)
+
+        success_matches = self.config.get(
+            'success', ['analysis completed successfully'])
+        for entry in report.cuckoo_server_messages:
+            for success in success_matches:
+                if success in entry:
+                    logger.debug('Success indicator "%s" found in Cuckoo '
+                                 'messages', success)
+                    return self.result(Result.unknown,
+                                       _("Behavioral analysis by Cuckoo "
+                                         "completed successfully"),
+                                       True)
+
+        logger.debug('Neither success nor failure indicators found, '
+                     'considering analysis failed.')
+        return self.result(Result.failed, failure_reason, False)
 
 
 class FinalRule(Rule):

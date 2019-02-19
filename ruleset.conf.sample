@@ -121,7 +121,37 @@ domain.1 : canarytokens.com
 [contains_peekabooyar]
 enabled : no
 
+[cuckoo_analysis_failed]
+# This rule checks whether analysis by Cuckoo failed. If so, it reports a
+# result of "failed" for this sample and aborts rule processing. In case of
+# success, result "unknown" is returned (because successful analysis in itself
+# provides no indication about the sample) and rule processing is continued.
+#
+# The following strings are matched in the order listed against the
+# debug/cuckoo log of the report, i.e. the server's messages about the
+# analysis. Order of evaluation is failure -> success -> fallback: failure,
+# which means:
+#
+# - if any failure string is contained in any log entry, the analysis is
+#   considered failed and evaluation is aborted
+# - if any success string is contained in any log entry, the analysis is
+#   considered successfully finished and evaluation is aborted
+# - if no string matches, the analysis is considered failed
+#
+# Failure strings are optional but there has to be at least one success string
+# to prevent the rule from always reporting failure. If the rule is supposed to do
+# nothing, it should be disabled instead of providing no or very permissive
+# match strings.
+
+# default:
+#success.1: analysis completed successfully
+# no failure
+
+# possible more specific config: 'end of analysis reached!' shows that the
+# analysis ran beyond the analysis timeout and into the critical timeout which
+# is a clear indicator that it did not succeed (for whatever reason)
+#failure.1: end of analysis reached!
+
 # rules without configuration options:
 # - office_macro
-# - cuckoo_analysis_failed
 # - final_rule
