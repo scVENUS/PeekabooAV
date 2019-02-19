@@ -27,9 +27,10 @@ import logging
 from threading import Thread, Event, Lock
 from queue import Queue, Empty
 from time import sleep
-from peekaboo.ruleset import Result
+from peekaboo.ruleset import Result, RuleResult
 from peekaboo.ruleset.engine import RulesetEngine
-from peekaboo.exceptions import CuckooReportPendingException
+from peekaboo.exceptions import CuckooReportPendingException, \
+    PeekabooDatabaseError
 
 
 logger = logging.getLogger(__name__)
@@ -309,6 +310,8 @@ class Worker(Thread):
     def run(self):
         self.running_flag.set()
         while not self.shutdown_requested.is_set():
+            logger.debug('Worker %d: Ready', self.worker_id)
+
             try:
                 # wait blocking for next job (thread safe) with timeout
                 sample = self.job_queue.dequeue()
@@ -319,37 +322,52 @@ class Worker(Thread):
                 # we just got pinged
                 continue
 
-            logger.info('Worker %d: Processing sample %s' % (self.worker_id, sample))
+            logger.info('Worker %d: Processing sample %s',
+                        self.worker_id, sample)
 
-            try:
-                sample.init()
+            # The following used to be one big try/except block catching any
+            # exception. This got complicated because in the case of
+            # CuckooReportPending we use exceptions for control flow as well
+            # (which might be questionable in itself). Instead of catching,
+            # logging and ignoring errors here if workers start to die again
+            # because of uncaught exceptions we should improve error handling
+            # in the subroutines causing it.
 
-                engine = RulesetEngine(sample, self.ruleset_config, self.db_con)
-                engine.run()
-
-                if sample.result >= Result.failed:
-                    sample.dump_processing_info()
-
-                if sample.result != Result.failed:
-                    logger.debug('Saving results to database')
-                    self.db_con.analysis_save(sample)
-                else:
-                    logger.debug('Not saving results of failed analysis')
-
-                sample.cleanup()
+            if not sample.init():
+                logger.error('Sample initialization failed')
+                sample.add_rule_result(
+                    RuleResult(
+                        "Worker", result=Result.failed,
+                        reason=_("Sample initialization failed"),
+                        further_analysis=False))
                 sample.mark_done()
-
                 self.job_queue.done(sample.sha256sum)
+                continue
+
+            engine = RulesetEngine(sample, self.ruleset_config, self.db_con)
+            try:
+                engine.run()
             except CuckooReportPendingException:
-                logger.debug("Report for sample %s still pending" % sample)
-                pass
-            except Exception as e:
-                logger.exception(e)
-                # it's no longer in-flight even though processing seems to have
-                # failed
-                self.job_queue.done(sample.sha256sum)
+                logger.debug("Report for sample %s still pending", sample)
+                continue
 
-            logger.debug('Worker is ready')
+            if sample.result >= Result.failed:
+                sample.dump_processing_info()
+
+            if sample.result != Result.failed:
+                logger.debug('Saving results to database')
+                try:
+                    self.db_con.analysis_save(sample)
+                except PeekabooDatabaseError as dberr:
+                    logger.error('Failed to save analysis result to '
+                                 'database: %s', dberr)
+                    # no showstopper, we can limp on without caching in DB
+            else:
+                logger.debug('Not saving results of failed analysis')
+
+            sample.cleanup()
+            sample.mark_done()
+            self.job_queue.done(sample.sha256sum)
 
         logger.info('Worker %d: Stopped' % self.worker_id)
         self.running_flag.clear()

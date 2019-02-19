@@ -146,7 +146,7 @@ class Sample(object):
         to the actual initialization.
         """
         if self.initialized:
-            return
+            return True
 
         logger.debug("initializing sample")
 
@@ -158,13 +158,29 @@ class Sample(object):
         if file_ext:
             # create a temporary directory where mkdtemp makes sure that
             # creation is atomic, i.e. no other process is using it
-            self.__wd = tempfile.mkdtemp(
-                prefix=self.job_hash, dir=self.__base_dir)
+            try:
+                self.__wd = tempfile.mkdtemp(
+                    prefix=self.job_hash, dir=self.__base_dir)
+            except OSError as oserr:
+                logger.error('Error creating working directory: %s', oserr)
+                return False
+
+            logger.debug('Working directory %s created', self.__wd)
+
             self.__submit_path = os.path.join(
                 self.__wd, '%s.%s' % (self.sha256sum, file_ext))
 
-            logger.debug('ln -s %s %s' % (self.__path, self.__submit_path))
-            os.symlink(self.__path, self.__submit_path)
+            try:
+                os.symlink(self.__path, self.__submit_path)
+            except OSError as oserr:
+                logger.error('Error linking sample from %s to working '
+                             'directory as %s',
+                             self.__path, self.__submit_path)
+                self.cleanup()
+                return False
+
+            logger.debug('Sample symlinked from %s to %s',
+                         self.__path, self.__submit_path)
 
         self.initialized = True
 
@@ -179,6 +195,8 @@ class Sample(object):
         if self.meta_info_type_declared:
             self.__internal_report.append("meta info: type_declared: %s"
                                           % self.meta_info_type_declared)
+
+        return True
 
     @property
     def file_path(self):
@@ -303,20 +321,28 @@ class Sample(object):
 
         dump_dir = os.path.join(self.__processing_info_dir, self.job_hash)
         if not os.path.isdir(dump_dir):
-            os.makedirs(dump_dir, 0o770)
+            try:
+                os.makedirs(dump_dir, 0o770)
+            except OSError as oserr:
+                logger.error('Failed to create dump directory %s: %s',
+                             dump_dir, oserr)
+                return
+
         filename = self.__filename + '-' + self.sha256sum
 
         logger.debug('Dumping processing info to %s for sample %s',
                      dump_dir, self)
 
         # Peekaboo's report
+        peekaboo_report = os.path.join(dump_dir, filename + '_report.txt')
         try:
-            peekaboo_report = os.path.join(dump_dir, filename + '_report.txt')
             with open(peekaboo_report, 'w+') as f:
                 f.write('\n'.join(self.__report))
                 f.write('\n'.join(self.__internal_report))
-        except IOError as ioerror:
-            logger.exception(ioerror)
+        except (OSError, IOError) as error:
+            logger.error('Failure to write report file %s: %s',
+                         peekaboo_report, error)
+            return
 
         # store malicious sample along with the reports
         if self.__result == Result.bad:
@@ -325,18 +351,22 @@ class Sample(object):
                     self.__path,
                     os.path.join(dump_dir, self.__filename)
                 )
-            except IOError as ioerror:
-                logger.exception(ioerror)
+            except (shutil.Error, IOError, OSError) as error:
+                logger.error('Failure to copy sample file %s to dump '
+                             'directory: %s', self.__path, error)
+                return
 
         # Cuckoo report
         if self.__cuckoo_report:
+            cuckoo_report = os.path.join(dump_dir,
+                                         filename + '_cuckoo_report.json')
             try:
-                cuckoo_report = os.path.join(dump_dir,
-                                             filename + '_cuckoo_report.json')
                 with open(cuckoo_report, 'w+') as f:
                     json.dump(self.__cuckoo_report.raw, f, indent=1)
-            except IOError as ioerror:
-                logger.exception(ioerror)
+            except (OSError, IOError) as error:
+                logger.error('Failure to dump json report to %s: %s',
+                             cuckoo_report, error)
+                return
 
     @property
     def sha256sum(self):
@@ -474,14 +504,15 @@ class Sample(object):
             return
 
         if self.__keep_mail_data:
-            logger.debug('Keeping mail data in %s' % self.__wd)
+            logger.debug('Keeping mail data in %s', self.__wd)
             return
 
-        logger.debug("Deleting tempdir %s" % self.__wd)
+        logger.debug("Deleting working directory %s", self.__wd)
         try:
             shutil.rmtree(self.__wd)
-        except OSError as e:
-            logger.exception(e)
+        except OSError as oserr:
+            logger.error('Failed to remove working directory %s: %s',
+                         self.__wd, oserr)
 
     def __str__(self):
         return ("<Sample(filename='%s', job_id='%d',"
