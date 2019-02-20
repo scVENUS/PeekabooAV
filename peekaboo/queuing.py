@@ -246,6 +246,10 @@ class JobQueue:
         if len(submitted_duplicates) > 0:
             logger.debug("Submitted duplicates from backlog: %s" % submitted_duplicates)
 
+        # now that this sample is really done and cleared from the queue, tell
+        # its connection handler about it
+        sample.mark_done()
+
     def dequeue(self):
         """ Remove a sample from the queue. Used by the workers to get their
         work. Blocks indefinitely until some work is available. If we want to
@@ -370,7 +374,6 @@ class Worker(Thread):
                         "Worker", result=Result.failed,
                         reason=_("Sample initialization failed"),
                         further_analysis=False))
-                sample.mark_done()
                 self.job_queue.done(sample.sha256sum)
                 continue
 
@@ -396,7 +399,6 @@ class Worker(Thread):
                 logger.debug('Not saving results of failed analysis')
 
             sample.cleanup()
-            sample.mark_done()
             self.job_queue.done(sample.sha256sum)
 
         logger.info('Worker %d: Stopped' % self.worker_id)
