@@ -1,0 +1,153 @@
+=============
+Translation
+=============
+
+This chapter explains how to translate Peekaboo into other languages.
+
+
+Overview
+========
+
+Peekaboo has partial internationalization in that it supports translation of
+the messages returned to the client into other languages.
+The idea is that the client can present these messages to administrators or end
+users in their native languages.
+
+Currently only one language can be statically configured and will be used for
+all messages.
+Conceivably, the client could communicate the language it wants the report for
+an individual analysis to be returned in and we could switch the language on
+the fly.
+But we currently have no such client and therefore this is not yet implemented.
+
+The following sections detail how to configure the language to use, translate
+existing messages into new languages and how to add new translatable strings.
+
+Configuration
+=============
+
+By default, Peekaboo uses the system's locale settings which are usually
+communicated using environment variables ``LANG`` or ``LC_ALL``.
+
+As an exception to normal practice, Peekaboo additionally has a configuration
+option ``report_locale`` in the ``[global]`` section of its configuration file
+to explicitly configure the language used for messages to the client.
+This is because it is normally run as a daemon and changing their locale
+settings is more complicated than those of user sessions.
+Also this is to highlight the fact that Peekaboo only translates messages to
+the client and not all its error and debug logging.
+
+.. _new-languages:
+
+Translating into new languages
+==============================
+
+Peekaboo uses standard gettext message catalog files.
+These are handled using `Babel`_.
+They reside in the ``pekaboo/locale`` subdirectory of the source code.
+
+For translating Peekaboo into a new language, get the source and set up
+your :ref:`development-environment`, particularly installing the development
+requirements which will give you the ``pybabel`` command.
+
+Make a new directory ``peekaboo/locale/<new language>/LC_MESSAGES`` and
+copy the template ``peekaboo/locale/peekaboo.pot`` into it as
+``peekaboo.po`` (note the missing ``t``).
+
+``<new language>`` in this is a standard locale identifier like ``de`` or
+``ca``.
+It should be chosen to be generic when starting out and only made more specific
+if the translation actually gets that specific, e.g. ``en`` vs. ``en_GB``
+(any English vs. British English).
+
+Then fill in the empty ``msgstr`` fields with appropriate translations.
+When finished, run:
+
+.. code-block:: shell
+
+    pybabel compile -D peekaboo -d peekaboo/locale
+
+This will create a ``peekaboo.mo`` file in the same directory which is a
+compiled form of the translation.
+
+The translation can be tested by starting up the debug Peekaboo with with the
+``LANG`` environment variable set and submitting a sample for analysis using
+``scan_file.py`` in verbose mode like this:
+
+.. code-block:: shell
+
+    $ LANG=de_DE ./peekaboo_debug.py -c peekaboo.conf
+
+In another terminal:
+
+.. code-block:: shell
+
+    $ bin/scan_file.py -s /tmp/peekaboo.sock -f bin/scan_file.py -vv
+    Waiting for response...
+    Hallo das ist Peekaboo
+
+    Datei "scan_file.py" 21a76f46ef42a2649d91ad49038a4e239511f4e0b6cd110120348d1d66a130bf wird analysiert
+    Datei "scan_file.py": Ergebnis "bad" der Regel known - The following signatures have been recognized: One or more processes crashed
+    , Analyse wird fortgesetzt: Nein.
+    Die Datei "scan_file.py" wird als "bad" betrachtet
+
+    Die Datensammlung wurde als "bad" eingestuft
+    The file collection has been categorized "bad"
+
+**Note**: how the above translation is incomplete: It still says ``The following
+signatures ...`` and ``One or more...``.
+The second part is easily explained:
+Signatures are reported by Cuckoo and aren't translated.
+The first part of the message is still in English because in this case the
+result was fetched from the database and the Peekaboo instance doing this
+analysis was configured to English.
+
+The above process can be repeated iteratively until all translations are
+correct.
+Then the new translation file can be sent in for inclusion, e.g. via a Pull
+Request on `GitHub`_.
+
+Adding new translatable messages
+================================
+
+Messages can be marked as translatable in the source code by enclosing them in
+``_()``.
+For example:
+
+.. code-block:: python
+
+    if not self.talk_back(["Hello, this is Peekaboo.", '']):
+
+turns into:
+
+.. code-block:: python
+
+    if not self.talk_back([_("Hello, this is Peekaboo."), '']):
+
+**Note**: Generally, only strings which end up being returned to the client
+using method ``talk_back()`` of class ``PeekabooStreamRequestHandler`` should
+currently be translated.
+
+Now the translation template file can be updated with the following ``pybabel``
+command:
+
+.. code-block:: shell
+
+    $ pybabel extract -o peekaboo/locale/peekaboo.pot bin peekaboo
+
+With this new template all the translations can be updated to include the new
+string for translation:
+
+.. code-block:: shell
+
+    $ pybabel update -D peekaboo -i peekaboo/locale/peekaboo.pot -d peekaboo/locale
+    updating catalog peekaboo/locale/de/LC_MESSAGES/peekaboo.po based on peekaboo/locale/peekaboo.pot
+
+Since the translations are empty, the system will continue to use the
+untranslated string.
+With the updated files included in the source code, translators can then start
+looking into how to translate this string into their language using the normal
+process explained under :ref:`new-languages`.
+
+.. _Babel: http://babel.pocoo.org
+.. _GitHub: https://github.com/scVENUS/PeekabooAV

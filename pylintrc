@@ -1,2 +1,5 @@
 [BASIC]
 good-names=logger
+
+[VARIABLES]
+additional-builtins=_

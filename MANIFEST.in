@@ -3,3 +3,4 @@ include LICENSE.txt
 include requirements.txt
 include peekaboo.conf.sample
 include systemd/peekaboo.service
+graft peekaboo/locale

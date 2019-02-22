@@ -35,8 +35,8 @@ class Result(Enum):
     unchecked = 1
     unknown = 2
     ignored = 3
-    checked = 4
-    good = 5
+    good = 4
+    failed = 5
     bad = 6
 
     def __ge__(self, other):
@@ -56,19 +56,19 @@ class RuleResult:
     """
     def __init__(self, rule,
                  result=Result.unknown,
-                 reason='regel ohne Ergebnis',
+                 reason=None,
                  further_analysis=True):
         self.result = Result.unchecked
         self.rule = rule
         self.result = result
         self.reason = reason
+        if self.reason is None:
+            self.reason = _("Rule without result")
         self.further_analysis = further_analysis
 
     def __str__(self):
-        return ("Ergebnis \"%s\" der Regel %s - %s, Analyse wird fortgesetzt: %s."\
-                                                        % (self.result.name,
-                                                           self.rule,
-                                                           self.reason,
-                                                           'Ja' if self.further_analysis else 'Nein'))
+        return (_("Result \"%s\" of rule %s - %s, analysis continues: %s.")
+                % (self.result.name, self.rule, self.reason,
+                   _('Yes') if self.further_analysis else _('No')))
 
     __repr__ = __str__

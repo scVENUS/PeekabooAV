@@ -22,28 +22,29 @@
 #                                                                             #
 ###############################################################################
 
+""" The main peekaboo module, starting up and managing all the various
+components. """
+
+import errno
+import gettext
 import os
 import sys
 import grp
 import pwd
-import stat
 import logging
-import socketserver
-import socket
 import signal
-from time import sleep
-import json
-from threading import Thread
+import socket
 from argparse import ArgumentParser
 from sdnotify import SystemdNotifier
+from sqlalchemy.exc import SQLAlchemyError
 from peekaboo import PEEKABOO_OWL, __version__
 from peekaboo.config import PeekabooConfig, PeekabooRulesetConfig
 from peekaboo.db import PeekabooDatabase
-from peekaboo.toolbox.sampletools import ConnectionMap
 from peekaboo.queuing import JobQueue
 from peekaboo.sample import SampleFactory
+from peekaboo.server import PeekabooServer
 from peekaboo.exceptions import PeekabooDatabaseError, PeekabooConfigException
-from peekaboo.toolbox.cuckoo import Cuckoo, CuckooEmbed, CuckooApi
+from peekaboo.toolbox.cuckoo import CuckooEmbed, CuckooApi
 
 
 logger = logging.getLogger(__name__)
@@ -52,7 +53,7 @@ logger = logging.getLogger(__name__)
 class SignalHandler():
     """
     Signal handler.
-    
+
     @author: Felix Bauer
     """
     def __init__(self):
@@ -86,112 +87,134 @@ class SignalHandler():
                 listener.reap_children()
 
 
-class PeekabooStreamServer(socketserver.ThreadingUnixStreamServer):
-    """
-    Asynchronous server.
+class PeekabooDaemonInfrastructure(object):
+    """ A class that manages typical daemon infrastructure such as PID file and
+    privileges. """
+    def __init__(self, pid_file, sock_file, user, group):
+        self.pid_file = pid_file
+        self.sock_file = sock_file
+        self.user = user
+        self.group = group
 
-    @author: Sebastian Deiss
-    """
-    def __init__(self, server_address, request_handler_cls, job_queue,
-            sample_factory, bind_and_activate = True, request_queue_size = 10):
-        self.server_address = server_address
-        self.__job_queue = job_queue
-        self.__sample_factory = sample_factory
-        self.request_queue_size = request_queue_size
-        self.allow_reuse_address = True
-        
-        socketserver.ThreadingUnixStreamServer.__init__(self, server_address,
-                                                        request_handler_cls,
-                                                        bind_and_activate=bind_and_activate)
+        self.pid_file_created = False
 
-    @property
-    def job_queue(self):
-        return self.__job_queue
+    def init(self):
+        """ Initialize daemon infrastructure. """
+        self.drop_privileges()
+        self.create_pid_file()
+        self.check_stale_socket()
 
-    @property
-    def sample_factory(self):
-        return self.__sample_factory
+    def drop_privileges(self):
+        """ Check and potentially drop privileges. """
+        if os.getuid() == 0:
+            if self.user and self.group:
+                # drop privileges to user
+                os.setgid(grp.getgrnam(self.group)[2])
+                os.setuid(pwd.getpwnam(self.user)[2])
+                logger.info("Dropped privileges to user %s and group %s",
+                            self.user, self.group)
 
-    def shutdown_request(self, request):
-        """ Keep the connection alive until Cuckoo reports back, so the results can be send to the client. """
-        # TODO: Find a better solution.
-        pass
+                # set $HOME to the users home directory
+                # (VirtualBox must access the configs)
+                os.environ['HOME'] = pwd.getpwnam(self.user)[5]
+                logger.debug('$HOME is %s', os.environ['HOME'])
+            else:
+                logger.warning('Peekaboo should not run as root. Please '
+                               'configure a user and group to run as.')
+                sys.exit(0)
 
-    def server_close(self):
-        # no new connections from this point on
-        os.remove(self.server_address)
-        return socketserver.ThreadingUnixStreamServer.server_close(self)
+    def create_pid_file(self):
+        """ Check for stale old and create a new PID file. Look at the socket
+        as well. """
+        pid = None
+        if os.path.exists(self.pid_file):
+            stale = False
+            try:
+                with open(self.pid_file, 'r') as pidfile:
+                    pid = int(pidfile.read())
+            except (OSError, IOError, ValueError) as error:
+                stale = True
+                logger.warning('PID file exists but cannot be read, '
+                               'assuming it to be stale')
 
+            if pid is not None:
+                try:
+                    # ping the process to see if it exists, sends no signal
+                    os.kill(pid, 0)
+                except OSError as oserror:
+                    # ESRCH == no such process
+                    if oserror.errno == errno.ESRCH:
+                        stale = True
 
-class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
-    """
-    Request handler used by PeekabooStreamServer to handle analysis requests.
+            if not stale:
+                logger.critical('Another instance of Peekaboo seems to be '
+                                'running as process %d. Please check PID '
+                                'file %s.', pid, self.pid_file)
+                sys.exit(1)
 
-    @author: Sebastian Deiss
-    """
-    def setup(self):
-        socketserver.StreamRequestHandler.setup(self)
-        self.job_queue = self.server.job_queue
-        self.sample_factory = self.server.sample_factory
+            logger.warning('Removing stale PID file of process %d', pid)
+            try:
+                os.remove(self.pid_file)
+            except OSError as error:
+                logger.critical('Error deleting stale PID file %s: %s',
+                                self.pid_file, error)
+                sys.exit(1)
 
-    def handle(self):
-        """
-        Handles an analysis request. This is expected to be a JSON structure
-        containing the path of the directory / file to analyse. Structure::
+        # write PID file
+        pid = os.getpid()
+        with open(self.pid_file, "w") as pidfile:
+            pidfile.write("%d\n" % pid)
 
-            [ { "full_name": "<path>",
-                "name_declared": ...,
-                ... },
-              { ... },
-              ... ]
+        # remember that the PID file is ours - important on shutdown
+        self.pid_file_created = True
+        logger.debug('PID %d written to %s', pid, self.pid_file)
 
-        The maximum buffer size is 16 KiB, because JSON incurs some bloat.
-        """
-        self.request.sendall('Hallo das ist Peekaboo\n\n')
-        request = self.request.recv(1024 * 16).rstrip()
+    def check_stale_socket(self):
+        """ Check if the socket file exists already/still and if it is stale or
+        actively serviced. Remove it if stale. """
+        # is the socket also stale?
+        if not os.path.exists(self.sock_file):
+            return
 
+        stale = False
         try:
-            parts = json.loads(request)
-        except:
-            self.request.sendall('FEHLER: Ungueltiges JSON.')
-            logger.error('Invalid JSON in request.')
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            sock.connect(self.sock_file)
+            logger.debug('Someone answered on existing socket')
+        except socket.error as sockerr:
+            logger.debug('Existing socket connection attempt failed: %s',
+                         sockerr)
+            if sockerr.errno == errno.ECONNREFUSED:
+                stale = True
+
+        if not stale:
+            logger.critical('Socket %s exists and seems to be serviced. '
+                            'Please check for another instance running.',
+                            self.sock_file)
+            sys.exit(1)
+
+        logger.warning('Removing stale socket %s', self.sock_file)
+        try:
+            os.remove(self.sock_file)
+        except OSError as oserror:
+            logger.critical('Error removing stale socket %s: %s',
+                            self.sock_file, oserror)
+            sys.exit(1)
+
+    def __del__(self):
+        """ Clean up on shutdown, such as removing the PID file. """
+        # only remove stuff if we created it. Otherwise we're bailing (but
+        # still getting called) after realising that another instance is
+        # running.
+        if not self.pid_file_created:
             return
 
-        if type(parts) not in (list, tuple):
-            self.request.sendall('FEHLER: Ungueltiges Datenformat.')
-            logger.error('Invalid data structure.')
-            return
-
-        for_analysis = []
-        for part in parts:
-            if not part.has_key('full_name'):
-                self.request.sendall('FEHLER: Unvollstaendige Datenstruktur.')
-                logger.error('Incomplete data structure.')
-                return
-
-            path = part['full_name']
-            logger.info("Got run_analysis request for %s" % path)
-            if not os.path.exists(path):
-                self.request.sendall('FEHLER: Pfad existiert nicht oder '
-                        'Zugriff verweigert.')
-                logger.error('Path does not exist or no permission '
-                        'to access it.')
-                return
-
-            if not os.path.isfile(path):
-                self.request.sendall('FEHLER: Eingabe ist keine Datei.')
-                logger.error('Input is not a file')
-                return
-
-            sample = self.sample_factory.make_sample(path, metainfo = part,
-                    socket = self.request)
-            for_analysis.append(sample)
-            logger.debug('Created sample %s' % sample)
-
-        # introduced after an issue where results were reported
-        # before all files could be added.
-        for sample in for_analysis:
-            self.job_queue.submit(sample, self.__class__)
+        logger.debug('Removing PID file %s', self.pid_file)
+        try:
+            os.remove(self.pid_file)
+        except OSError as oserror:
+            logger.warning('Removal of PID file %s failed: %s',
+                           self.pid_file, oserror)
 
 
 def run():
@@ -232,6 +255,24 @@ def run():
         logging.critical(error)
         sys.exit(1)
 
+    # find localisation in our package directory
+    locale_domain = 'peekaboo'
+    locale_dir = os.path.join(os.path.dirname(__file__), 'locale')
+    languages = None
+    if config.report_locale:
+        logger.debug('Looking for translations for preconfigured locale "%s"',
+                     config.report_locale)
+        languages = [config.report_locale]
+        if not gettext.find(locale_domain, locale_dir, languages):
+            logger.warning('Translation file not found - falling back to '
+                           'system configuration.')
+            languages = None
+
+    logger.debug('Installing report message translations')
+    translation = gettext.translation(locale_domain, locale_dir, languages,
+                                      fallback=True)
+    translation.install()
+
     # establish a connection to the database
     try:
         db_con = PeekabooDatabase(
@@ -240,9 +281,9 @@ def run():
     except PeekabooDatabaseError as error:
         logging.critical(error)
         sys.exit(1)
-    except Exception as error:
+    except SQLAlchemyError as dberr:
         logger.critical('Failed to establish a connection to the database '
-                        'at %s: %s', config.db_url, error)
+                        'at %s: %s', config.db_url, dberr)
         sys.exit(1)
 
     # Import debug module if we are in debug mode
@@ -252,27 +293,11 @@ def run():
         debugger = PeekabooDebugger()
         debugger.start()
 
-    if os.getuid() == 0:
-        if config.user and config.group:
-            # drop privileges to user
-            os.setgid(grp.getgrnam(config.group)[2])
-            os.setuid(pwd.getpwnam(config.user)[2])
-            logger.info("Dropped privileges to user %s and group %s"
-                        % (config.user, config.group))
-
-            # set $HOME to the users home directory
-            # (VirtualBox must access the configs)
-            os.environ['HOME'] = pwd.getpwnam(config.user)[5]
-            logger.debug('$HOME is ' + os.environ['HOME'])
-        else:
-            logger.warning('Peekaboo should not run as root. Please '
-                           'configure a user and group to run as.')
-            sys.exit(0)
-
-    # write PID file
-    pid = str(os.getpid())
-    with open(config.pid_file, "w") as pidfile:
-        pidfile.write("%s\n" % pid)
+    # initialize the daemon infrastructure such as PID file and dropping
+    # privileges, automatically cleans up after itself when going out of scope
+    daemon_infrastructure = PeekabooDaemonInfrastructure(
+        config.pid_file, config.sock_file, config.user, config.group)
+    daemon_infrastructure.init()
 
     systemd = SystemdNotifier()
 
@@ -283,14 +308,14 @@ def run():
 
     # a cluster duplicate interval of 0 disables the handler thread which is
     # what we want if we don't have an instance_id and therefore are alone
-    cluster_duplicate_check_interval = 0
+    cldup_check_interval = 0
     if config.cluster_instance_id > 0:
-        cluster_duplicate_check_interval = config.cluster_duplicate_check_interval
-        if cluster_duplicate_check_interval < 5:
-            cluster_update_check_interval = 5
-            log.warning("Raising excessively low cluster duplicate check "
-                        "interval to %d seconds.",
-                        cluster_duplicate_check_interval)
+        cldup_check_interval = config.cluster_duplicate_check_interval
+        if cldup_check_interval < 5:
+            cldup_check_interval = 5
+            logger.warning("Raising excessively low cluster duplicate check "
+                           "interval to %d seconds.",
+                           cldup_check_interval)
 
     # workers of the job queue need the ruleset configuration to create the
     # ruleset engine with it
@@ -304,17 +329,16 @@ def run():
     job_queue = JobQueue(
         worker_count=config.worker_count, ruleset_config=ruleset_config,
         db_con=db_con,
-        cluster_duplicate_check_interval=cluster_duplicate_check_interval)
-    connection_map = ConnectionMap()
+        cluster_duplicate_check_interval=cldup_check_interval)
 
     if config.cuckoo_mode == "embed":
-        cuckoo = CuckooEmbed(job_queue, connection_map, config.cuckoo_exec,
+        cuckoo = CuckooEmbed(job_queue, config.cuckoo_exec,
                              config.cuckoo_submit, config.cuckoo_storage,
                              config.interpreter)
     # otherwise it's the new API method and default
     else:
-        cuckoo = CuckooApi(job_queue, connection_map, config.cuckoo_url,
-                config.cuckoo_poll_interval)
+        cuckoo = CuckooApi(job_queue, config.cuckoo_url,
+                           config.cuckoo_poll_interval)
 
     sig_handler = SignalHandler()
     sig_handler.register_listener(cuckoo)
@@ -322,53 +346,43 @@ def run():
     # Factory producing almost identical samples providing them with global
     # config values and references to other objects they need, such as cuckoo,
     # database connection and connection map.
-    sample_factory = SampleFactory(cuckoo, connection_map,
-                config.sample_base_dir, config.job_hash_regex,
-                config.keep_mail_data)
+    sample_factory = SampleFactory(
+        cuckoo, config.sample_base_dir, config.job_hash_regex,
+        config.keep_mail_data, config.processing_info_dir)
 
-    # Try three times to start SocketServer
-    for i in range(0, 3):
-        try:
-            # We only want to accept 2 * worker_count connections.
-            server = PeekabooStreamServer(config.sock_file,
-                    PeekabooStreamRequestHandler,
-                    job_queue = job_queue,
-                    sample_factory = sample_factory,
-                    request_queue_size = config.worker_count * 2)
-            break
-        except socket.error as msg:
-            logger.warning("SocketServer couldn't start (%i): %s" % (i, msg))
-    if not server:
-        logger.error('Fatal: Couldn\'t initialise Peekaboo Server')
+    # We only want to accept 2 * worker_count connections.
+    try:
+        server = PeekabooServer(
+            sock_file=config.sock_file, job_queue=job_queue,
+            sample_factory=sample_factory,
+            request_queue_size=config.worker_count * 2)
+    except Exception as error:
+        logger.critical('Failed to start Peekaboo Server: %s', error)
+        job_queue.shut_down()
+        if debugger is not None:
+            debugger.shut_down()
         sys.exit(1)
 
-    runner = Thread(target=server.serve_forever)
-    runner.daemon = True
-
-    rc = 1
+    exit_code = 1
     try:
-        runner.start()
-        logger.info('Peekaboo server is listening on %s' % server.server_address)
-
-        os.chmod(config.sock_file, stat.S_IWOTH | stat.S_IREAD |
-                                   stat.S_IWRITE | stat.S_IRGRP |
-                                   stat.S_IWGRP | stat.S_IWOTH)
-
         systemd.notify("READY=1")
         # If this dies Peekaboo dies, since this is the main thread. (legacy)
-        rc = cuckoo.do()
+        exit_code = cuckoo.do()
     except Exception as error:
-        logger.critical('Main thread aborted: %s' % error)
+        logger.critical('Main thread aborted: %s', error)
     finally:
         server.shutdown()
-        server.server_close()
         job_queue.shut_down()
-        db_con.clear_in_flight_samples()
-        db_con.clear_stale_in_flight_samples()
+        try:
+            db_con.clear_in_flight_samples()
+            db_con.clear_stale_in_flight_samples()
+        except PeekabooDatabaseError as dberr:
+            logger.error(dberr)
+
         if debugger is not None:
             debugger.shut_down()
 
-    sys.exit(rc)
+    sys.exit(exit_code)
 
 if __name__ == '__main__':
     run()

@@ -27,8 +27,10 @@ import logging
 from threading import Thread, Event, Lock
 from queue import Queue, Empty
 from time import sleep
+from peekaboo.ruleset import Result, RuleResult
 from peekaboo.ruleset.engine import RulesetEngine
-from peekaboo.exceptions import CuckooReportPendingException
+from peekaboo.exceptions import CuckooReportPendingException, \
+    PeekabooDatabaseError
 
 
 logger = logging.getLogger(__name__)
@@ -40,9 +42,9 @@ class JobQueue:
 
     @author: Sebastian Deiss
     """
-    def __init__(self, ruleset_config, db_con, worker_count = 4,
-            queue_timeout = 300, dequeue_timeout = 5, shutdown_timeout = 600,
-            cluster_duplicate_check_interval = 5):
+    def __init__(self, ruleset_config, db_con, worker_count=4,
+                 queue_timeout=300, shutdown_timeout=60,
+                 cluster_duplicate_check_interval=5):
         """ Initialise job queue by creating n Peekaboo worker threads to
         process samples.
 
@@ -56,7 +58,6 @@ class JobQueue:
         self.workers = []
         self.worker_count = worker_count
         self.queue_timeout = queue_timeout
-        self.dequeue_timeout = dequeue_timeout
         self.shutdown_timeout = shutdown_timeout
 
         # keep a backlog of samples with hashes identical to samples currently
@@ -123,7 +124,13 @@ class JobQueue:
             else:
                 # are we the first of potentially multiple instances working on
                 # this sample?
-                if self.db_con.mark_sample_in_flight(sample):
+                try:
+                    locked = self.db_con.mark_sample_in_flight(sample)
+                except PeekabooDatabaseError as dberr:
+                    logger.error(dberr)
+                    return False
+
+                if locked:
                     # initialise a per-duplicate backlog for this sample which
                     # also serves as in-flight marker and submit to queue
                     self.duplicates[sample_hash] = {
@@ -152,9 +159,11 @@ class JobQueue:
             logger.debug("New sample submitted to job queue by %s. %s" %
                     (submitter, sample_str))
 
+        return True
+
     def submit_cluster_duplicates(self):
         if not self.cluster_duplicates.keys():
-            return
+            return True
 
         submitted_cluster_duplicates = []
 
@@ -163,7 +172,14 @@ class JobQueue:
             # processed by another instance concurrently
             for sample_hash, sample_duplicates in self.cluster_duplicates.items():
                 # try to mark as in-flight
-                if self.db_con.mark_sample_in_flight(sample_duplicates[0]):
+                try:
+                    locked = self.db_con.mark_sample_in_flight(
+                        sample_duplicates[0])
+                except PeekabooDatabaseError as dberr:
+                    logger.error(dberr)
+                    return False
+
+                if locked:
                     sample_str = str(sample_duplicates[0])
                     if self.duplicates.get(sample_hash) is not None:
                         logger.error("Possible backlog corruption for sample "
@@ -190,8 +206,16 @@ class JobQueue:
                     "their duplicates) from backlog: %s" %
                     submitted_cluster_duplicates)
 
+        return True
+
     def clear_stale_in_flight_samples(self):
-        return self.db_con.clear_stale_in_flight_samples()
+        try:
+            cleared = self.db_con.clear_stale_in_flight_samples()
+        except PeekabooDatabaseError as dberr:
+            logger.error(dberr)
+            cleared = False
+
+        return cleared
 
     def done(self, sample_hash):
         submitted_duplicates = []
@@ -210,7 +234,11 @@ class JobQueue:
                 self.jobs.put(s, True, self.queue_timeout)
 
             sample = self.duplicates[sample_hash]['master']
-            self.db_con.clear_sample_in_flight(sample)
+            try:
+                self.db_con.clear_sample_in_flight(sample)
+            except PeekabooDatabaseError as dberr:
+                logger.error(dberr)
+
             sample_str = str(sample)
             del self.duplicates[sample_hash]
 
@@ -218,8 +246,16 @@ class JobQueue:
         if len(submitted_duplicates) > 0:
             logger.debug("Submitted duplicates from backlog: %s" % submitted_duplicates)
 
-    def dequeue(self, timeout):
-        return self.jobs.get(True, timeout)
+        # now that this sample is really done and cleared from the queue, tell
+        # its connection handler about it
+        sample.mark_done()
+
+    def dequeue(self):
+        """ Remove a sample from the queue. Used by the workers to get their
+        work. Blocks indefinitely until some work is available. If we want to
+        wake the workers for some other reason, we send them a None item as
+        ping. """
+        return self.jobs.get(True)
 
     def shut_down(self, timeout = None):
         if not timeout:
@@ -230,21 +266,32 @@ class JobQueue:
         if self.cluster_duplicate_handler:
             self.cluster_duplicate_handler.shut_down()
 
-        for w in self.workers:
-            w.shut_down()
+        # tell all workers to shut down
+        for worker in self.workers:
+            worker.shut_down()
+
+        # put a ping for each worker on the queue. Since they already all know
+        # that they're supposed to shut down, each of them will only remove
+        # one item from the queue and then exit, leaving the others for their
+        # colleagues. For this reason this loop can't be folded into the above!
+        for worker in self.workers:
+            self.jobs.put(None)
 
         # wait for workers to end
-        for t in range(0, timeout):
+        interval = 1
+        for attempt in range(1, timeout / interval + 1):
             still_running = []
-            for w in self.workers:
-                if w.running:
-                    still_running.append(w)
+            for worker in self.workers:
+                if worker.running:
+                    still_running.append(worker)
 
             self.workers = still_running
             if len(self.workers) == 0:
                 break
 
-            sleep(1)
+            sleep(interval)
+            logger.debug('%d: %d workers still running', attempt,
+                         len(self.workers))
 
         if len(self.workers) > 0:
             logger.error("Some workers refused to stop.")
@@ -263,6 +310,9 @@ class ClusterDuplicateHandler(Thread):
         while not self.shutdown_requested.wait(self.interval):
             logger.debug("Checking for samples in processing by other "
                          "instances to submit")
+            # TODO: Error handling: How do we cause Peekaboo to exit with an
+            # error from here? For now just keep trying and hope (database)
+            # failure is transient.
             self.job_queue.clear_stale_in_flight_samples()
             self.job_queue.submit_cluster_duplicates()
 
@@ -278,7 +328,7 @@ class Worker(Thread):
 
     @author: Sebastian Deiss
     """
-    def __init__(self, wid, job_queue, ruleset_config, db_con, dequeue_timeout = 5):
+    def __init__(self, wid, job_queue, ruleset_config, db_con):
         # whether we should run
         self.shutdown_requested = Event()
         self.shutdown_requested.clear()
@@ -289,41 +339,67 @@ class Worker(Thread):
         self.job_queue = job_queue
         self.ruleset_config = ruleset_config
         self.db_con = db_con
-        self.dequeue_timeout = dequeue_timeout
         Thread.__init__(self)
 
     def run(self):
         self.running_flag.set()
         while not self.shutdown_requested.is_set():
+            logger.debug('Worker %d: Ready', self.worker_id)
+
             try:
                 # wait blocking for next job (thread safe) with timeout
-                sample = self.job_queue.dequeue(self.dequeue_timeout)
+                sample = self.job_queue.dequeue()
             except Empty:
                 continue
-            logger.info('Worker %d: Processing sample %s' % (self.worker_id, sample))
 
-            sample.init()
+            if sample is None:
+                # we just got pinged
+                continue
 
+            logger.info('Worker %d: Processing sample %s',
+                        self.worker_id, sample)
+
+            # The following used to be one big try/except block catching any
+            # exception. This got complicated because in the case of
+            # CuckooReportPending we use exceptions for control flow as well
+            # (which might be questionable in itself). Instead of catching,
+            # logging and ignoring errors here if workers start to die again
+            # because of uncaught exceptions we should improve error handling
+            # in the subroutines causing it.
+
+            if not sample.init():
+                logger.error('Sample initialization failed')
+                sample.add_rule_result(
+                    RuleResult(
+                        "Worker", result=Result.failed,
+                        reason=_("Sample initialization failed"),
+                        further_analysis=False))
+                self.job_queue.done(sample.sha256sum)
+                continue
+
+            engine = RulesetEngine(sample, self.ruleset_config, self.db_con)
             try:
-                engine = RulesetEngine(sample, self.ruleset_config, self.db_con)
                 engine.run()
-                engine.report()
-
-                logger.debug('Saving results to database')
-                self.db_con.analysis_save(sample)
-                sample.remove_from_connection_map()
-
-                self.job_queue.done(sample.sha256sum)
             except CuckooReportPendingException:
-                logger.debug("Report for sample %s still pending" % sample)
-                pass
-            except Exception as e:
-                logger.exception(e)
-                # it's no longer in-flight even though processing seems to have
-                # failed
-                self.job_queue.done(sample.sha256sum)
+                logger.debug("Report for sample %s still pending", sample)
+                continue
 
-            logger.debug('Worker is ready')
+            if sample.result >= Result.failed:
+                sample.dump_processing_info()
+
+            if sample.result != Result.failed:
+                logger.debug('Saving results to database')
+                try:
+                    self.db_con.analysis_save(sample)
+                except PeekabooDatabaseError as dberr:
+                    logger.error('Failed to save analysis result to '
+                                 'database: %s', dberr)
+                    # no showstopper, we can limp on without caching in DB
+            else:
+                logger.debug('Not saving results of failed analysis')
+
+            sample.cleanup()
+            self.job_queue.done(sample.sha256sum)
 
         logger.info('Worker %d: Stopped' % self.worker_id)
         self.running_flag.clear()

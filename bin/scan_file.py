@@ -49,30 +49,40 @@ def main():
                         help='Output additional diagnostics')
     parser.add_argument('-s', '--socket_file', action='store', required=True,
                         help='Path to Peekaboo\'s socket file')
-    parser.add_argument('-f', '--filename', action='store', required=True,
-                        help='Path to the file to scan')
+    parser.add_argument('-f', '--filename', action='append', required=True,
+                        help='Path to the file to scan. Can be given more '
+                        'than once to scan multiple files.')
     args = parser.parse_args()
 
     result_regex = re.compile(r'.*wurde als',
                               re.MULTILINE + re.DOTALL + re.UNICODE)
-    file_abspath = path.abspath(args.filename)
     peekaboo = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     peekaboo.connect(args.socket_file)
-    request = '[ { "full_name": "%s" } ]' % file_abspath
+
+    file_snippets = []
+    for filename in args.filename:
+        file_snippets.append('{ "full_name": "%s" }' % path.abspath(filename))
+    request = '[ %s ]' % ', '.join(file_snippets)
+
     if args.debug:
         print ('Sending request: %s' % request)
+
     peekaboo.send(request)
     print ('Waiting for response...')
 
     if args.verbose2:
         args.verbose = True
 
+    buf = ''
     while True:
-        result = peekaboo.recv(1024)
-        result = result.rstrip(linesep)
-        if result == '':
+        data = peekaboo.recv(1024)
+        if data:
+            buf += data
+        else:
             peekaboo.close()
             break
+
+    for result in buf.splitlines():
         output = result_regex.search(result)
         if output:
             if 'bad' in result:

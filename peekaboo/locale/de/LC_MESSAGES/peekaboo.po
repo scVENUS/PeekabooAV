@@ -1,0 +1,195 @@
+# Peekaboo translations of client-visible strings
+# Copyright (C) 2019 science + computing ag
+# Michael Weiser <michael.weiser@gmx.de>
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: PeekabooAV 1.6.2\n"
+"Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
+"POT-Creation-Date: 2019-02-19 13:11+0000\n"
+"PO-Revision-Date: 2019-02-14 22:02+0000\n"
+"Last-Translator: Michael Weiser <michael.weiser@gmx.de>\n"
+"Language: de\n"
+"Language-Team: Michael Weiser <michael.weiser@gmx.de>\n"
+"Plural-Forms: nplurals=2; plural=(n != 1)\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.4.0\n"
+
+#: peekaboo/sample.py:187
+#, python-format
+msgid "File \"%s\" %s is being analyzed"
+msgstr "Datei \"%s\" %s wird analysiert"
+
+#: peekaboo/sample.py:240
+#, python-format
+msgid "File \"%s\" is considered \"%s\""
+msgstr "Die Datei \"%s\" wird als \"%s\" betrachtet"
+
+#: peekaboo/sample.py:310
+#, python-format
+msgid "File \"%s\": %s"
+msgstr "Datei \"%s\": %s"
+
+#: peekaboo/server.py:143
+msgid "Hello, this is Peekaboo."
+msgstr "Hallo das ist Peekaboo"
+
+#: peekaboo/server.py:176
+#, fuzzy
+msgid "Error: Invalid JSON in request."
+msgstr "FEHLER: Ungueltiges JSON."
+
+#: peekaboo/server.py:181
+msgid "ERROR: Invalid data structure."
+msgstr "FEHLER: Ungueltiges Datenformat."
+
+#: peekaboo/server.py:188
+msgid "ERROR: Incomplete data structure."
+msgstr "FEHLER: Unvollstaendige Datenstruktur."
+
+#: peekaboo/server.py:195
+msgid "ERROR: Path does not exist or no permission to access it."
+msgstr "FEHLER: Pfad existiert nicht oder Zugriff verweigert."
+
+#: peekaboo/server.py:202
+msgid "ERRROR: Input is not a file"
+msgstr "FEHLER: Eingabe ist keine Datei"
+
+#: peekaboo/server.py:209
+msgid "Error submitting sample to job queue"
+msgstr "Fehler beim Einstellen in Warteschlange"
+
+#: peekaboo/server.py:241
+msgid "Files are being analyzed..."
+msgstr "Dateien werden analysiert..."
+
+#: peekaboo/server.py:264
+msgid "Peekaboo is shutting down."
+msgstr "Peekaboo wird beendet."
+
+#: peekaboo/server.py:316
+#, python-format
+msgid "The file collection has been categorized \"%s\""
+msgstr "Die Datensammlung wurde als \"%s\" eingestuft"
+
+#: peekaboo/ruleset/__init__.py:66
+msgid "Rule without result"
+msgstr "Regel ohne Ergebnis"
+
+#: peekaboo/ruleset/__init__.py:70
+#, python-format
+msgid "Result \"%s\" of rule %s - %s, analysis continues: %s."
+msgstr "Ergebnis \"%s\" der Regel %s - %s, Analyse wird fortgesetzt: %s."
+
+#: peekaboo/ruleset/__init__.py:72
+msgid "Yes"
+msgstr "Ja"
+
+#: peekaboo/ruleset/__init__.py:72
+msgid "No"
+msgstr "Nein"
+
+#: peekaboo/ruleset/engine.py:88
+#, python-format
+msgid "Rule '%s' is disabled."
+msgstr "Regel '%s' ist deaktiviert."
+
+#: peekaboo/ruleset/engine.py:102
+msgid "Rule aborted with error"
+msgstr "Regel mit Fehler abgebrochen"
+
+#: peekaboo/ruleset/rules.py:84
+msgid "File is not yet known to the system"
+msgstr "Datei ist dem System noch nicht bekannt"
+
+#: peekaboo/ruleset/rules.py:101
+#, python-format
+msgid "File has more than %d bytes"
+msgstr "Datei hat mehr als %d bytes"
+
+#: peekaboo/ruleset/rules.py:106
+#, python-format
+msgid "File is more than %d bytes long"
+msgstr "Datei ist nur %d bytes lang"
+
+#: peekaboo/ruleset/rules.py:125
+msgid "File type is on whitelist"
+msgstr "Dateityp ist auf Whitelist"
+
+#: peekaboo/ruleset/rules.py:129
+msgid "File type is not on whitelist"
+msgstr "Dateityp ist nicht auf Whitelist"
+
+#: peekaboo/ruleset/rules.py:148
+msgid "File type is on the list of types to analyze"
+msgstr "Dateityp ist auf der Liste der zu analysiserenden Typen"
+
+#: peekaboo/ruleset/rules.py:153
+#, python-format
+msgid "File type is not on the list of types to analyse (%s)"
+msgstr "Dateityp ist nicht auf der Liste der zu analysierenden Typen (%s)"
+
+#: peekaboo/ruleset/rules.py:166
+msgid "The file contains an Office macro"
+msgstr "Die Datei beinhaltet ein Office-Makro"
+
+#: peekaboo/ruleset/rules.py:170
+msgid "The file does not contain a recognizable Office macro"
+msgstr "Die Datei beinhaltet kein erkennbares Office-Makro"
+
+#: peekaboo/ruleset/rules.py:197 peekaboo/ruleset/rules.py:327
+msgid ""
+"Behavioral analysis by Cuckoo has produced an error and did not finish "
+"successfully"
+msgstr ""
+"Die Verhaltensanalyse durch Cuckoo hat einen Fehler produziert und konnte"
+" nicht erfolgreich abgeschlossen werden"
+
+#: peekaboo/ruleset/rules.py:231
+msgid "Empty list of malicious signatures"
+msgstr "Leere Liste schaedlicher Signaturen"
+
+#: peekaboo/ruleset/rules.py:249
+msgid "No signature suggesting malware detected"
+msgstr "Keine Signatur erkannt die auf Schadcode hindeutet"
+
+#: peekaboo/ruleset/rules.py:254
+#, python-format
+msgid "The following signatures have been recognized: %s"
+msgstr "Folgende Signaturen wurden erkannt: %s"
+
+#: peekaboo/ruleset/rules.py:271
+#, python-format
+msgid "Cuckoo score >= %s: %s"
+msgstr ""
+
+#: peekaboo/ruleset/rules.py:276
+#, python-format
+msgid "Cuckoo score < %s: %s"
+msgstr ""
+
+#: peekaboo/ruleset/rules.py:292
+msgid "Empty domain list"
+msgstr "Leere Domainliste"
+
+#: peekaboo/ruleset/rules.py:297
+#, python-format
+msgid "The file attempts to contact at least one domain on the blacklist (%s)"
+msgstr ""
+"Die Datei versucht mindestens eine Domain aus der Blacklist zu "
+"kontaktieren (%s)"
+
+#: peekaboo/ruleset/rules.py:303
+msgid "File does not seem to attempt contact with domains on the blacklist"
+msgstr "Datei scheint keine Domains aus der Blacklist kontaktieren zu wollen"
+
+#: peekaboo/ruleset/rules.py:322
+msgid "Behavioral analysis by Cuckoo completed successfully"
+msgstr "Die Verhaltensanalyse durch Cuckoo wurde erfolgreich abgeschlossen"
+
+#: peekaboo/ruleset/rules.py:340
+msgid "File does not seem to exhibit recognizable malicious behaviour"
+msgstr "Datei scheint keine erkennbaren Schadroutinen zu starten"
+

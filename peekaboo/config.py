@@ -79,9 +79,11 @@ class PeekabooConfig(object): # pylint: disable=too-many-instance-attributes
         self.interpreter = '/usr/bin/python -u'
         self.worker_count = 3
         self.sample_base_dir = '/tmp'
-        self.job_hash_regex = '/var/lib/amavis/tmp/([^/]+)/parts.*'
+        self.job_hash_regex = '/amavis/tmp/([^/]+)/parts/'
         self.use_debug_module = False
         self.keep_mail_data = False
+        self.processing_info_dir = '/var/lib/peekaboo/malware_reports'
+        self.report_locale = None
         self.db_url = 'sqlite:////var/lib/peekaboo/peekaboo.db'
         self.config_file = '/opt/peekaboo/etc/peekaboo.conf'
         self.ruleset_config = '/opt/peekaboo/etc/ruleset.conf'
@@ -112,6 +114,8 @@ class PeekabooConfig(object): # pylint: disable=too-many-instance-attributes
             'job_hash_regex': ['global', 'job_hash_regex'],
             'use_debug_module': ['global', 'use_debug_module'],
             'keep_mail_data': ['global', 'keep_mail_data'],
+            'processing_info_dir': ['global', 'processing_info_dir'],
+            'report_locale': ['global', 'report_locale'],
             'db_url': ['db', 'url'],
             'ruleset_config': ['ruleset', 'config'],
             'cuckoo_mode': ['cuckoo', 'mode'],

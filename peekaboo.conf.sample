@@ -12,12 +12,21 @@
 #interpreter      :    /usr/bin/python -u
 #worker_count     :    3
 #sample_base_dir  :    /tmp
-#job_hash_regex   :    /var/lib/amavis/tmp/([^/]+)/parts.*
+#job_hash_regex   :    /amavis/tmp/([^/]+)/parts/
 # 'yes' or 'no'  to use Peekaboo's debug module, which allows
 # additional code execution at runtime.
 #use_debug_module :    no
 # Whether or not to cleanup temporary files under /tmp
 #keep_mail_data   :    no
+#processing_info_dir : /var/lib/peekaboo/malware_reports
+
+# Configure the language to use for messages in the report returned to the
+# client. If unset, falls back to system configuration using environment
+# variables such as LANG. Defaults to English messages if neither is
+# configured or no translation is found. Standard LANG variable identifiers
+# such as de, de_DE or de_DE.ISO-8859-1 can be used. Standard gettext search
+# order applies.
+#report_locale    :    <unset>
 
 
 #[ruleset]
@@ -60,7 +69,7 @@
 # embed mode
 #exec             :    /opt/cuckoo/bin/cuckoo
 #submit           :    /opt/cuckoo/bin/cuckoo submit
-#storage_path     :    /var/lib//peekaboo/.cuckoo/storage
+#storage_path     :    /var/lib/peekaboo/.cuckoo/storage
 
 # api mode
 #url              :    http://127.0.0.1:8090

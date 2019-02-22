@@ -133,8 +133,8 @@ Put the following code into ``/etc/amavis/conf.d/15-av_scanners``:
     @av_scanners = (
         ['Peekaboo-Analysis',
         \&ask_peekaboo, ["{}\n", "/var/run/peekaboo/peekaboo.sock"],
-        qr/wurde als "(unknown|checked|good|ignored)" eingestuft/m,
-        qr/wurde als "bad" eingestuft/m ],
+        qr/has been categorized "(unknown|checked|good|ignored)"$/m,
+        qr/has been categorized "bad"$/m ],
     );
 
     1;  # ensure a defined return

@@ -1,3 +1,5 @@
+.. _development-environment:
+
 =======================
 Development Environment
 =======================
@@ -43,3 +45,76 @@ Simply
 * Derive your own config from ``peekaboo.conf.sample`` and save it to ``peekaboo.conf``
 * Run Peekaboo with: ``/path/to/your/venv/bin/python peekaboo_debug.py``
 * For command line options run ``/path/to/your/venv/bin/python peekaboo_debug.py --help``
+
+Code Quality
+============
+
+To improve and keep code quality we're using `git-lint`_.
+It checks the changed lines for style and syntax issues on each commit and
+supports various languages and formats.
+In our case it supports python through pylint and pycodestyle as well as rst
+for the documentation.
+
+**Note**: There's various projects with "git" and "lint" in their name.
+Particularly beware that "gitlint" is not the `git-lint`_ we use.
+
+The tools themselves are already installed by the pip commands in the previous
+section.
+Configure and activate git-lint for your local git repo as follows:
+
+git-lint's ``config.yaml`` needs to be adjusted so that pylint uses its default
+and our local configuration.
+The override by git-lint using the ``--rcfile`` option would otherwise
+disable our local ``pylintrc``.
+
+Also, all commands are changed to reference the linters by absolute path inside
+the virtual environment so that it does not need to be added to the search
+path which might cause confusion if there's tool overlap with the system or
+other venvs.
+(But of course you can also just run ``. /path/to/your/venv/bin/activate``
+starting each development session and be done with it.)
+
+.. code-block:: shell
+
+    $ venv=/path/to/your/venv
+    $ sed -i -e "s,command:  *,command: $venv/bin/," \
+        -e "/--rcfile=.*\/pylintrc/d" \
+        $venv/lib/python3*/site-packages/gitlint/configs/config.yaml
+
+Finally these commands fix up and activate the pre-commit hook for `git`.
+
+.. code-block:: shell
+
+    $ sed -i "s,git lint,$venv/bin/git-lint," $venv/bin/pre-commit.git-lint.sh
+    $ ln -sfn $venv/bin/pre-commit.git-lint.sh .git/hooks/pre-commit
+
+**Note**: git-lint keeps a cache in ``$HOME/.git-lint/cache``.
+If it should start to behave curiously, this can be deleted to get back to a
+clean baseline.
+
+git-lint will abort the commit if **any** issues are found.
+Use your best judgement as to what is legitimate advise and what is nitpicking
+and override with option ``--no-verify`` as required.
+
+Finally, pylint and pycodestyle can be run on the code as a whole using the
+following commands:
+
+.. code-block:: shell
+
+    $ /path/to/your/venv/bin/pylint peekaboo bin/*.py
+    $ /path/to/your/venv/bin/pycodestyle peekaboo bin
+
+Expect a maintainer to do this for your pull request.
+
+As said, we have a local ``pylintrc`` which can be used to silence accepted
+"issues".
+Similar configuration files for other tools could potentially be added as well.
+
+Also, local overrides particularly for pylint can be added in the code using
+the ``pylint: disable=foo`` syntax per individual line or wrapping a block of
+code in ``pylint: disable=foo`` and ``pylint: enable=foo`` (where ``foo`` is
+the symbolic name of a warning or error).
+Please do not forget to turn warnings back on and please do not pollute the
+code with loads of these overrides.
+
+.. _git-lint: https://pypi.org/project/git-lint/
