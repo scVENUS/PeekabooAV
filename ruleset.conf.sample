@@ -2,15 +2,23 @@
 # Peekaboo ruleset configuration file
 # Copyright (C) 2016-2019 science + computing ag
 #
+
+# list of rules to run on samples
+[rules]
+rule.1  : known
+rule.2  : file_larger_than
+rule.3  : file_type_on_whitelist
+rule.4  : file_type_on_greylist
+rule.5  : cuckoo_evil_sig
+rule.6  : cuckoo_score
+rule.7  : office_macro
+#rule.8  : requests_evil_domain
+rule.9  : cuckoo_analysis_failed
+#rule.10 : contains_peekabooyar
+rule.11 : final_rule
+
 # rule specific configuration options
 # the section name equals the name of the rule
-#
-
-
-[known]
-# if not specified the default is enabled : yes
-enabled : yes
-
 #[file_larger_than]
 # defaults:
 #bytes : 5
@@ -113,15 +121,10 @@ signature.43 : Wscript.exe initiated network communications indicative of a scri
 #higher_than : 4.0
 
 [requests_evil_domain]
-enabled  : no
 # define a list of bad domains here
 domain.1 : canarytokens.com
 
-# this rule is for testing only, so it is disabled by default
-[contains_peekabooyar]
-enabled : no
-
-[cuckoo_analysis_failed]
+#[cuckoo_analysis_failed]
 # This rule checks whether analysis by Cuckoo failed. If so, it reports a
 # result of "failed" for this sample and aborts rule processing. In case of
 # success, result "unknown" is returned (because successful analysis in itself
@@ -153,5 +156,7 @@ enabled : no
 #failure.1: end of analysis reached!
 
 # rules without configuration options:
+# - known
+# - contains_peekabooyar
 # - office_macro
 # - final_rule

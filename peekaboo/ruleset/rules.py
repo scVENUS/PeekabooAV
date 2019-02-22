@@ -40,6 +40,8 @@ class Rule(object):
     """ This is the base class for all rules. It provides common infrastructure
     such as resources that can be used by the rules (configuration, database
     connection) or helper functions. """
+    rule_name = 'unimplemented'
+
     def __init__(self, config=None, db_con=None):
         """ Initialize common configuration and resources """
         self.db_con = db_con

@@ -40,7 +40,7 @@ class RulesetEngine(object):
 
     @since: 1.6
     """
-    rules = [
+    known_rules = [
         KnownRule,
         FileLargerThanRule,
         FileTypeOnWhitelistRule,
@@ -59,9 +59,14 @@ class RulesetEngine(object):
         self.config = ruleset_config
         self.db_con = db_con
 
+        # create a lookup table from rule name to class
+        self.rules = {}
+        for known_rule in self.known_rules:
+            self.rules[known_rule.rule_name] = known_rule
+
     def run(self):
-        for rule in RulesetEngine.rules:
-            result = self.__exec_rule(self.sample, rule)
+        for rule in self.config.rule_config('rules').get('rule'):
+            result = self.__exec_rule(self.sample, self.rules[rule])
             if not result.further_analysis:
                 return
 
@@ -75,18 +80,9 @@ class RulesetEngine(object):
         logger.debug("Processing rule '%s' for %s" % (rule_name, sample))
 
         try:
-            # skip disabled rules.
-            if self.config.rule_enabled(rule_name):
-                rule_config = self.config.rule_config(rule_name)
-                rule = rule_class(config=rule_config, db_con=self.db_con)
-                result = rule.evaluate(sample)
-            else:
-                logger.debug("Rule '%s' is disabled." % rule_name)
-                result = RuleResult(
-                    rule_name, result=Result.unchecked,
-                    reason=_("Rule '%s' is disabled.") % rule_name,
-                    further_analysis=True)
-
+            rule_config = self.config.rule_config(rule_name)
+            rule = rule_class(config=rule_config, db_con=self.db_con)
+            result = rule.evaluate(sample)
             sample.add_rule_result(result)
         except PeekabooAnalysisDeferred:
             # in case the Sample is requesting the Cuckoo report

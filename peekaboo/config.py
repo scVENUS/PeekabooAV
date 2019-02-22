@@ -293,11 +293,7 @@ class PeekabooRulesetConfig(object):
                 # - There are no duplicate settings with ConfigParser. The last
                 #   one always wins.
 
-                # special keyword enabled is boolean and has the same behaviour
-                # for all rules
-                if key.lower() in ['enabled']:
-                    saved_val = config.getboolean(section, setting)
-                elif is_list:
+                if is_list:
                     saved_val.append(config.get(section, setting))
                 else:
                     saved_val = config.get(section, setting)
@@ -312,22 +308,6 @@ class PeekabooRulesetConfig(object):
         @return: dict of rule configuration settings or None if no
                  configuration is present. """
         return self.ruleset_config.get(rule)
-
-    def rule_enabled(self, rule):
-        """ Check if a rule is enabled. Cases are:
-        - no config section for that rule is present
-        - enabled keyword is not present in that section or
-        - the value of the enabled is True (i.e. yes, true, 1 in the file)
-
-        @param rule: Name of the rule to check if enabled or not.
-        @type rule: string
-        @return: True or False based on above criteria.
-        """
-        config = self.rule_config(rule)
-        if config is None:
-            return True
-
-        return config.get('enabled', True)
 
     def __str__(self):
         return '<PeekabooRulesetConfiguration(filepath="%s", %s)>' % \
