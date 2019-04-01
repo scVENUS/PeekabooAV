@@ -217,14 +217,21 @@ class JobQueue:
 
         return cleared
 
-    def done(self, sample_hash):
+    def submit_duplicates(self, sample_hash):
+        """ Check if any samples have been held from processing as duplicates
+        and submit them now. Clear the original sample whose duplicates have
+        been submitted from the in-flight list.
+
+        @param sample_hash: Hash of sample to check for duplicates
+        """
         submitted_duplicates = []
         with self.duplock:
             # duplicates which have been submitted from the backlog still
             # report done but do not get registered as potentially having
             # duplicates because we expect the ruleset to identify them as
             # already known and process them quickly now that the first
-            # instance has gone through full analysis
+            # instance has gone through full analysis. Therefore we can ignore
+            # them here.
             if not self.duplicates.has_key(sample_hash):
                 return
 
@@ -245,6 +252,14 @@ class JobQueue:
         logger.debug("Cleared sample %s from in-flight list" % sample_str)
         if len(submitted_duplicates) > 0:
             logger.debug("Submitted duplicates from backlog: %s" % submitted_duplicates)
+
+    def done(self, sample):
+        """ Perform cleanup actions after sample processing is done:
+        1. Submit held duplicates and
+        2. notify request handler thread that sample processing is done.
+
+        @param sample: The Sample object to post-process. """
+        self.submit_duplicates(sample.sha256sum)
 
         # now that this sample is really done and cleared from the queue, tell
         # its connection handler about it
@@ -399,7 +414,7 @@ class Worker(Thread):
                 logger.debug('Not saving results of failed analysis')
 
             sample.cleanup()
-            self.job_queue.done(sample.sha256sum)
+            self.job_queue.done(sample)
 
         logger.info('Worker %d: Stopped' % self.worker_id)
         self.running_flag.clear()
