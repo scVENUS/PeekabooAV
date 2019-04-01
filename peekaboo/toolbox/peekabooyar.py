@@ -48,8 +48,9 @@ class ContainsPeekabooYarRule(Rule):
             }'''
         )
 
-        with open(s.get_file_path(), 'rb') as f:
-            matches = rules.match(data=f.read())
+        # FIXME: Only user of file_path. Remove?
+        with open(s.file_path, 'rb') as sample_file:
+            matches = rules.match(data=sample_file.read())
 
         if matches != []:
             return self.result(Result.bad,
