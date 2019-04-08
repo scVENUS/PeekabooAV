@@ -232,7 +232,7 @@ class JobQueue:
             # already known and process them quickly now that the first
             # instance has gone through full analysis. Therefore we can ignore
             # them here.
-            if not self.duplicates.has_key(sample_hash):
+            if sample_hash not in self.duplicates:
                 return
 
             # submit all samples which have accumulated in the backlog
