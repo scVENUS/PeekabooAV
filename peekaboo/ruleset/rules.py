@@ -96,7 +96,15 @@ class FileLargerThanRule(Rule):
         threshold. """
         size = int(self.config.get('bytes', 5))
 
-        if sample.file_size > size:
+        try:
+            sample_size = sample.file_size
+        except OSError as oserr:
+            return self.result(
+                Result.failed,
+                _("Failure to determine sample file size: %s") % oserr,
+                False)
+
+        if sample_size > size:
             return self.result(Result.unknown,
                                _("File has more than %d bytes") % size,
                                True)

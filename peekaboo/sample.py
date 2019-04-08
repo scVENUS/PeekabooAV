@@ -461,6 +461,9 @@ class Sample(object):
 
     @property
     def file_size(self):
+        """ Determine and cache sample file size
+
+        @raises: OSError if e.g. file does not exist or is inaccessible """
         if not self.__file_stat:
             self.__file_stat = os.stat(self.__path)
 
