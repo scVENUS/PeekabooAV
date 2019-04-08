@@ -43,15 +43,15 @@ msgstr "Hallo das ist Peekaboo"
 #: peekaboo/server.py:176
 #, fuzzy
 msgid "Error: Invalid JSON in request."
-msgstr "FEHLER: Ungueltiges JSON."
+msgstr "FEHLER: Ungültiges JSON."
 
 #: peekaboo/server.py:181
 msgid "ERROR: Invalid data structure."
-msgstr "FEHLER: Ungueltiges Datenformat."
+msgstr "FEHLER: Ungültiges Datenformat."
 
 #: peekaboo/server.py:188
 msgid "ERROR: Incomplete data structure."
-msgstr "FEHLER: Unvollstaendige Datenstruktur."
+msgstr "FEHLER: Unvollständige Datenstruktur."
 
 #: peekaboo/server.py:195
 msgid "ERROR: Path does not exist or no permission to access it."
@@ -111,7 +111,7 @@ msgstr "Datei ist dem System noch nicht bekannt"
 #: peekaboo/ruleset/rules.py:104
 #, python-format
 msgid "Failure to determine sample file size: %s"
-msgstr "Ermittlung der Dateigroesse fehlgeschlagen: %s"
+msgstr "Ermittlung der Dateigröße fehlgeschlagen: %s"
 
 #: peekaboo/ruleset/rules.py:109
 #, python-format
@@ -158,7 +158,7 @@ msgstr ""
 
 #: peekaboo/ruleset/rules.py:239
 msgid "Empty list of malicious signatures"
-msgstr "Leere Liste schaedlicher Signaturen"
+msgstr "Leere Liste schädlicher Signaturen"
 
 #: peekaboo/ruleset/rules.py:257
 msgid "No signature suggesting malware detected"
