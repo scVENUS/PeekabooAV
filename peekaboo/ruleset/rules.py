@@ -159,7 +159,7 @@ class FileTypeOnGreylistRule(Rule):
 
         return self.result(Result.unknown,
                            _("File type is not on the list of types to "
-                             "analyse (%s)") % (str(sample.mimetypes)),
+                             "analyse (%s)") % sample.mimetypes,
                            False)
 
 
@@ -248,7 +248,7 @@ class CuckooEvilSigRule(CuckooRule):
         # check if there is a "bad" signatures and return bad
         matched_bad_sigs = []
         for sig in bad_sigs:
-            match = re.search(sig, str(sigs))
+            match = re.search(sig, "\n".join(sigs))
             if match:
                 matched_bad_sigs.append(sig)
 

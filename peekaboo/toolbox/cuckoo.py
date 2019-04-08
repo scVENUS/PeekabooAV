@@ -328,11 +328,11 @@ class CuckooServer(protocol.ProcessProtocol):
 
     def outReceived(self, data):
         """ on receiving output on STDOUT from Cuckoo """
-        logger.debug('STDOUT %s' % str(data))
+        logger.debug('STDOUT %s', data)
 
     def errReceived(self, data):
         """ on receiving output on STDERR from Cuckoo """
-        logger.debug('STDERR %s' % str(data.replace('\n', '')))
+        logger.debug('STDERR %s', data.replace('\n', ''))
 
         #
         # FILE SUBMITTED
@@ -371,11 +371,11 @@ class CuckooServer(protocol.ProcessProtocol):
         self.cuckoo.shut_down(1)
 
     def processExited(self, reason):
-        logger.info("Cuckoo exited with status %s" % str(reason.value.exitCode))
+        logger.info("Cuckoo exited with status %s", reason.value.exitCode)
         self.cuckoo.shut_down()
 
     def processEnded(self, reason):
-        logger.info("Cuckoo ended with status %s" % str(reason.value.exitCode))
+        logger.info("Cuckoo ended with status %s", reason.value.exitCode)
         self.cuckoo.shut_down()
 
 

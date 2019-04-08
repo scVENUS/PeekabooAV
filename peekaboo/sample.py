@@ -295,8 +295,8 @@ class Sample(object):
         """ Add a rule result to the sample. This also adds a message about
         this to the report and updates the overall analysis result (so far).
         """
-        logger.debug('Adding rule result %s' % str(res))
-        self.__report.append(_("File \"%s\": %s") % (self.__filename, str(res)))
+        logger.debug('Adding rule result %s', res)
+        self.__report.append(_("File \"%s\": %s") % (self.__filename, res))
 
         logger.debug("Current overall result: %s, new rule result: %s",
                      self.__result, res.result)

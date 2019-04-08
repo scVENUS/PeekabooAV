@@ -100,7 +100,7 @@ class JobQueue:
         @raises Full: if the queue is full.
         """
         sample_hash = sample.sha256sum
-        sample_str = str(sample)
+        sample_str = "%s" % sample
         duplicate = None
         cluster_duplicate = None
         resubmit = None
@@ -180,7 +180,7 @@ class JobQueue:
                     return False
 
                 if locked:
-                    sample_str = str(sample_duplicates[0])
+                    sample_str = "%s" % sample_duplicates[0]
                     if self.duplicates.get(sample_hash) is not None:
                         logger.error("Possible backlog corruption for sample "
                                 "%s! Please file a bug report. Trying to "
@@ -237,7 +237,7 @@ class JobQueue:
 
             # submit all samples which have accumulated in the backlog
             for s in self.duplicates[sample_hash]['duplicates']:
-                submitted_duplicates.append(str(s))
+                submitted_duplicates.append("%s" % s)
                 self.jobs.put(s, True, self.queue_timeout)
 
             sample = self.duplicates[sample_hash]['master']
@@ -246,7 +246,7 @@ class JobQueue:
             except PeekabooDatabaseError as dberr:
                 logger.error(dberr)
 
-            sample_str = str(sample)
+            sample_str = "%s" % sample
             del self.duplicates[sample_hash]
 
         logger.debug("Cleared sample %s from in-flight list" % sample_str)
