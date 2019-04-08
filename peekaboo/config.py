@@ -247,7 +247,7 @@ class PeekabooConfig(object): # pylint: disable=too-many-instance-attributes
             if not option.startswith('_'):
                 settings[option] = value
 
-        return '<PeekabooConfig(%s)>' % str(settings)
+        return '<PeekabooConfig(%s)>' % settings
 
     __repr__ = __str__
 
@@ -333,7 +333,7 @@ class PeekabooRulesetConfig(object):
         return config.get('enabled', True)
 
     def __str__(self):
-        return str('<PeekabooRulesetConfiguration(filepath="%s", %s)>' %
-                   (self.config_file, self.ruleset_config))
+        return '<PeekabooRulesetConfiguration(filepath="%s", %s)>' % \
+            (self.config_file, self.ruleset_config)
 
     __repr__ = __str__

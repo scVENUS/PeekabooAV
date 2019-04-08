@@ -26,6 +26,7 @@
 
 import re
 import os
+import locale
 import logging
 import json
 import subprocess
@@ -115,9 +116,14 @@ class CuckooEmbed(Cuckoo):
             # cuckoo_submit is a list, make a copy as to not modify the
             # original value
             proc = self.cuckoo_submit.split(' ') + [sample.submit_path]
+
+            # universal_newlines opens channels to child in text mode and
+            # returns strings instead of bytes in return which we do to avoid
+            # the need to handle decoding ourselves
             p = subprocess.Popen(proc,
                                  stdout=subprocess.PIPE,
-                                 stderr=subprocess.PIPE)
+                                 stderr=subprocess.PIPE,
+                                 universal_newlines=True)
             p.wait()
         except Exception as e:
             raise CuckooAnalysisFailedException(e)
@@ -126,15 +132,13 @@ class CuckooEmbed(Cuckoo):
             raise CuckooAnalysisFailedException('cuckoo submit returned a non-zero return code.')
         else:
             out, err = p.communicate()
-            logger.debug("cuckoo submit STDOUT: %s" % out)
-            logger.debug("cuckoo submit STDERR: %s" % err)
-
-            response = out.replace("\n", "")
+            logger.debug("cuckoo submit STDOUT: %s", out)
+            logger.debug("cuckoo submit STDERR: %s", err)
 
             match = None
             pattern_no = 0
             for pattern in self.job_id_patterns:
-                match = re.search(pattern, response)
+                match = re.search(pattern, out)
                 if match is not None:
                     logger.debug('Pattern %d matched.' % pattern_no)
                     break
@@ -149,7 +153,7 @@ class CuckooEmbed(Cuckoo):
                 return job_id
 
             raise CuckooAnalysisFailedException(
-                'Unable to extract job ID from given string %s' % response)
+                'Unable to extract job ID from given string %s' % out)
 
     def get_report(self, job_id):
         path = os.path.join(self.cuckoo_storage,
@@ -321,6 +325,7 @@ class CuckooServer(protocol.ProcessProtocol):
     """
     def __init__(self, cuckoo):
         self.cuckoo = cuckoo
+        self.encoding = locale.getpreferredencoding()
 
     def connectionMade(self):
         logger.info('Connected. Cuckoo PID: %s' % self.transport.pid)
@@ -328,11 +333,19 @@ class CuckooServer(protocol.ProcessProtocol):
 
     def outReceived(self, data):
         """ on receiving output on STDOUT from Cuckoo """
-        logger.debug('STDOUT %s' % str(data))
+        # explicit decoding: The program is sending us stuff and because it's
+        # just stdout/stderr we have no defined protocol, no structure and no
+        # guaranteed encoding. Normally we'd tell popen to open in text mode
+        # which would automatically apply the system encoding. With Twisted
+        # there doesn't seem to be that option. But since it's our child, we
+        # can (hopefully) assume that it uses our locale settings. So we use
+        # the default encoding as returned by our interpreter.
+        logger.debug('STDOUT %s', data.decode(self.encoding))
 
     def errReceived(self, data):
         """ on receiving output on STDERR from Cuckoo """
-        logger.debug('STDERR %s' % str(data.replace('\n', '')))
+        content = data.decode(self.encoding)
+        logger.debug('STDERR %s', content.replace('\n', ''))
 
         #
         # FILE SUBMITTED
@@ -341,11 +354,12 @@ class CuckooServer(protocol.ProcessProtocol):
         # 2016-04-12 09:14:06,984 [lib.cuckoo.core.scheduler] INFO: Starting
         # analysis of FILE "cuckoo.png" (task #201, options "")
         # INFO: Starting analysis of FILE ".bashrc" (task #4, options "")
-        m = re.match('.*INFO: Starting analysis of FILE \"(.*)\" \(task #([0-9]*), options .*', data)
+        match = re.match(r'.*INFO: Starting analysis of FILE "(.*)" '
+                         r'\(task #([0-9]*), options .*', content)
 
-        if m:
-            logger.info("File submitted: task #%s, filename %s" % (m.group(2),
-                                                                   m.group(1)))
+        if match:
+            logger.info("File submitted: task #%s, filename %s",
+                        match.group(2), match.group(1))
 
         #
         # ANALYSIS DONE
@@ -353,7 +367,7 @@ class CuckooServer(protocol.ProcessProtocol):
         # 2016-04-12 09:25:27,824 [lib.cuckoo.core.scheduler] INFO: Task #202:
         # reports generation completed ...
         m = re.match(".*INFO: Task #([0-9]*): reports generation completed.*",
-                     data)
+                     content)
         if m:
             job_id = int(m.group(1))
             self.cuckoo.resubmit_with_report(job_id)
@@ -371,11 +385,11 @@ class CuckooServer(protocol.ProcessProtocol):
         self.cuckoo.shut_down(1)
 
     def processExited(self, reason):
-        logger.info("Cuckoo exited with status %s" % str(reason.value.exitCode))
+        logger.info("Cuckoo exited with status %s", reason.value.exitCode)
         self.cuckoo.shut_down()
 
     def processEnded(self, reason):
-        logger.info("Cuckoo ended with status %s" % str(reason.value.exitCode))
+        logger.info("Cuckoo ended with status %s", reason.value.exitCode)
         self.cuckoo.shut_down()
 
 

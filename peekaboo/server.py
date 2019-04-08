@@ -184,7 +184,7 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
 
         submitted = []
         for part in parts:
-            if not part.has_key('full_name'):
+            if 'full_name' not in part:
                 self.talk_back(_('ERROR: Incomplete data structure.'))
                 logger.error('Incomplete data structure.')
                 return None
@@ -342,12 +342,14 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
         @returns: True on successful sending of all messages, False on error of
                   sending and None specifically if sending failed because the
                   client closed the connection. """
-        if isinstance(msgs, str):
+        if not isinstance(msgs, (list, tuple)):
             msgs = (msgs, )
 
         for msg in msgs:
             try:
-                self.request.sendall('%s\n' % msg)
+                # FIXME: Hard-coded, arbitrary encoding since we have no
+                # clearly defined protocol here.
+                self.request.sendall(('%s\n' % msg).encode('utf-8'))
             except IOError as ioerror:
                 if ioerror.errno == errno.EPIPE:
                     logger.warning('Client closed connection on us: %s',

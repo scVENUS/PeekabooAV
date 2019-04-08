@@ -100,7 +100,7 @@ class JobQueue:
         @raises Full: if the queue is full.
         """
         sample_hash = sample.sha256sum
-        sample_str = str(sample)
+        sample_str = "%s" % sample
         duplicate = None
         cluster_duplicate = None
         resubmit = None
@@ -180,7 +180,7 @@ class JobQueue:
                     return False
 
                 if locked:
-                    sample_str = str(sample_duplicates[0])
+                    sample_str = "%s" % sample_duplicates[0]
                     if self.duplicates.get(sample_hash) is not None:
                         logger.error("Possible backlog corruption for sample "
                                 "%s! Please file a bug report. Trying to "
@@ -232,12 +232,12 @@ class JobQueue:
             # already known and process them quickly now that the first
             # instance has gone through full analysis. Therefore we can ignore
             # them here.
-            if not self.duplicates.has_key(sample_hash):
+            if sample_hash not in self.duplicates:
                 return
 
             # submit all samples which have accumulated in the backlog
             for s in self.duplicates[sample_hash]['duplicates']:
-                submitted_duplicates.append(str(s))
+                submitted_duplicates.append("%s" % s)
                 self.jobs.put(s, True, self.queue_timeout)
 
             sample = self.duplicates[sample_hash]['master']
@@ -246,7 +246,7 @@ class JobQueue:
             except PeekabooDatabaseError as dberr:
                 logger.error(dberr)
 
-            sample_str = str(sample)
+            sample_str = "%s" % sample
             del self.duplicates[sample_hash]
 
         logger.debug("Cleared sample %s from in-flight list" % sample_str)
@@ -294,7 +294,7 @@ class JobQueue:
 
         # wait for workers to end
         interval = 1
-        for attempt in range(1, timeout / interval + 1):
+        for attempt in range(1, timeout // interval + 1):
             still_running = []
             for worker in self.workers:
                 if worker.running:

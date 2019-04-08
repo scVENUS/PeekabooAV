@@ -271,7 +271,11 @@ def run():
     logger.debug('Installing report message translations')
     translation = gettext.translation(locale_domain, locale_dir, languages,
                                       fallback=True)
-    translation.install()
+    # python2's gettext needs to be told explicitly to return unicode strings
+    loc_kwargs = {}
+    if sys.version_info[0] < 3:
+        loc_kwargs = {'unicode': True}
+    translation.install(loc_kwargs)
 
     # establish a connection to the database
     try:
