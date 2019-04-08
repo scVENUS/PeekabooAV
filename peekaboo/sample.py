@@ -32,6 +32,9 @@ import shutil
 import string
 import logging
 import tempfile
+# python 3's open with encoding parameter and implicit usage of the system
+# locale-specified encoding
+from builtins import open
 from datetime import datetime
 from peekaboo.toolbox.files import guess_mime_type_from_file_contents, \
                                    guess_mime_type_from_filename
@@ -332,9 +335,9 @@ class Sample(object):
         # Peekaboo's report
         peekaboo_report = os.path.join(dump_dir, filename + '_report.txt')
         try:
-            with open(peekaboo_report, 'w+') as f:
-                f.write('\n'.join(self.__report))
-                f.write('\n'.join(self.__internal_report))
+            with open(peekaboo_report, 'w+') as pr_file:
+                pr_file.write('\n'.join(self.__report))
+                pr_file.write('\n'.join(self.__internal_report))
         except (OSError, IOError) as error:
             logger.error('Failure to write report file %s: %s',
                          peekaboo_report, error)
@@ -357,8 +360,10 @@ class Sample(object):
             cuckoo_report = os.path.join(dump_dir,
                                          filename + '_cuckoo_report.json')
             try:
-                with open(cuckoo_report, 'w+') as f:
-                    json.dump(self.__cuckoo_report.raw, f, indent=1)
+                with open(cuckoo_report, 'wb+') as cr_json_file:
+                    cr_json = json.dumps(self.__cuckoo_report.raw,
+                                         indent=1, ensure_ascii=True)
+                    cr_json_file.write(cr_json.encode('ascii'))
             except (OSError, IOError) as error:
                 logger.error('Failure to dump json report to %s: %s',
                              cuckoo_report, error)
