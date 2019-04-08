@@ -294,7 +294,7 @@ class JobQueue:
 
         # wait for workers to end
         interval = 1
-        for attempt in range(1, timeout / interval + 1):
+        for attempt in range(1, timeout // interval + 1):
             still_running = []
             for worker in self.workers:
                 if worker.running:
