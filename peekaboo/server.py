@@ -347,7 +347,9 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
 
         for msg in msgs:
             try:
-                self.request.sendall('%s\n' % msg)
+                # FIXME: Hard-coded, arbitrary encoding since we have no
+                # clearly defined protocol here.
+                self.request.sendall('%s\n' % msg.encode('utf-8'))
             except IOError as ioerror:
                 if ioerror.errno == errno.EPIPE:
                     logger.warning('Client closed connection on us: %s',
