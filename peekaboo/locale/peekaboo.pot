@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2019-02-19 13:11+0000\n"
+"POT-Creation-Date: 2019-04-08 12:24+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -17,17 +17,21 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.4.0\n"
 
-#: peekaboo/sample.py:187
+#: peekaboo/queuing.py:375
+msgid "Sample initialization failed"
+msgstr ""
+
+#: peekaboo/sample.py:186
 #, python-format
 msgid "File \"%s\" %s is being analyzed"
 msgstr ""
 
-#: peekaboo/sample.py:240
+#: peekaboo/sample.py:239
 #, python-format
 msgid "File \"%s\" is considered \"%s\""
 msgstr ""
 
-#: peekaboo/sample.py:310
+#: peekaboo/sample.py:299
 #, python-format
 msgid "File \"%s\": %s"
 msgstr ""
@@ -103,88 +107,93 @@ msgstr ""
 msgid "File is not yet known to the system"
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:101
+#: peekaboo/ruleset/rules.py:104
+#, python-format
+msgid "Failure to determine sample file size: %s"
+msgstr ""
+
+#: peekaboo/ruleset/rules.py:109
 #, python-format
 msgid "File has more than %d bytes"
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:106
+#: peekaboo/ruleset/rules.py:114
 #, python-format
 msgid "File is more than %d bytes long"
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:125
+#: peekaboo/ruleset/rules.py:133
 msgid "File type is on whitelist"
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:129
+#: peekaboo/ruleset/rules.py:137
 msgid "File type is not on whitelist"
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:148
+#: peekaboo/ruleset/rules.py:156
 msgid "File type is on the list of types to analyze"
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:153
+#: peekaboo/ruleset/rules.py:161
 #, python-format
 msgid "File type is not on the list of types to analyse (%s)"
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:166
+#: peekaboo/ruleset/rules.py:174
 msgid "The file contains an Office macro"
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:170
+#: peekaboo/ruleset/rules.py:178
 msgid "The file does not contain a recognizable Office macro"
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:197 peekaboo/ruleset/rules.py:327
+#: peekaboo/ruleset/rules.py:205 peekaboo/ruleset/rules.py:327
 msgid ""
 "Behavioral analysis by Cuckoo has produced an error and did not finish "
 "successfully"
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:231
+#: peekaboo/ruleset/rules.py:239
 msgid "Empty list of malicious signatures"
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:249
+#: peekaboo/ruleset/rules.py:257
 msgid "No signature suggesting malware detected"
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:254
+#: peekaboo/ruleset/rules.py:262
 #, python-format
 msgid "The following signatures have been recognized: %s"
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:271
+#: peekaboo/ruleset/rules.py:279
 #, python-format
 msgid "Cuckoo score >= %s: %s"
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:276
+#: peekaboo/ruleset/rules.py:284
 #, python-format
 msgid "Cuckoo score < %s: %s"
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:292
+#: peekaboo/ruleset/rules.py:300
 msgid "Empty domain list"
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:297
+#: peekaboo/ruleset/rules.py:305
 #, python-format
 msgid "The file attempts to contact at least one domain on the blacklist (%s)"
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:303
+#: peekaboo/ruleset/rules.py:311
 msgid "File does not seem to attempt contact with domains on the blacklist"
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:322
+#: peekaboo/ruleset/rules.py:347
 msgid "Behavioral analysis by Cuckoo completed successfully"
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:340
+#: peekaboo/ruleset/rules.py:364
 msgid "File does not seem to exhibit recognizable malicious behaviour"
 msgstr ""
 
