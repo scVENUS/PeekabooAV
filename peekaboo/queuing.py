@@ -29,7 +29,7 @@ from queue import Queue, Empty
 from time import sleep
 from peekaboo.ruleset import Result, RuleResult
 from peekaboo.ruleset.engine import RulesetEngine
-from peekaboo.exceptions import CuckooReportPendingException, \
+from peekaboo.exceptions import PeekabooAnalysisDeferred, \
     PeekabooDatabaseError
 
 
@@ -395,7 +395,7 @@ class Worker(Thread):
             engine = RulesetEngine(sample, self.ruleset_config, self.db_con)
             try:
                 engine.run()
-            except CuckooReportPendingException:
+            except PeekabooAnalysisDeferred:
                 logger.debug("Report for sample %s still pending", sample)
                 continue
 

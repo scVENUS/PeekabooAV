@@ -28,7 +28,7 @@ import logging
 from peekaboo.ruleset import Result, RuleResult
 from peekaboo.ruleset.rules import *
 from peekaboo.toolbox.peekabooyar import ContainsPeekabooYarRule
-from peekaboo.exceptions import CuckooReportPendingException
+from peekaboo.exceptions import PeekabooAnalysisDeferred
 
 
 logger = logging.getLogger(__name__)
@@ -89,7 +89,7 @@ class RulesetEngine(object):
                     further_analysis=True)
 
             sample.add_rule_result(result)
-        except CuckooReportPendingException as e:
+        except PeekabooAnalysisDeferred:
             # in case the Sample is requesting the Cuckoo report
             raise
         # catch all other exceptions for this rule

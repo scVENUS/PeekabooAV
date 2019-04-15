@@ -29,7 +29,7 @@
 import re
 import logging
 from peekaboo.ruleset import Result, RuleResult
-from peekaboo.exceptions import CuckooReportPendingException, \
+from peekaboo.exceptions import PeekabooAnalysisDeferred, \
         CuckooSubmitFailedException
 
 
@@ -186,13 +186,12 @@ class CuckooRule(Rule):
         """ If a report is present for the sample in question we call method
         evaluate_report() implemented by subclasses to evaluate it for
         findings. Otherwise we submit the sample to Cuckoo and raise
-        CuckooReportPendingException to abort the current run of the ruleset
+        PeekabooAnalysisDeferred to abort the current run of the ruleset
         until the report arrives. If submission to Cuckoo fails we will
         ourselves report the sample as failed.
 
         @param sample: The sample to evaluate.
-        @raises CuckooReportPendingException: if the sample was submitted to
-                                              Cuckoo
+        @raises PeekabooAnalysisDeferred: if the sample was submitted to Cuckoo
         @returns: RuleResult containing verdict.
         """
         report = sample.cuckoo_report
@@ -212,7 +211,7 @@ class CuckooRule(Rule):
 
             logger.info('Sample submitted to Cuckoo. Job ID: %s. '
                         'Sample: %s', job_id, sample)
-            raise CuckooReportPendingException()
+            raise PeekabooAnalysisDeferred()
 
         # call report evaluation function if we get here
         return self.evaluate_report(report)
