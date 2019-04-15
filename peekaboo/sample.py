@@ -336,8 +336,10 @@ class Sample(object):
         peekaboo_report = os.path.join(dump_dir, filename + '_report.txt')
         try:
             with open(peekaboo_report, 'w+') as pr_file:
-                pr_file.write('\n'.join(self.__report))
-                pr_file.write('\n'.join(self.__internal_report))
+                if self.__report:
+                    pr_file.write('\n'.join(self.__report + [""]))
+                if self.__internal_report:
+                    pr_file.write('\n'.join(self.__internal_report + [""]))
         except (OSError, IOError) as error:
             logger.error('Failure to write report file %s: %s',
                          peekaboo_report, error)
