@@ -41,8 +41,12 @@ class PeekabooRulesetException(PeekabooException):
 
 
 class CuckooReportPendingException(PeekabooRulesetException):
+    """ An exception signifying that we're waiting for Cuckoo to finish its
+    analysis an defer our interpretation of its findings until its report
+    becomes available. """
     pass
 
 
-class CuckooAnalysisFailedException(PeekabooException):
+class CuckooSubmitFailedException(PeekabooException):
+    """ An exception raised if submitting a job to Cuckoo fails. """
     pass

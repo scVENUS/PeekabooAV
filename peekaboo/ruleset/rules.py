@@ -30,7 +30,7 @@ import re
 import logging
 from peekaboo.ruleset import Result, RuleResult
 from peekaboo.exceptions import CuckooReportPendingException, \
-        CuckooAnalysisFailedException
+        CuckooSubmitFailedException
 
 
 logger = logging.getLogger(__name__)
@@ -199,7 +199,7 @@ class CuckooRule(Rule):
         if report is None:
             try:
                 job_id = sample.submit_to_cuckoo()
-            except CuckooAnalysisFailedException as failed:
+            except CuckooSubmitFailedException as failed:
                 logger.error("Submit to Cuckoo failed: %s", failed)
                 # exception message intentionally not present in message
                 # delivered back to client as to not disclose internal
