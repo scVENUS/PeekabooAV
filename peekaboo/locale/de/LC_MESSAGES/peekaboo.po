@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PeekabooAV 1.6.2\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2019-04-08 12:24+0000\n"
+"POT-Creation-Date: 2019-04-15 15:41+0000\n"
 "PO-Revision-Date: 2019-02-14 22:02+0000\n"
 "Last-Translator: Michael Weiser <michael.weiser@gmx.de>\n"
 "Language: de\n"
@@ -17,24 +17,29 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.4.0\n"
 
-#: peekaboo/queuing.py:375
+#: peekaboo/queuing.py:390
 msgid "Sample initialization failed"
 msgstr "Initialisierung der zu analysierenden Datei fehlgeschlagen"
 
-#: peekaboo/sample.py:186
+#: peekaboo/sample.py:189
 #, python-format
 msgid "File \"%s\" %s is being analyzed"
 msgstr "Datei \"%s\" %s wird analysiert"
 
-#: peekaboo/sample.py:239
+#: peekaboo/sample.py:242
 #, python-format
 msgid "File \"%s\" is considered \"%s\""
 msgstr "Die Datei \"%s\" wird als \"%s\" betrachtet"
 
-#: peekaboo/sample.py:299
+#: peekaboo/sample.py:302
 #, python-format
 msgid "File \"%s\": %s"
 msgstr "Datei \"%s\": %s"
+
+#: peekaboo/sample.py:498
+#, python-format
+msgid "Sample %s successfully submitted to Cuckoo as job %d"
+msgstr "Erfolgreich an Cuckoo gegeben %s als Job %d"
 
 #: peekaboo/server.py:143
 msgid "Hello, this is Peekaboo."

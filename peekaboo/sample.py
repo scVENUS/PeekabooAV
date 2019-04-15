@@ -494,8 +494,9 @@ class Sample(object):
         """
         logger.debug("Submitting %s to Cuckoo", self.__submit_path)
         self.__cuckoo_job_id = self.__cuckoo.submit(self)
-        self.__internal_report.append('Erfolgreich an Cuckoo gegeben %s als '
-                                      'Job %d' % (self, self.__cuckoo_job_id))
+        self.__internal_report.append(
+            _('Sample %s successfully submitted to Cuckoo as job %d')
+            % (self, self.__cuckoo_job_id))
         return self.__cuckoo_job_id
 
     def register_cuckoo_report(self, report):
