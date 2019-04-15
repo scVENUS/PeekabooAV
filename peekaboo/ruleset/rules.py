@@ -199,7 +199,11 @@ class CuckooRule(Rule):
         if report is None:
             try:
                 job_id = sample.submit_to_cuckoo()
-            except CuckooAnalysisFailedException:
+            except CuckooAnalysisFailedException as failed:
+                logger.error("Submit to Cuckoo failed: %s", failed)
+                # exception message intentionally not present in message
+                # delivered back to client as to not disclose internal
+                # information, should request user to contact admin instead
                 return self.result(
                     Result.failed,
                     _("Behavioral analysis by Cuckoo has produced an error "
