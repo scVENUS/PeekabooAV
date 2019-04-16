@@ -164,7 +164,8 @@ class PeekabooDatabase(object):
     @author: Sebastian Deiss
     """
     def __init__(self, db_url, instance_id=0,
-                 stale_in_flight_threshold=1*60*60):
+                 stale_in_flight_threshold=1*60*60,
+                 log_level=logging.WARNING):
         """
         Initialize the Peekaboo database handler.
 
@@ -177,6 +178,8 @@ class PeekabooDatabase(object):
         @param stale_in_flight_threshold: Number of seconds after which a in
         flight marker is considered stale and deleted or ignored.
         """
+        logging.getLogger('sqlalchemy.engine').setLevel(log_level)
+
         self.__engine = create_engine(db_url, pool_recycle=1)
         session_factory = sessionmaker(bind=self.__engine)
         self.__session = scoped_session(session_factory)

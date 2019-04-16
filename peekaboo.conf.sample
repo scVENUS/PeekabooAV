@@ -57,6 +57,11 @@
 # PostgreSQL
 # url             :    postgresql://user:password@host:port/database
 
+# Enable additional logging by the SQLAlchemy database module beyond Peekaboo's
+# own logging. Can be considered another set of debug logging even beyond
+# Peekaboo's DEBUG log level.
+#log_level        :    WARNING
+
 #
 # Cuckoo specific settings
 #
