@@ -352,11 +352,7 @@ class CreatingSampleFactory(SampleFactory):
 
 
 class TestDatabase(unittest.TestCase):
-    """
-    Unittests for Peekaboo's database module.
-
-    @author: Sebastian Deiss
-    """
+    """ Unittests for Peekaboo's database module. """
     @classmethod
     def setUpClass(cls):
         """ Set up common test case resources. """
@@ -501,11 +497,7 @@ class TestDatabase(unittest.TestCase):
 
 
 class TestSample(unittest.TestCase):
-    """
-    Unittests for Samples.
-
-    @author: Sebastian Deiss
-    """
+    """ Unittests for Samples. """
     @classmethod
     def setUpClass(cls):
         """ Set up common test case resources. """
@@ -652,11 +644,7 @@ class CuckooReportSample(object):  # pylint: disable=too-few-public-methods
 
 
 class TestRules(unittest.TestCase):
-    """
-    Unittests for Rules.
-
-    @author: Felix Bauer
-    """
+    """ Unittests for Rules. """
     def test_rule_file_type_on_whitelist(self):
         """ Test whitelist rule. """
         combinations = [

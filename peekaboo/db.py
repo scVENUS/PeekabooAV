@@ -49,11 +49,7 @@ Base = declarative_base()
 
 
 class PeekabooMetadata(Base):
-    """
-    Definition of the _meta table for Peekaboo.
-
-    @author: Sebastian Deiss
-    """
+    """ Definition of the _meta table for Peekaboo. """
     __tablename__ = '_meta'
     peekaboo_version = Column(String(10), nullable=False,
                               primary_key=True)
@@ -88,11 +84,7 @@ class InFlightSample(Base):
 
 
 class SampleInfo(Base):
-    """
-    Definition of the sample_info table.
-
-    @author: Sebastian Deiss
-    """
+    """ Definition of the sample_info table. """
     __tablename__ = 'sample_info_v%d' % DB_SCHEMA_VERSION
 
     id = Column(Integer, primary_key=True)
@@ -112,11 +104,7 @@ class SampleInfo(Base):
 
 
 class AnalysisJournal(Base):
-    """
-    Definition of the analysis_jobs table.
-
-    @author: Sebastian Deiss
-    """
+    """ Definition of the analysis_jobs table. """
     __tablename__ = 'analysis_jobs_v%d' % DB_SCHEMA_VERSION
 
     id = Column(Integer, primary_key=True)
@@ -147,11 +135,7 @@ class AnalysisJournal(Base):
 
 
 class PeekabooDatabase(object):
-    """
-    Peekaboo's database.
-
-    @author: Sebastian Deiss
-    """
+    """ Peekaboo's database. """
     def __init__(self, db_url, instance_id=0,
                  stale_in_flight_threshold=1*60*60):
         """

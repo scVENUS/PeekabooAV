@@ -37,11 +37,7 @@ logger = logging.getLogger(__name__)
 
 
 class JobQueue:
-    """
-    Peekaboo's queuing system.
-
-    @author: Sebastian Deiss
-    """
+    """ Peekaboo's queuing system. """
     def __init__(self, ruleset_config, db_con, worker_count=4,
                  queue_timeout=300, shutdown_timeout=60,
                  cluster_duplicate_check_interval=5):
@@ -338,11 +334,7 @@ class ClusterDuplicateHandler(Thread):
 
 
 class Worker(Thread):
-    """
-    A Worker thread to process a sample.
-
-    @author: Sebastian Deiss
-    """
+    """ A Worker thread to process a sample. """
     def __init__(self, wid, job_queue, ruleset_config, db_con):
         # whether we should run
         self.shutdown_requested = Event()

@@ -51,11 +51,7 @@ logger = logging.getLogger(__name__)
 
 
 class SignalHandler():
-    """
-    Signal handler.
-
-    @author: Felix Bauer
-    """
+    """ Signal handler. """
     def __init__(self):
         """ register custom signal handler """
         self.listeners = []

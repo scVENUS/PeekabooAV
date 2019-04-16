@@ -38,7 +38,6 @@ class RulesetEngine(object):
     """
     Peekaboo's ruleset engine.
 
-    @author: Sebastian Deiss
     @since: 1.6
     """
     rules = [

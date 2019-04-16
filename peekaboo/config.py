@@ -57,11 +57,7 @@ class PeekabooConfigParser( # pylint: disable=too-many-ancestors
 
 
 class PeekabooConfig(object): # pylint: disable=too-many-instance-attributes
-    """
-    This class represents the Peekaboo configuration.
-
-    @author: Sebastian Deiss
-    """
+    """ This class represents the Peekaboo configuration. """
     def __init__(self, config_file=None, log_level=None):
         """ Initialise the configuration with defaults, overwrite with command
         line options and finally read the configuration file. """
@@ -259,7 +255,6 @@ class PeekabooRulesetConfig(object):
     The ruleset configuration is stored as a dictionary in the form of
     ruleset_config[rule_name][config_option] = value | [value1, value2, ...]
 
-    @author: Sebastian Deiss
     @since: 1.6
     """
     def __init__(self, config_file):

@@ -25,12 +25,6 @@
 #                                                                             #
 ###############################################################################
 
-"""
-@author:     Felix Bauer, Sebastian Deiss
-@copyright:  2016-2019 science + computing ag. All rights reserved.
-@license:    GPLv3
-"""
-
 
 from __future__ import print_function
 from os import path, linesep

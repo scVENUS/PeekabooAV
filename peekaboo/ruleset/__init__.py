@@ -29,9 +29,8 @@ from enum import Enum, unique
 
 @unique
 class Result(Enum):
-    """
-    @author: Felix Bauer
-    """
+    """ Enumeration of rule evaluation result severities with apropriate
+    comparison semantics. """
     unchecked = 1
     unknown = 2
     ignored = 3
@@ -51,9 +50,8 @@ class Result(Enum):
 
 
 class RuleResult:
-    """
-    @author: Felix Bauer
-    """
+    """ A rule evaluation result with severity, deciding rule, decision
+    description and reason. """
     def __init__(self, rule,
                  result=Result.unknown,
                  reason=None,

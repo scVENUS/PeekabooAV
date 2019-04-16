@@ -40,11 +40,7 @@ logger = logging.getLogger(__name__)
 
 
 class PeekabooStreamServer(socketserver.ThreadingUnixStreamServer):
-    """
-    Asynchronous server.
-
-    @author: Sebastian Deiss
-    """
+    """ Asynchronous server. """
     def __init__(self, server_address, request_handler_cls, job_queue,
                  sample_factory, bind_and_activate=True,
                  request_queue_size=10, status_change_timeout=60):
@@ -120,11 +116,8 @@ class PeekabooStreamServer(socketserver.ThreadingUnixStreamServer):
 
 
 class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
-    """
-    Request handler used by PeekabooStreamServer to handle analysis requests.
-
-    @author: Sebastian Deiss
-    """
+    """ Request handler used by PeekabooStreamServer to handle analysis
+    requests. """
     def setup(self):
         socketserver.StreamRequestHandler.setup(self)
         self.job_queue = self.server.job_queue

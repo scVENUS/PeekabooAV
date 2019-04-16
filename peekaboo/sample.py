@@ -78,9 +78,6 @@ class Sample(object):
     such as the file checksum.
 
     The data structure works together with Cuckoo to run behavioral analysis.
-
-    @author: Felix Bauer
-    @author: Sebastian Deiss
     """
     def __init__(self, file_path, cuckoo=None, status_change=None,
                  metainfo=None, base_dir=None, job_hash_regex=None,

@@ -26,10 +26,9 @@
 
 
 VERSION = (1, 6, 2)
-AUTHORS = ['Felix Bauer', 'Sebastian Deiss']
 
 __version__ = '.'.join(map(str, VERSION))
-__author__ = ', '.join(AUTHORS)
+__author__ = 'Felix Bauer'
 __description__ = 'Peekaboo Extended Email Attachment Behavior Observation Owl'
 __copyright__ = 'Copyright (C) 2016-2019 science + computing ag. All rights reserved.'
 __license__ = 'GPLv3'
