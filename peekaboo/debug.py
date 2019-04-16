@@ -43,7 +43,7 @@ class PeekabooDebugger(Thread):
         self.socket = None
         self.poll_interval = 5
         self.bufsize = 4096
-        Thread.__init__(self)
+        Thread.__init__(self, name="Debugger")
 
     def wait_for_input(self, socket, timeout):
         r = []

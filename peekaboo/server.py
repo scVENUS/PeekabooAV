@@ -32,7 +32,7 @@ import os
 import stat
 import socket
 import socketserver
-from threading import Thread, Event
+from threading import Thread, Event, current_thread
 from peekaboo.ruleset import Result
 
 
@@ -126,6 +126,11 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
     @author: Sebastian Deiss
     """
     def setup(self):
+        # rename thread for higher log message clarity
+        thread = current_thread()
+        # keep trailing thread number by replacing just the base name
+        thread.name = thread.name.replace('Thread-', 'Request-')
+
         socketserver.StreamRequestHandler.setup(self)
         self.job_queue = self.server.job_queue
         self.sample_factory = self.server.sample_factory
@@ -391,7 +396,7 @@ class PeekabooServer(object):
             sample_factory=sample_factory,
             request_queue_size=request_queue_size)
 
-        self.runner = Thread(target=self.server.serve_forever)
+        self.runner = Thread(target=self.server.serve_forever, name="Server")
         self.runner.start()
 
         os.chmod(sock_file,
