@@ -304,7 +304,7 @@ class PeekabooConfig(PeekabooConfigParser):
         self.cuckoo_exec = '/opt/cuckoo/bin/cuckoo'
         self.cuckoo_submit = '/opt/cuckoo/bin/cuckoo submit'
         self.cluster_instance_id = 0
-        self.cluster_stale_in_flight_threshold = 1*60*60
+        self.cluster_stale_in_flight_threshold = 15*60
         self.cluster_duplicate_check_interval = 60
 
         # section and option names for the configuration file. key is the above

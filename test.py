@@ -176,7 +176,7 @@ class TestDefaultConfig(unittest.TestCase):
         self.assertEqual(self.config.cuckoo_url, 'http://127.0.0.1:8090')
         self.assertEqual(self.config.cuckoo_poll_interval, 5)
         self.assertEqual(self.config.cluster_instance_id, 0)
-        self.assertEqual(self.config.cluster_stale_in_flight_threshold, 3600)
+        self.assertEqual(self.config.cluster_stale_in_flight_threshold, 15*60)
         self.assertEqual(self.config.cluster_duplicate_check_interval, 60)
 
 

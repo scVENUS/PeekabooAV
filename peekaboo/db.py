@@ -148,7 +148,7 @@ class AnalysisJournal(Base):
 class PeekabooDatabase(object):
     """ Peekaboo's database. """
     def __init__(self, db_url, instance_id=0,
-                 stale_in_flight_threshold=1*60*60,
+                 stale_in_flight_threshold=15*60,
                  log_level=logging.WARNING):
         """
         Initialize the Peekaboo database handler.

@@ -92,7 +92,7 @@
 # number of seconds after which in-flight markers of samples are to be
 # removed/ignored, assuming that the instance processing them has crashed or
 # been shut down.
-#stale_in_flight_threshold: 3600
+#stale_in_flight_threshold: 900
 
 # Interval in which to check if other instances of a Peekaboo cluster have
 # finished processing samples we have held.
