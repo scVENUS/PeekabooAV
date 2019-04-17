@@ -15,11 +15,16 @@ Status: **DRAFT**.
 * PeekabooAV is written in Python, multi-threaded, scalable, has a very powerful ruleset, and is easy to extend and personalize
 * It is able to detect: malware by its behavior, exploitation of zero days, and targeted attacks
 
-**The main developers are:**
+**Current active developers:**
 
 * Felix Bauer
 * Michael Weiser
 * Christoph Herrmann
+
+**Past developers and contributors:**
+
+* Sebastian Deiß
+* Mark Pröhl
 
 For news and announcements follow us on twitter [@peekabooAV](https://twitter.com/peekabooav).
 

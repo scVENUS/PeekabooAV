@@ -98,10 +98,11 @@ Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduc
 We use [SemVer](http://semver.org/) for versioning. For the versions available,
 see the [tags on this repository](https://github.com/scVENUS/PeekabooAV/releases).
 
-## Authors ##
+## Past and present Developers and Contributors ##
 
 * **Felix Bauer** - *Security Analyst and Project Leader* - [@Jack28](https://github.com/Jack28)
-* **Sebastian Deiss** - *Technical Lead* - [@SebastianDeiss](https://github.com/SebastianDeiss)
+* **Michael Weiser** - *Developer* - [@michaelweiser](https://github.com/michaelweiser)
+* **Sebastian Deiss** - *Former Technical Lead* - [@SebastianDeiss](https://github.com/SebastianDeiss)
 
 ## License ##
 

@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 
 
 class Cuckoo:
-    """ Parent class, defines interface to Cuckoo """
+    """ Parent class, defines interface to Cuckoo. """
     def __init__(self, job_queue):
         self.job_queue = job_queue
         self.shutdown_requested = False
@@ -118,11 +118,7 @@ class Cuckoo:
         raise NotImplementedError
 
 class CuckooEmbed(Cuckoo):
-    """ Runs and interfaces with Cuckoo in IPC
-        
-    @author: Sebastian Deiss
-    @author: Felix Bauer
-    """
+    """ Runs and interfaces with Cuckoo in IPC. """
     def __init__(self, job_queue, cuckoo_exec, cuckoo_submit,
                  cuckoo_storage, interpreter=None):
         Cuckoo.__init__(self, job_queue)
@@ -248,11 +244,7 @@ class CuckooEmbed(Cuckoo):
         pass
 
 class CuckooApi(Cuckoo):
-    """
-    Interfaces with a Cuckoo installation via its REST API
-        
-    @author: Felix Bauer
-    """
+    """ Interfaces with a Cuckoo installation via its REST API. """
     def __init__(self, job_queue, url="http://localhost:8090", poll_interval=5):
         Cuckoo.__init__(self, job_queue)
         self.url = url
@@ -344,17 +336,12 @@ class CuckooApi(Cuckoo):
         return 0
 
 class CuckooServer(protocol.ProcessProtocol):
-    """
-    Class that is used by twisted.internet.reactor to process Cuckoo
-    output and process its behavior. Usage::
+    """ Class that is used by twisted.internet.reactor to process Cuckoo output
+    and process its behavior. Usage::
 
         srv = CuckooServer()
         reactor.spawnProcess(srv, 'python2', ['python2', '/path/to/cukoo.py'])
-        reactor.run()
-
-    @author: Felix Bauer
-    @author: Sebastian Deiss
-    """
+        reactor.run() """
     def __init__(self, cuckoo):
         self.cuckoo = cuckoo
         self.encoding = locale.getpreferredencoding()
@@ -426,12 +413,7 @@ class CuckooServer(protocol.ProcessProtocol):
 
 
 class CuckooReport(object):
-    """
-    Represents a Cuckoo analysis JSON report.
-
-    @author: Sebastian Deiss
-    @author: Felix Bauer
-    """
+    """ Represents a Cuckoo analysis JSON report. """
     def __init__(self, report):
         """
         @param report: hash with report data from Cuckoo

@@ -73,7 +73,7 @@ setup(
     author=__author__,
     install_requires=install_requires,
     dependency_links=dependency_links,
-    author_email='felix.bauer@atos.net, sebastian.deiss@atos.net',
+    author_email='felix.bauer@atos.net',
     entry_points={
         'console_scripts': [
             'peekaboo = peekaboo.daemon:run',
