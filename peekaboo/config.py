@@ -85,6 +85,7 @@ class PeekabooConfig(object): # pylint: disable=too-many-instance-attributes
         self.processing_info_dir = '/var/lib/peekaboo/malware_reports'
         self.report_locale = None
         self.db_url = 'sqlite:////var/lib/peekaboo/peekaboo.db'
+        self.db_log_level = logging.WARNING
         self.config_file = '/opt/peekaboo/etc/peekaboo.conf'
         self.ruleset_config = '/opt/peekaboo/etc/ruleset.conf'
         self.cuckoo_mode = "api"
@@ -117,6 +118,7 @@ class PeekabooConfig(object): # pylint: disable=too-many-instance-attributes
             'processing_info_dir': ['global', 'processing_info_dir'],
             'report_locale': ['global', 'report_locale'],
             'db_url': ['db', 'url'],
+            'db_log_level': ['db', 'log_level', self.get_log_level],
             'ruleset_config': ['ruleset', 'config'],
             'cuckoo_mode': ['cuckoo', 'mode'],
             'cuckoo_url': ['cuckoo', 'url'],

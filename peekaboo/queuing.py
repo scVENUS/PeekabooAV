@@ -29,7 +29,7 @@ from queue import Queue, Empty
 from time import sleep
 from peekaboo.ruleset import Result, RuleResult
 from peekaboo.ruleset.engine import RulesetEngine
-from peekaboo.exceptions import CuckooReportPendingException, \
+from peekaboo.exceptions import PeekabooAnalysisDeferred, \
     PeekabooDatabaseError
 
 
@@ -317,7 +317,7 @@ class ClusterDuplicateHandler(Thread):
         self.shutdown_requested.clear()
         self.job_queue = job_queue
         self.interval = interval
-        Thread.__init__(self)
+        Thread.__init__(self, name="ClusterDuplicateHandler")
 
     def run(self):
         logger.debug("Cluster duplicate handler started.")
@@ -354,7 +354,7 @@ class Worker(Thread):
         self.job_queue = job_queue
         self.ruleset_config = ruleset_config
         self.db_con = db_con
-        Thread.__init__(self)
+        Thread.__init__(self, name="Worker-%d" % wid)
 
     def run(self):
         self.running_flag.set()
@@ -395,7 +395,7 @@ class Worker(Thread):
             engine = RulesetEngine(sample, self.ruleset_config, self.db_con)
             try:
                 engine.run()
-            except CuckooReportPendingException:
+            except PeekabooAnalysisDeferred:
                 logger.debug("Report for sample %s still pending", sample)
                 continue
 

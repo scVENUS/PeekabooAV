@@ -4,7 +4,7 @@
 #
 
 
-#[global]
+[global]
 #user             :    peekaboo
 #group            :    peekaboo
 #socket_file      :    /var/run/peekaboo/peekaboo.sock
@@ -29,14 +29,14 @@
 #report_locale    :    <unset>
 
 
-#[ruleset]
+[ruleset]
 #config           :    /opt/peekaboo/etc/ruleset.conf
 
 
 #
 # Logging configuration
 #
-#[logging]
+[logging]
 # log_level
 # possible values: CRITICAL | ERROR | WARNING | INFO | DEBUG
 #log_level        :    INFO
@@ -49,7 +49,7 @@
 #
 # Database configuration
 #
-#[db]
+[db]
 # SQLite
 #url              :    sqlite:////var/lib/peekaboo/peekaboo.db
 # MySQL (recommended)
@@ -57,10 +57,15 @@
 # PostgreSQL
 # url             :    postgresql://user:password@host:port/database
 
+# Enable additional logging by the SQLAlchemy database module beyond Peekaboo's
+# own logging. Can be considered another set of debug logging even beyond
+# Peekaboo's DEBUG log level.
+#log_level        :    WARNING
+
 #
 # Cuckoo specific settings
 #
-#[cuckoo]
+[cuckoo]
 # mode has two options:
 #  embed   : for legacy embeded mode
 #  api     : to access cuckoo via the REST api
@@ -75,7 +80,7 @@
 #url              :    http://127.0.0.1:8090
 #poll_interval    :    5
 
-#[cluster]
+[cluster]
 # if multiple instances are to run in parallel and avoid concurrent analysis of
 # the same sample, set instance_id to a nonzero positive unique integer value
 # on each instance and use the same networked DBMS instance (MySQL or

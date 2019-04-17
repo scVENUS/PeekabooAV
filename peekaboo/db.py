@@ -86,6 +86,17 @@ class InFlightSample(Base):
     instance_id = Column(Integer, nullable=False)
     start_time = Column(DateTime, nullable=False)
 
+    def __str__(self):
+        return (
+            '<InFlightSample(sha256sum="%s", instance_id="%s", '
+            'start_time="%s")>'
+            % (self.sha256sum,
+               self.instance_id,
+               self.start_time.strftime("%Y%m%dT%H%M%S"))
+        )
+
+    __repr__ = __str__
+
 
 class SampleInfo(Base):
     """
@@ -153,7 +164,8 @@ class PeekabooDatabase(object):
     @author: Sebastian Deiss
     """
     def __init__(self, db_url, instance_id=0,
-                 stale_in_flight_threshold=1*60*60):
+                 stale_in_flight_threshold=1*60*60,
+                 log_level=logging.WARNING):
         """
         Initialize the Peekaboo database handler.
 
@@ -166,6 +178,8 @@ class PeekabooDatabase(object):
         @param stale_in_flight_threshold: Number of seconds after which a in
         flight marker is considered stale and deleted or ignored.
         """
+        logging.getLogger('sqlalchemy.engine').setLevel(log_level)
+
         self.__engine = create_engine(db_url, pool_recycle=1)
         session_factory = sessionmaker(bind=self.__engine)
         self.__session = scoped_session(session_factory)
@@ -389,6 +403,15 @@ class PeekabooDatabase(object):
             '(%d seconds)', self.stale_in_flight_threshold)
 
         try:
+            # the loop triggers the query, so only do it if debugging is
+            # enabled
+            if logger.isEnabledFor(logging.DEBUG):
+                # obviously there's a race between logging and actual delete
+                # here, use with caution, compare with actual number of markers
+                # cleared below before relying on it for debugging
+                for stale in query:
+                    logger.debug('Stale in-flight marker to clear: %s', stale)
+
             # delete() is not queued and goes to the DB before commit()
             cleared = query.delete()
             session.commit()

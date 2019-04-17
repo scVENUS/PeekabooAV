@@ -40,9 +40,26 @@ class PeekabooRulesetException(PeekabooException):
     pass
 
 
-class CuckooReportPendingException(PeekabooRulesetException):
+class PeekabooAnalysisDeferred(PeekabooRulesetException):
+    """ Analysis has been deferred to a later point in time.
+
+    An exception signifying that analysis has been deferred to a later point in
+    time. Ruleset processing will be aborted (without error). Useful if we're
+    waiting for someone to finish their analysis and defer our interpretation
+    of their findings until they become available, most notably the Cuckoo
+    report.
+
+    Not an exception in the traditional sense since it does not indicate an
+    error but actually influences control flow instead. Somewhat questionable
+    in that regard.
+
+    The raiser becomes owner of the sample and is responsible to appropriately
+    resubmit it into Peekaboo once it wants processing to continue. That should
+    take into account that the ruleset will be rerun from the very beginning.
+    """
     pass
 
 
-class CuckooAnalysisFailedException(PeekabooException):
+class CuckooSubmitFailedException(PeekabooException):
+    """ An exception raised if submitting a job to Cuckoo fails. """
     pass
