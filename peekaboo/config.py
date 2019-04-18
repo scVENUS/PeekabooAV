@@ -208,6 +208,66 @@ class PeekabooConfigParser( # pylint: disable=too-many-ancestors
 
         return fallback
 
+    def check_config(self, known_options):
+        """ Check this configuration against a list of known options. Raise an
+        exception if any unknown options are found.
+
+        @param known_options: A dict of sections and options, the key being the
+                              section name and the value a list of option names.
+        @type known_options: dict
+
+        @returns: None
+        @raises PeekabooConfigException: if any unknown sections or options are
+                                         found.
+        """
+        known_sections = known_options.keys()
+        self.check_sections(known_sections)
+
+        # go over sections both allowed and in the config
+        for section in known_sections:
+            self.check_section_options(section, known_options[section])
+
+    def check_sections(self, known_sections):
+        """ Check a list of known section names against this configuration
+
+        @param known_sections: names of known sections
+        @type known_sections: list(string)
+
+        @returns: None
+        @raises PeekabooConfigException: if any unknown sections are found in
+                                         the configuration.
+        """
+        section_diff = set(self.sections()) - set(known_sections)
+        if section_diff:
+            raise PeekabooConfigException(
+                'Unknown section(s) found in config: %s'
+                % ', '.join(section_diff))
+
+    def check_section_options(self, section, known_options):
+        """ Check a config section for unknown options.
+
+        @param section: name of section to check
+        @type section: string
+        @param known_options: list of names of known options to check against
+        @type known_options: list(string)
+
+        @returns: None
+        @raises PeekabooConfigException: if any unknown options are found. """
+        try:
+            section_options = map(
+                # account for option.1 list syntax
+                lambda x: x.split('.')[0],
+                self.options(section))
+        except configparser.NoSectionError:
+            # a non-existant section can have no non-allowed options :)
+            return
+
+        option_diff = set(section_options) - set(known_options)
+        if option_diff:
+            raise PeekabooConfigException(
+                'Unknown config option(s) found in section %s: %s'
+                % (section, ', '.join(option_diff)))
+
 
 class PeekabooConfig(PeekabooConfigParser):
     """ This class represents the Peekaboo configuration. """
@@ -299,7 +359,16 @@ class PeekabooConfig(PeekabooConfigParser):
 
         # overwrite above defaults in our member variables via indirect access
         settings = vars(self)
-        for (option, config_names) in config_options.items():
+        check_options = {}
+        for (setting, config_names) in config_options.items():
+            section = config_names[0]
+            option = config_names[1]
+
+            # remember for later checking for unknown options
+            if section not in check_options:
+                check_options[section] = []
+            check_options[section].append(option)
+
             # maybe use special getter
             getter = self.get_by_default_type
             if len(config_names) == 3:
@@ -308,8 +377,11 @@ class PeekabooConfig(PeekabooConfigParser):
             # e.g.:
             # self.log_format = self.get('logging', 'log_format',
             #                            self.log_format)
-            settings[option] = getter(
-                config_names[0], config_names[1], fallback=settings[option])
+            settings[setting] = getter(
+                section, option, fallback=settings[setting])
+
+        # now check for unknown options
+        self.check_config(check_options)
 
         # Update logging with what we just parsed from the config
         self.setup_logging()

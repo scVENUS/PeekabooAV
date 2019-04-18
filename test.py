@@ -49,7 +49,9 @@ from peekaboo.sample import SampleFactory
 from peekaboo.ruleset import RuleResult, Result
 from peekaboo.ruleset.engine import RulesetEngine
 from peekaboo.ruleset.rules import FileTypeOnWhitelistRule, \
-        FileTypeOnGreylistRule, CuckooAnalysisFailedRule
+        FileTypeOnGreylistRule, CuckooAnalysisFailedRule, \
+        KnownRule, FileLargerThanRule, CuckooEvilSigRule, \
+        CuckooScoreRule, RequestsEvilDomainRule, FinalRule
 from peekaboo.toolbox.cuckoo import CuckooReport
 from peekaboo.db import PeekabooDatabase, PeekabooDatabaseError
 # pylint: enable=wrong-import-position
@@ -281,7 +283,24 @@ user; peekaboo''')
                 r'\[Errno 2\] No such file or directory' % config_file):
             PeekabooConfig(config_file)
 
-    def test_4_unknown_loglevel(self):
+    def test_4_unknown_section(self):
+        """ Test correct error is thrown if an unknown section name is given.
+        """
+        with self.assertRaisesRegexp(
+                PeekabooConfigException,
+                r'Unknown section\(s\) found in config: globl'):
+            CreatingPeekabooConfig('''[globl]''')
+
+    def test_5_unknown_option(self):
+        """ Test correct error is thrown if an unknown option name is given.
+        """
+        with self.assertRaisesRegexp(
+                PeekabooConfigException,
+                r'Unknown config option\(s\) found in section global: foo'):
+            CreatingPeekabooConfig('''[global]
+foo: bar''')
+
+    def test_6_unknown_loglevel(self):
         """ Test with an unknown log level """
         with self.assertRaisesRegexp(
                 PeekabooConfigException,
@@ -628,6 +647,18 @@ higher_than: foo''')
                 r'could not convert string to float: foo'):
             RulesetEngine(ruleset_config=config, db_con=None)
 
+    def test_disabled_config(self):
+        """ Test that no error is shown if disabled rule has config. """
+
+        config = CreatingConfigParser('''[rules]
+rule.1: known
+#rule.2: cuckoo_score
+
+[cuckoo_score]
+higher_than: 4.0''')
+        RulesetEngine(ruleset_config=config, db_con=None)
+
+
 class MimetypeSample(object):  # pylint: disable=too-few-public-methods
     """ A dummy sample class that only contains a set of MIME types for testing
     whitelist and greylist rules with it. """
@@ -659,6 +690,31 @@ greylist.3 : application/msword
 failure.1: end of analysis reached!
 success.1: analysis completed successfully''')
 
+    def test_config_known(self):  # pylint: disable=no-self-use
+        """ Test the known rule configuration. """
+        config = '''[known]
+unknown : baz'''
+        # there is no exception here since empty config is acceptable
+        KnownRule(CreatingConfigParser())
+        # there is no exception here since the known rule simply does
+        # not look at the configuration at all - maybe we should have a
+        # 'unknown section' error here
+        KnownRule(CreatingConfigParser(config))
+
+    def test_config_file_larger_than(self):
+        """ Test the file larger than rule configuration. """
+        config = '''[file_larger_than]
+bytes : 10
+unknown : baz'''
+        # there is no exception here since empty config is acceptable
+        FileLargerThanRule(CreatingConfigParser())
+
+        with self.assertRaisesRegexp(
+                PeekabooConfigException,
+                r'Unknown config option\(s\) found in section '
+                r'file_larger_than: unknown'):
+            FileLargerThanRule(CreatingConfigParser(config))
+
     def test_rule_file_type_on_whitelist(self):
         """ Test whitelist rule. """
         combinations = [
@@ -673,6 +729,22 @@ success.1: analysis completed successfully''')
         for expected, types in combinations:
             result = rule.evaluate(MimetypeSample(types))
             self.assertEqual(result.further_analysis, expected)
+
+    def test_config_file_type_on_whitelist(self):
+        """ Test whitelist rule configuration. """
+        config = '''[file_type_on_whitelist]
+whitelist.1 : foo/bar
+unknown : baz'''
+        with self.assertRaisesRegexp(
+                PeekabooRulesetConfigError,
+                r'Empty whitelist, check file_type_on_whitelist rule config.'):
+            FileTypeOnWhitelistRule(CreatingConfigParser())
+
+        with self.assertRaisesRegexp(
+                PeekabooConfigException,
+                r'Unknown config option\(s\) found in section '
+                r'file_type_on_whitelist: unknown'):
+            FileTypeOnWhitelistRule(CreatingConfigParser(config))
 
     def test_rule_file_type_on_greylist(self):
         """ Test greylist rule. """
@@ -689,6 +761,22 @@ success.1: analysis completed successfully''')
         for expected, types in combinations:
             result = rule.evaluate(MimetypeSample(types))
             self.assertEqual(result.further_analysis, expected)
+
+    def test_config_file_type_on_greylist(self):
+        """ Test greylist rule configuration. """
+        config = '''[file_type_on_greylist]
+greylist.1 : foo/bar
+unknown : baz'''
+        with self.assertRaisesRegexp(
+                PeekabooRulesetConfigError,
+                r'Empty greylist, check file_type_on_greylist rule config.'):
+            FileTypeOnGreylistRule(CreatingConfigParser())
+
+        with self.assertRaisesRegexp(
+                PeekabooConfigException,
+                r'Unknown config option\(s\) found in section '
+                r'file_type_on_greylist: unknown'):
+            FileTypeOnGreylistRule(CreatingConfigParser(config))
 
     def test_rule_analysis_failed(self):
         """ Test the Cuckoo analysis failed rule """
@@ -734,6 +822,79 @@ success.1: analysis completed successfully''')
         result = rule.evaluate(everything_sample)
         self.assertEqual(result.result, Result.failed)
         self.assertEqual(result.further_analysis, False)
+
+    def test_config_evil_sig(self):
+        """ Test the Cuckoo evil signature rule configuration. """
+        config = '''[cuckoo_evil_sig]
+signature.1  : foo
+unknown : baz'''
+        with self.assertRaisesRegexp(
+                PeekabooRulesetConfigError,
+                r'Empty bad signature list, check cuckoo_evil_sig rule '
+                r'config.'):
+            CuckooEvilSigRule(CreatingConfigParser())
+
+        with self.assertRaisesRegexp(
+                PeekabooConfigException,
+                r'Unknown config option\(s\) found in section '
+                r'cuckoo_evil_sig: unknown'):
+            CuckooEvilSigRule(CreatingConfigParser(config))
+
+    def test_config_score(self):
+        """ Test the Cuckoo score rule configuration. """
+        config = '''[cuckoo_score]
+higher_than : 10
+unknown : baz'''
+        CuckooScoreRule(CreatingConfigParser())
+
+        with self.assertRaisesRegexp(
+                PeekabooConfigException,
+                r'Unknown config option\(s\) found in section '
+                r'cuckoo_score: unknown'):
+            CuckooScoreRule(CreatingConfigParser(config))
+
+    def test_config_evil_domain(self):
+        """ Test the Cuckoo requests evil domain rule configuration. """
+        config = '''[requests_evil_domain]
+domain.1 : foo
+unknown : baz'''
+        with self.assertRaisesRegexp(
+                PeekabooRulesetConfigError,
+                r'Empty evil domain list, check requests_evil_domain rule '
+                r'config.'):
+            RequestsEvilDomainRule(CreatingConfigParser())
+
+        with self.assertRaisesRegexp(
+                PeekabooConfigException,
+                r'Unknown config option\(s\) found in section '
+                r'requests_evil_domain: unknown'):
+            RequestsEvilDomainRule(CreatingConfigParser(config))
+
+    def test_config_analysis_failed(self):
+        """ Test the Cuckoo analysis failed rule configuration. """
+        config = '''[cuckoo_analysis_failed]
+failure.1: end of analysis reached!
+success.1: analysis completed successfully
+unknown : baz'''
+        # there should be no exception here since empty config is acceptable
+        CuckooAnalysisFailedRule(CreatingConfigParser())
+
+        with self.assertRaisesRegexp(
+                PeekabooConfigException,
+                r'Unknown config option\(s\) found in section '
+                r'cuckoo_analysis_failed: unknown'):
+            CuckooAnalysisFailedRule(CreatingConfigParser(config))
+
+    def test_config_final(self):  # pylint: disable=no-self-use
+        """ Test the final rule configuration. """
+        config = '''[final]
+unknown : baz'''
+        # there is no exception here since empty config is acceptable
+        FinalRule(CreatingConfigParser())
+        # there is no exception here since the final rule simply does
+        # not look at the configuration at all - maybe we should have a
+        # 'unknown section' error here
+        FinalRule(CreatingConfigParser(config))
 
 
 class PeekabooTestResult(unittest.TextTestResult):

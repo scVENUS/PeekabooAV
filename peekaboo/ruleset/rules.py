@@ -48,7 +48,13 @@ class Rule(object):
         self.config = config
 
         # initialise and validate configuration
+        self.config_options = {}
         self.get_config()
+        # if this rule has (tried to) read any options from the config, it must
+        # believe them to be known and allowed
+        if self.config_options:
+            self.config.check_section_options(
+                self.rule_name, self.config_options.keys())
 
     def result(self, result, reason, further_analysis):
         """ Construct a RuleResult for returning to the engine. """
@@ -88,7 +94,9 @@ class Rule(object):
 
         @returns: configuration value read from config
         """
-        # additional common logic to go here
+        # mark this config option as known
+        self.config_options[option] = True
+
         return getter(self.rule_name, option, *args, **kwargs)
 
     def get_config_int(self, option, default=None):

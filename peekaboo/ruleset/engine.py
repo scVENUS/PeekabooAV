@@ -56,6 +56,11 @@ class RulesetEngine(object):
     ]
 
     def __init__(self, ruleset_config, db_con):
+        """ Initialise the engine, validate its and the individual rules'
+        configuration.
+
+        @raises PeekabooRulesetConfigError: if configuration errors are found
+        """
         self.config = ruleset_config
         self.db_con = db_con
 
@@ -77,6 +82,8 @@ class RulesetEngine(object):
 
         @returns: None
         @raises PeekabooRulesetConfigError: if configuration errors are found
+        @raises KeyError, ValueError, PeekabooConfigException: by failed config
+            object accesses
         """
         if not self.enabled_rules:
             raise PeekabooRulesetConfigError(
@@ -89,7 +96,13 @@ class RulesetEngine(object):
             raise PeekabooRulesetConfigError(
                 'Unknown rule(s) enabled: %s' % ', '.join(unknown_rules))
 
-        config_sections = []
+        # check for unknown config sections by using rule names as rules'
+        # config section names. Allow all known rules not only the enabled ones
+        # because some might be temporarily disabled but should be allowed to
+        # retain their configuration.
+        self.config.check_sections(['rules'] + known_rule_names)
+
+        # have enabled rules check their configuration
         for rule in self.enabled_rules:
             # not passing database connection. Needs revisiting if a rule
             # ever wants to retrieve configuration from the database. For
