@@ -77,18 +77,21 @@ class Rule(object):
         have configuration options. """
         # pass
 
-    # the following getters are somewhat boilerplate but unavoidable for now.
-    # They serve the purpose of keeping config access specifics out of rules for
-    # the sake of readablility.
-    def get_config_value(self, getter, option, *args, **kwargs):
+    def get_config_value(self, option, default, option_type=None):
         """ Get a configuation value for this rule from the ruleset
         configuration. Getter routine and option name to be provided by caller.
         The rule's name is always used as configuration section name.
 
-        @param getter: getter routine to use
-        @type getter: getter method of PeekabooConfigParser
         @param option: name of option to read
         @type option: string
+        @param default: default value to use as fallback and for type
+                        determination
+        @type default: None, int, float, string, list, tuple
+        @param option_type: force the option's value type, necessary for lists
+                            of regular expressions or log levels by specifying
+                            self.config.RELIST or self.config.LOG_LEVEL
+        @type option_type: option type constant of PeekabooConfigParser, e.g.
+                           LOG_LEVEL
         @param args, kwargs: additional arguments passed to the getter routine,
                              such as fallback.
 
@@ -96,32 +99,8 @@ class Rule(object):
         """
         # mark this config option as known
         self.config_options[option] = True
-
-        return getter(self.rule_name, option, *args, **kwargs)
-
-    def get_config_int(self, option, default=None):
-        """ Get an integer from the ruleset configuration. See get_config_value
-        for parameters. """
-        return self.get_config_value(
-            self.config.getint, option, fallback=default)
-
-    def get_config_float(self, option, default=None):
-        """ Get a float from the ruleset configuration. See get_config_value
-        for parameters. """
-        return self.get_config_value(
-            self.config.getfloat, option, fallback=default)
-
-    def get_config_list(self, option, default=None):
-        """ Get a list from the ruleset configuration. See get_config_value
-        for parameters. """
-        return self.get_config_value(
-            self.config.getlist, option, fallback=default)
-
-    def get_config_relist(self, option, default=None):
-        """ Get a list of compiled regular expressions from the ruleset. See
-        get_config_value for parameters. """
-        return self.get_config_value(
-            self.config.getrelist, option, fallback=default)
+        return self.config.get_by_type(
+            self.rule_name, option, fallback=default, option_type=option_type)
 
 
 class KnownRule(Rule):
@@ -148,7 +127,7 @@ class FileLargerThanRule(Rule):
     rule_name = 'file_larger_than'
 
     def get_config(self):
-        self.size_threshold = self.get_config_int('bytes', 5)
+        self.size_threshold = self.get_config_value('bytes', 5)
 
     def evaluate(self, sample):
         """ Evaluate whether the sample is larger than a certain threshold.
@@ -180,7 +159,7 @@ class FileTypeOnWhitelistRule(Rule):
     rule_name = 'file_type_on_whitelist'
 
     def get_config(self):
-        whitelist = self.get_config_list('whitelist')
+        whitelist = self.get_config_value('whitelist', [])
         if not whitelist:
             raise PeekabooRulesetConfigError(
                 "Empty whitelist, check %s rule config." % self.rule_name)
@@ -206,7 +185,7 @@ class FileTypeOnGreylistRule(Rule):
     rule_name = 'file_type_on_greylist'
 
     def get_config(self):
-        greylist = self.get_config_list('greylist')
+        greylist = self.get_config_value('greylist', [])
         if not greylist:
             raise PeekabooRulesetConfigError(
                 "Empty greylist, check %s rule config." % self.rule_name)
@@ -298,7 +277,8 @@ class CuckooEvilSigRule(CuckooRule):
     def get_config(self):
         # list all installed signatures
         # grep -o "description.*" -R . ~/cuckoo2.0/modules/signatures/
-        self.bad_sigs = self.get_config_relist('signature')
+        self.bad_sigs = self.get_config_value(
+            'signature', [], option_type=self.config.RELIST)
         if not self.bad_sigs:
             raise PeekabooRulesetConfigError(
                 "Empty bad signature list, check %s rule config." %
@@ -343,7 +323,7 @@ class CuckooScoreRule(CuckooRule):
     rule_name = 'cuckoo_score'
 
     def get_config(self):
-        self.score_threshold = self.get_config_float('higher_than', 4.0)
+        self.score_threshold = self.get_config_value('higher_than', 4.0)
 
     def evaluate_report(self, report):
         """ Evaluate the score reported by Cuckoo against the threshold from
@@ -367,7 +347,7 @@ class RequestsEvilDomainRule(CuckooRule):
     rule_name = 'requests_evil_domain'
 
     def get_config(self):
-        self.evil_domains = self.get_config_list('domain')
+        self.evil_domains = self.get_config_value('domain', [])
         if not self.evil_domains:
             raise PeekabooRulesetConfigError(
                 "Empty evil domain list, check %s rule config."
@@ -396,8 +376,8 @@ class CuckooAnalysisFailedRule(CuckooRule):
     rule_name = 'cuckoo_analysis_failed'
 
     def get_config(self):
-        self.failure_matches = self.get_config_list('failure', [])
-        self.success_matches = self.get_config_list(
+        self.failure_matches = self.get_config_value('failure', [])
+        self.success_matches = self.get_config_value(
             'success', ['analysis completed successfully'])
 
     def evaluate_report(self, report):

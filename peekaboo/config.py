@@ -39,6 +39,8 @@ class PeekabooConfigParser( # pylint: disable=too-many-ancestors
         configparser.ConfigParser):
     """ A config parser that gives error feedback if a required file does not
     exist or cannot be opened. """
+    LOG_LEVEL = object()
+    RELIST = object()
 
     def __init__(self, config_file):
         # super() does not work here because ConfigParser uses old-style
@@ -171,8 +173,7 @@ class PeekabooConfigParser( # pylint: disable=too-many-ancestors
 
         return levels[level]
 
-    def get_by_default_type(self, section, option, fallback=None,
-                            option_type=None):
+    def get_by_type(self, section, option, fallback=None, option_type=None):
         """ Get an option from the configuration file parser. Automatically
         detects the type from the type of the default if given and calls the
         right getter method to coerce the value to the correct type.
@@ -192,21 +193,19 @@ class PeekabooConfigParser( # pylint: disable=too-many-ancestors
 
         getter = {
             int: self.getint,
+            float: self.getfloat,
             bool: self.getboolean,
+            list: self.getlist,
+            tuple: self.getlist,
             str: self.get,
             None: self.get,
+
+            # these only work when given explicitly as option_type
+            self.LOG_LEVEL: self.get_log_level,
+            self.RELIST: self.getrelist,
         }
 
-        try:
-            return getter[option_type](section, option)
-        except configparser.NoSectionError:
-            logger.debug('Configuration section %s not found - using '
-                         'default %s', section, fallback)
-        except configparser.NoOptionError:
-            logger.debug('Configuration option %s not found in section '
-                         '%s - using default: %s', option, section, fallback)
-
-        return fallback
+        return getter[option_type](section, option, fallback=fallback)
 
     def check_config(self, known_options):
         """ Check this configuration against a list of known options. Raise an
@@ -312,7 +311,7 @@ class PeekabooConfig(PeekabooConfigParser):
         # file value. Third item can be getter function if special parsing is
         # required.
         config_options = {
-            'log_level': ['logging', 'log_level', self.get_log_level],
+            'log_level': ['logging', 'log_level', self.LOG_LEVEL],
             'log_format': ['logging', 'log_format'],
             'user': ['global', 'user'],
             'group': ['global', 'group'],
@@ -327,7 +326,7 @@ class PeekabooConfig(PeekabooConfigParser):
             'processing_info_dir': ['global', 'processing_info_dir'],
             'report_locale': ['global', 'report_locale'],
             'db_url': ['db', 'url'],
-            'db_log_level': ['db', 'log_level', self.get_log_level],
+            'db_log_level': ['db', 'log_level', self.LOG_LEVEL],
             'ruleset_config': ['ruleset', 'config'],
             'cuckoo_mode': ['cuckoo', 'mode'],
             'cuckoo_url': ['cuckoo', 'url'],
@@ -369,16 +368,17 @@ class PeekabooConfig(PeekabooConfigParser):
                 check_options[section] = []
             check_options[section].append(option)
 
-            # maybe use special getter
-            getter = self.get_by_default_type
+            # maybe force the option's value type
+            option_type = None
             if len(config_names) == 3:
-                getter = config_names[2]
+                option_type = config_names[2]
 
             # e.g.:
             # self.log_format = self.get('logging', 'log_format',
             #                            self.log_format)
-            settings[setting] = getter(
-                section, option, fallback=settings[setting])
+            settings[setting] = self.get_by_type(
+                section, option, fallback=settings[setting],
+                option_type=option_type)
 
         # now check for unknown options
         self.check_config(check_options)
