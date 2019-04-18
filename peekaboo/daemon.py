@@ -38,12 +38,14 @@ from argparse import ArgumentParser
 from sdnotify import SystemdNotifier
 from sqlalchemy.exc import SQLAlchemyError
 from peekaboo import PEEKABOO_OWL, __version__
-from peekaboo.config import PeekabooConfig, PeekabooRulesetConfig
+from peekaboo.config import PeekabooConfig, PeekabooConfigParser
 from peekaboo.db import PeekabooDatabase
 from peekaboo.queuing import JobQueue
+from peekaboo.ruleset.engine import RulesetEngine
 from peekaboo.sample import SampleFactory
 from peekaboo.server import PeekabooServer
-from peekaboo.exceptions import PeekabooDatabaseError, PeekabooConfigException
+from peekaboo.exceptions import PeekabooDatabaseError, \
+        PeekabooConfigException, PeekabooRulesetConfigError
 from peekaboo.toolbox.cuckoo import CuckooEmbed, CuckooApi
 
 
@@ -321,9 +323,19 @@ def run():
     # workers of the job queue need the ruleset configuration to create the
     # ruleset engine with it
     try:
-        ruleset_config = PeekabooRulesetConfig(config.ruleset_config)
-        logger.debug(ruleset_config)
+        ruleset_config = PeekabooConfigParser(config.ruleset_config)
     except PeekabooConfigException as error:
+        logging.critical(error)
+        sys.exit(1)
+
+    # verify the ruleset configuration by spawning a ruleset engine and having
+    # it verify it
+    try:
+        engine = RulesetEngine(ruleset_config, db_con)
+    except (KeyError, ValueError, PeekabooConfigException) as error:
+        logging.critical('Ruleset configuration error: %s', error)
+        sys.exit(1)
+    except PeekabooRulesetConfigError as error:
         logging.critical(error)
         sys.exit(1)
 

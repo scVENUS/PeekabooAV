@@ -384,9 +384,9 @@ class Worker(Thread):
                 self.job_queue.done(sample.sha256sum)
                 continue
 
-            engine = RulesetEngine(sample, self.ruleset_config, self.db_con)
+            engine = RulesetEngine(self.ruleset_config, self.db_con)
             try:
-                engine.run()
+                engine.run(sample)
             except PeekabooAnalysisDeferred:
                 logger.debug("Report for sample %s still pending", sample)
                 continue
