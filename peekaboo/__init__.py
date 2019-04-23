@@ -25,7 +25,7 @@
 """ Peekaboo constant module data. """
 
 
-VERSION = (1, 6, 2)
+VERSION = (1, 7)
 
 __version__ = '.'.join(map(str, VERSION))
 __author__ = 'Felix Bauer'
@@ -46,11 +46,11 @@ Peekaboo Extended Email Attachment Behavior Observation Owl
                      -*Xa_a_a_WUW##KUL_a_a_aX7'
                     _aXUXUUU4UUX4XX444UUUUUUXLa,
                    _UXXUXUXU47'!'!'!'!*X444U4UXX,
-                   ?XU4U4''   __    ___-'UUXUUi
-                   ?4U4' / | / /_  |___ \ 'UUXi
-                    *Xi  | || '_ \   __) | ?X7
-                     *L  | || (_) | / __/   j7
-                      *a |_(_)___(_)_____|  jY
+                   ?XU4U4''   _  _____ -'UUXUUi
+                   ?4U4'     / ||___  |   'UUXi
+                    *Xi      | |   / /     ?X7
+                     *L      | |_ / /       j7
+                      *a     |_(_)_/        jY
                        -L,                _/'
                          'l,            _/'
                            j7_a_;  aaa/4
