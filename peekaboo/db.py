@@ -460,6 +460,3 @@ class PeekabooDatabase(object):
                 'Cannot initialize the database: %s' % error)
         finally:
             session.close()
-
-    def __del__(self):
-        self.__engine.dispose()
