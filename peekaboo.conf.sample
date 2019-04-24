@@ -9,7 +9,7 @@
 #group            :    peekaboo
 #socket_file      :    /var/run/peekaboo/peekaboo.sock
 #pid_file         :    /var/run/peekaboo/peekaboo.pid
-#interpreter      :    /usr/bin/python -u
+#interpreter      :    /usr/bin/python2 -u
 #worker_count     :    3
 #sample_base_dir  :    /tmp
 #job_hash_regex   :    /amavis/tmp/([^/]+)/parts/

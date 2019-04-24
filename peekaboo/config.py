@@ -72,7 +72,7 @@ class PeekabooConfig(object): # pylint: disable=too-many-instance-attributes
         self.log_level = logging.INFO
         self.log_format = '%(asctime)s - %(name)s - (%(threadName)s) - ' \
                           '%(levelname)s - %(message)s'
-        self.interpreter = '/usr/bin/python -u'
+        self.interpreter = '/usr/bin/python2 -u'
         self.worker_count = 3
         self.sample_base_dir = '/tmp'
         self.job_hash_regex = '/amavis/tmp/([^/]+)/parts/'
