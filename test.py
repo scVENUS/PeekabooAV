@@ -644,7 +644,7 @@ rule.1: cuckoo_score
 higher_than: foo''')
         with self.assertRaisesRegexp(
                 ValueError,
-                r'could not convert string to float: foo'):
+                r"could not convert string to float: '?foo'?"):
             RulesetEngine(ruleset_config=config, db_con=None)
 
     def test_disabled_config(self):
