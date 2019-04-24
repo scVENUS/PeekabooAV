@@ -99,8 +99,12 @@ class RulesetEngine(object):
         # check for unknown config sections by using rule names as rules'
         # config section names. Allow all known rules not only the enabled ones
         # because some might be temporarily disabled but should be allowed to
-        # retain their configuration.
-        self.config.check_sections(['rules'] + known_rule_names)
+        # retain their configuration. Use += extension of list to avoid
+        # 'TypeError: can only concatenate list (not "dict_keys") to list' with
+        # python3.
+        known_sections = ['rules']
+        known_sections += known_rule_names
+        self.config.check_sections(known_sections)
 
         # have enabled rules check their configuration
         for rule in self.enabled_rules:
