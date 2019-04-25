@@ -72,7 +72,7 @@ Create a new python virtual environment and install cuckoo into it using pip:
 
 .. code-block:: shell
 
-    $ sudo virtualenv --python=/usr/bin/python2.7 /opt/cuckoo
+    $ sudo virtualenv /opt/cuckoo
     $ sudo /opt/cuckoo/bin/pip install cuckoo
 
 In order to test your new Cuckoo installation you should run it once:
@@ -97,7 +97,7 @@ A released version of Peekaboo can be installed directly via pip as follows:
 
 .. code-block:: shell
 
-    $ sudo virtualenv --python=/usr/bin/python2.7 /opt/peekaboo
+    $ sudo virtualenv /opt/peekaboo
     $ sudo /opt/peekaboo/bin/pip install peekabooav
 
 Peekaboo can also be installed from the source directory which is useful in
@@ -126,7 +126,7 @@ together with all its dependencies into it:
 
 .. code-block:: shell
 
-    $ sudo virtualenv --python=/usr/bin/python2.7 /opt/peekaboo
+    $ sudo virtualenv /opt/peekaboo
     $ sudo /opt/peekaboo/bin/pip install .
 
 **Note**: If you want to install Peekaboo for your system wide Python, leave

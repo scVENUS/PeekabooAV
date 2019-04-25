@@ -421,22 +421,23 @@ class PeekabooDatabase(object):
     def _db_schema_exists(self):
         if not self.__engine.dialect.has_table(self.__engine, '_meta'):
             return False
-        else:
-            session = self.__session()
-            # get the first of potentially multiple metadata entries ordered by
-            # descending schema version to get the newest currently configured
-            # schema
-            meta = session.query(PeekabooMetadata).order_by(
-                PeekabooMetadata.db_schema_version.desc()).first()
-            if not meta:
-                return False
 
-            schema_version = meta.db_schema_version
-            session.close()
-            if schema_version < DB_SCHEMA_VERSION:
-                logger.info('Adding new database schema.')
-                return False
-            return True
+        session = self.__session()
+        # get the first of potentially multiple metadata entries ordered by
+        # descending schema version to get the newest currently configured
+        # schema
+        meta = session.query(PeekabooMetadata).order_by(
+            PeekabooMetadata.db_schema_version.desc()).first()
+        if not meta:
+            return False
+
+        schema_version = meta.db_schema_version
+        session.close()
+        if schema_version < DB_SCHEMA_VERSION:
+            logger.info('Adding new database schema.')
+            return False
+
+        return True
 
     def _init_db(self):
         """
@@ -459,6 +460,3 @@ class PeekabooDatabase(object):
                 'Cannot initialize the database: %s' % error)
         finally:
             session.close()
-
-    def __del__(self):
-        self.__engine.dispose()

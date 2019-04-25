@@ -86,7 +86,7 @@ class TestDefaultConfig(TestConfig):
             self.config.sock_file, '/var/run/peekaboo/peekaboo.sock')
         self.assertEqual(
             self.config.pid_file, '/var/run/peekaboo/peekaboo.pid')
-        self.assertEqual(self.config.interpreter, '/usr/bin/python -u')
+        self.assertEqual(self.config.interpreter, '/usr/bin/python2 -u')
         self.assertEqual(self.config.worker_count, 3)
         self.assertEqual(self.config.sample_base_dir, '/tmp')
         self.assertEqual(
