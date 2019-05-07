@@ -334,6 +334,10 @@ class CuckooApi(Cuckoo):
     def submit(self, sample):
         path = sample.submit_path
         filename = os.path.basename(path)
+        # override with the original file name if available
+        if sample.name_declared:
+            filename = sample.name_declared
+
         files = {"file": (filename, open(path, 'rb'))}
         logger.debug("Creating Cuckoo task with content from %s and "
                      "filename %s", path, filename)

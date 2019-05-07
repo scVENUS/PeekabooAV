@@ -381,6 +381,12 @@ class Sample(object):
         return self.__sha256sum
 
     @property
+    def name_declared(self):
+        """ Returns the name declared by the sample as its original filename,
+        None if not available. """
+        return self.meta_info_name_declared
+
+    @property
     def file_extension(self):
         """ Determines the file extension of this sample. """
         if self.__file_extension:
@@ -391,8 +397,8 @@ class Sample(object):
         # amavis intentionally hands us files named only p001, p002 and so on.
         # But we still try it in case there's no declared name.
         filename = self.__filename
-        if self.meta_info_name_declared:
-            filename = self.meta_info_name_declared
+        if self.name_declared:
+            filename = self.name_declared
 
         # extension or the empty string if none found
         self.__file_extension = os.path.splitext(filename)[1][1:]
@@ -415,8 +421,8 @@ class Sample(object):
                 mime_types.add(declared_mt)
 
         declared_filename = self.__filename
-        if self.meta_info_name_declared:
-            declared_filename = self.meta_info_name_declared
+        if self.name_declared:
+            declared_filename = self.name_declared
 
         # check if the sample is an S/MIME signature (smime.p7s)
         # If so, don't overwrite the MIME type since we do not want to analyse
