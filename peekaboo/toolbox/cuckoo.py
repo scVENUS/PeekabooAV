@@ -47,7 +47,7 @@ from peekaboo.exceptions import CuckooSubmitFailedException
 logger = logging.getLogger(__name__)
 
 
-class Cuckoo:
+class Cuckoo(object):
     """ Parent class, defines interface to Cuckoo. """
     def __init__(self, job_queue):
         self.job_queue = job_queue
@@ -124,7 +124,7 @@ class CuckooEmbed(Cuckoo):
     """ Runs and interfaces with Cuckoo in IPC. """
     def __init__(self, job_queue, cuckoo_exec, cuckoo_submit,
                  cuckoo_storage, interpreter=None):
-        Cuckoo.__init__(self, job_queue)
+        super().__init__(job_queue)
         self.interpreter = interpreter
         self.cuckoo_exec = cuckoo_exec
         self.cuckoo_submit = cuckoo_submit
@@ -269,7 +269,7 @@ class CuckooApi(Cuckoo):
     """ Interfaces with a Cuckoo installation via its REST API. """
     def __init__(self, job_queue, url="http://localhost:8090", poll_interval=5,
                  retries=5, backoff=0.5):
-        Cuckoo.__init__(self, job_queue)
+        super().__init__(job_queue)
         self.url = url
         self.poll_interval = poll_interval
 
