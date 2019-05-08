@@ -9,6 +9,11 @@ See documentation for details.
 - Lower default for in-flight lock staleness to 15 minutes.
 - Detect unknown config sections and options and refuse to start if any are
   found.
+- Submit the sample with its original filename if available when using the REST
+  API. (#81, #82)
+- Improve REST API access robustness by introducing configurable urllib3 retry
+  handling with backoff and defined endless retry or failure report to client.
+  (#43)
 
 ## 1.7
 
