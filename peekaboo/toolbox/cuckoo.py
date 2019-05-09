@@ -24,6 +24,8 @@
 ###############################################################################
 
 
+from future.builtins import super  # pylint: disable=wrong-import-order
+
 import re
 import os
 import locale
@@ -31,11 +33,11 @@ import logging
 import json
 import subprocess
 import random
-
-from time import sleep
-from threading import RLock
-
 import requests
+import urllib3.util.retry
+
+from threading import RLock, Event
+from time import sleep
 from twisted.internet import protocol, reactor, process
 
 from peekaboo.exceptions import CuckooSubmitFailedException
@@ -44,11 +46,12 @@ from peekaboo.exceptions import CuckooSubmitFailedException
 logger = logging.getLogger(__name__)
 
 
-class Cuckoo:
+class Cuckoo(object):
     """ Parent class, defines interface to Cuckoo. """
     def __init__(self, job_queue):
         self.job_queue = job_queue
-        self.shutdown_requested = False
+        self.shutdown_requested = Event()
+        self.shutdown_requested.clear()
         self.running_jobs = {}
         self.running_jobs_lock = RLock()
 
@@ -107,7 +110,8 @@ class Cuckoo:
         self.job_queue.submit(sample, self.__class__)
 
     def shut_down(self):
-        self.shutdown_requested = True
+        """ Request the module to shut down. """
+        self.shutdown_requested.set()
 
     def reap_children(self):
         pass
@@ -121,7 +125,7 @@ class CuckooEmbed(Cuckoo):
     """ Runs and interfaces with Cuckoo in IPC. """
     def __init__(self, job_queue, cuckoo_exec, cuckoo_submit,
                  cuckoo_storage, interpreter=None):
-        Cuckoo.__init__(self, job_queue)
+        super().__init__(job_queue)
         self.interpreter = interpreter
         self.cuckoo_exec = cuckoo_exec
         self.cuckoo_submit = cuckoo_submit
@@ -231,10 +235,10 @@ class CuckooEmbed(Cuckoo):
         # the resulting ReactorNotRunning exception is foiled by the fact that
         # sigTerm defers the call through a queue into another thread which
         # insists on logging it
-        if not self.shutdown_requested:
+        if not self.shutdown_requested.is_set():
             reactor.sigTerm(0)
 
-        self.shutdown_requested = True
+        self.shutdown_requested.set()
         self.exit_code = exit_code
 
     def reap_children(self):
@@ -243,96 +247,174 @@ class CuckooEmbed(Cuckoo):
         (currently) intentionally a no-op. """
         pass
 
+
+class WhitelistRetry(urllib3.util.retry.Retry):
+    """ A Retry class which has a status code whitelist, allowing to retry all
+    requests not whitelisted in a hard-core, catch-all manner. """
+    def __init__(self, status_whitelist=None, **kwargs):
+        super().__init__(**kwargs)
+        self.status_whitelist = status_whitelist or set()
+
+    def is_retry(self, method, status_code, has_retry_after=False):
+        """ Override Retry's is_retry to introduce our status whitelist logic.
+        """
+        # we retry all methods so no check if method is retryable here
+
+        if self.status_whitelist and status_code not in self.status_whitelist:
+            return True
+
+        return super().is_retry(method, status_code, has_retry_after)
+
+
 class CuckooApi(Cuckoo):
     """ Interfaces with a Cuckoo installation via its REST API. """
-    def __init__(self, job_queue, url="http://localhost:8090", poll_interval=5):
-        Cuckoo.__init__(self, job_queue)
+    def __init__(self, job_queue, url="http://localhost:8090", poll_interval=5,
+                 retries=5, backoff=0.5):
+        super().__init__(job_queue)
         self.url = url
         self.poll_interval = poll_interval
-        self.reported = self.__status()["tasks"]["reported"]
-        logger.info("Connection to Cuckoo seems to work, %i reported tasks seen", self.reported)
-    
-    def __get(self, url, method="get", files=""):
-        r = ""
-        logger.debug("Requesting %s, method %s" % (url, method))
-        
-        # try 3 times to get a successfull response
-        for retry in range(0, 3):
-            try:
-                if method == "get":
-                    r = requests.get("%s/%s" % (self.url, url))
-                elif method == "post":
-                    r = requests.post("%s/%s" % (self.url, url), files=files)
-                else:
-                    break
-                if r.status_code != 200:
-                    continue
-                else:
-                    return r.json()
-            except requests.exceptions.Timeout as e:
-                # Maybe set up for a retry, or continue in a retry loop
-                print(e)
-                if e and retry >= 2:
-                    raise e
-            except requests.exceptions.TooManyRedirects as e:
-                # Tell the user their URL was bad and try a different one
-                print(e)
-                if e and retry >= 2:
-                    raise e
-            except requests.exceptions.RequestException as e:
-                # catastrophic error. bail.
-                print(e)
-                if e and retry >= 2:
-                    raise e
-        return None
-    
-    def __status(self):
-        return self.__get("cuckoo/status")
+
+        # urrlib3 backoff formula:
+        # <backoff factor> * (2 ^ (<retry count so far> - 1))
+        # with second try intentionally having no sleep,
+        # e.g. with retry count==5 and backoff factor==0.5:
+        # try 1: fail, sleep(0.5*2^(1-1)==0.5*2^0==0.5*1==0.5->intentionally
+        #   overridden to 0)
+        # try 2: fail, sleep(0.5*2^(2-1)==0.5*2^1==1)
+        # try 3: fail, sleep(0.5*2^(3-1)==0.5*2^2==2)
+        # try 4: fail, sleep(0.5*2^(4-1)==0.5*2^3==4)
+        # try 5: fail, abort, sleep would've been 8 before try 6
+        #
+        # Also, use method_whitelist=False to enable POST and other methods for
+        # retry which aren't by default because they're not considered
+        # idempotent. We assume that with the REST API a request either
+        # succeeds or fails without residual effects, making them atomic and
+        # idempotent.
+        #
+        # And finally we retry everything but a 200 response, which admittedly
+        # is a bit hard-core but serves our purposes for now.
+        retry_config = WhitelistRetry(total=retries,
+                                      backoff_factor=backoff,
+                                      method_whitelist=False,
+                                      status_whitelist=set([200]))
+        retry_adapter = requests.adapters.HTTPAdapter(max_retries=retry_config)
+        self.session = requests.session()
+        self.session.mount('http://', retry_adapter)
+        self.session.mount('https://', retry_adapter)
+
+    def __get(self, path):
+        request_url = "%s/%s" % (self.url, path)
+        logger.debug("Getting %s", request_url)
+
+        try:
+            response = self.session.get(request_url)
+        # all requests exceptions are derived from RequestsException, including
+        # RetryError, TooManyRedirects and Timeout
+        except requests.exceptions.RequestException as error:
+            logger.error('Request to REST API failed: %s', error)
+            return None
+
+        # no check for status code here since we retry all but 200
+        # responses and raise an exception if retries fail
+        try:
+            json_resp = response.json()
+        except ValueError as error:
+            logger.error(
+                'Invalid JSON in response when getting %s: %s',
+                request_url, error)
+            return None
+
+        return json_resp
     
     def submit(self, sample):
         path = sample.submit_path
         filename = os.path.basename(path)
+        # override with the original file name if available
+        if sample.name_declared:
+            filename = sample.name_declared
+
         files = {"file": (filename, open(path, 'rb'))}
-        response = self.__get("tasks/create/file", method="post", files=files)
+        logger.debug("Creating Cuckoo task with content from %s and "
+                     "filename %s", path, filename)
+
+        try:
+            response = self.session.post(
+                "%s/tasks/create/file" % self.url, files=files)
+        except requests.exceptions.RequestException as error:
+            raise CuckooSubmitFailedException(
+                'Error creating Cuckoo task: %s' % error)
         
-        task_id = response["task_id"]
-        if task_id > 0:
-            self.register_running_job(task_id, sample)
-            return task_id
+        try:
+            json_resp = response.json()
+        except ValueError as error:
+            raise CuckooSubmitFailedException(
+                'Invalid JSON in response when creating Cuckoo task: %s'
+                % error)
+
+        if "task_id" in json_resp:
+            task_id = json_resp["task_id"]
+            if task_id > 0:
+                self.register_running_job(task_id, sample)
+                return task_id
+
         raise CuckooSubmitFailedException(
-            'Unable to extract job ID from given string %s' % response)
+            'Unable to extract job ID from response %s' % json_resp)
 
     def get_report(self, job_id):
         logger.debug("Report from Cuckoo API requested, job_id = %d" % job_id)
         return self.__get("tasks/report/%d" % job_id)
     
     def do(self):
-        # do the polling for finished jobs
-        # record analysis count and call status over and over again
-        # logger ......
-        
-        limit = 1000000
-        offset = self.__status()["tasks"]["total"]
-        
-        while not self.shutdown_requested:
-            cuckoo_tasks_list = None
-            try:
-                cuckoo_tasks_list = self.__get("tasks/list/%i/%i" % (limit, offset))
-            except Exception as e:
-                logger.warn('Unable to communicate with Cuckoo API: %s' % e)
-                pass
+        """ Do the polling for finished jobs. """
+        # do a simple initial test of connectivity. With this we require the
+        # API to be reachable at startup (with the usual retries to account for
+        # a bit of a race condition in parallel startup) but later on hope
+        # that all errors are transient and retry endlessly
+        status = self.__get("cuckoo/status")
+        if status is None:
+            logger.critical("Connection to Cuckoo REST API failed")
+            return 1
+        if "tasks" not in status or "reported" not in status["tasks"]:
+            logger.critical("Invalid status JSON structure from Cuckoo REST "
+                            "API: %s", status)
+            return 1
 
-            #maxJobID = cuckoo_tasks_list[-1]["id"]
-            
-            first = True
-            if cuckoo_tasks_list:
-                for j in cuckoo_tasks_list["tasks"]:
-                    if j["status"] == "reported":
-                        job_id = j["id"]
-                        self.resubmit_with_report(job_id)
-            #self.reported = reported
-            sleep(float(self.poll_interval))
+        reported = status["tasks"]["reported"]
+        logger.info("Connection to Cuckoo seems to work, "
+                    "%i reported tasks seen", reported)
 
+        while not self.shutdown_requested.wait(self.poll_interval):
+            # no lock, atomic, copy() because keys() returns an iterable view
+            # instead of a fresh new list in python3
+            running_jobs = self.running_jobs.copy().keys()
+
+            # somewhat inefficient for the potential number of requests per
+            # poll round but more efficient in that it does not download an
+            # ever growing list of jobs using tasks/list. Might also take
+            # quite a while to get to all jobs if retries happen on each
+            # request.
+            # A call to get data about multiple tasks in one go would be nice
+            # here. tasks/list could be used with the minimum job number as
+            # offset and spread between highest and lowest job id as limit *if*
+            # its output was sorted by job ID. Apparently limit and offset are
+            # only meant to iterate over the job list in blocks but not to
+            # return data about a specific range of job IDs from that list.
+            for job_id in running_jobs:
+                job = self.__get("tasks/view/%i" % job_id)
+                if job is None:
+                    # ignore and retry on next polling run
+                    continue
+
+                # but fail hard if we get invalid stuff
+                if "task" not in job or "status" not in job["task"]:
+                    logger.error("Invalid JSON structure from Cuckoo REST "
+                                 "API: %s", job)
+                    return 1
+
+                if job["task"]["status"] == "reported":
+                    self.resubmit_with_report(job_id)
+
+        logger.debug("Shutting down.")
         return 0
 
 class CuckooServer(protocol.ProcessProtocol):
