@@ -2,6 +2,14 @@
 
 See documentation for details.
 
+## devel
+
+- Make list of rules to run configurable in members and order. See
+  `ruleset.conf.sample` section `[rules]` for details.
+- Lower default for in-flight lock staleness to 15 minutes.
+- Detect unknown config sections and options and refuse to start if any are
+  found.
+
 ## 1.7
 
 - give threads names for easier identification

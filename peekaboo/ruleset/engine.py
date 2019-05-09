@@ -28,7 +28,8 @@ import logging
 from peekaboo.ruleset import Result, RuleResult
 from peekaboo.ruleset.rules import *
 from peekaboo.toolbox.peekabooyar import ContainsPeekabooYarRule
-from peekaboo.exceptions import PeekabooAnalysisDeferred
+from peekaboo.exceptions import PeekabooAnalysisDeferred, \
+        PeekabooConfigException, PeekabooRulesetConfigError
 
 
 logger = logging.getLogger(__name__)
@@ -40,7 +41,7 @@ class RulesetEngine(object):
 
     @since: 1.6
     """
-    rules = [
+    known_rules = [
         KnownRule,
         FileLargerThanRule,
         FileTypeOnWhitelistRule,
@@ -54,14 +55,68 @@ class RulesetEngine(object):
         FinalRule
     ]
 
-    def __init__(self, sample, ruleset_config, db_con):
-        self.sample = sample
+    def __init__(self, ruleset_config, db_con):
+        """ Initialise the engine, validate its and the individual rules'
+        configuration.
+
+        @raises PeekabooRulesetConfigError: if configuration errors are found
+        """
         self.config = ruleset_config
         self.db_con = db_con
 
-    def run(self):
-        for rule in RulesetEngine.rules:
-            result = self.__exec_rule(self.sample, rule)
+        # create a lookup table from rule name to class
+        self.rule_classes = {}
+        for known_rule in self.known_rules:
+            self.rule_classes[known_rule.rule_name] = known_rule
+
+        try:
+            self.enabled_rules = self.config.getlist('rules', 'rule')
+        except PeekabooConfigException as error:
+            raise PeekabooRulesetConfigError(
+                'Ruleset configuration error: %s' % error)
+
+        self.validate_rule_config()
+
+    def validate_rule_config(self):
+        """ Validate the rule configuration in various ways.
+
+        @returns: None
+        @raises PeekabooRulesetConfigError: if configuration errors are found
+        @raises KeyError, ValueError, PeekabooConfigException: by failed config
+            object accesses
+        """
+        if not self.enabled_rules:
+            raise PeekabooRulesetConfigError(
+                'No enabled rules found, check ruleset config.')
+
+        # check if unknown rules are enabled
+        known_rule_names = self.rule_classes.keys()
+        unknown_rules = set(self.enabled_rules) - set(known_rule_names)
+        if unknown_rules:
+            raise PeekabooRulesetConfigError(
+                'Unknown rule(s) enabled: %s' % ', '.join(unknown_rules))
+
+        # check for unknown config sections by using rule names as rules'
+        # config section names. Allow all known rules not only the enabled ones
+        # because some might be temporarily disabled but should be allowed to
+        # retain their configuration. Use += extension of list to avoid
+        # 'TypeError: can only concatenate list (not "dict_keys") to list' with
+        # python3.
+        known_sections = ['rules']
+        known_sections += known_rule_names
+        self.config.check_sections(known_sections)
+
+        # have enabled rules check their configuration
+        for rule in self.enabled_rules:
+            # not passing database connection. Needs revisiting if a rule
+            # ever wants to retrieve configuration from the database. For
+            # now at least rule constructor and get_config() need to be
+            # able to cope without it.
+            rule = self.rule_classes[rule](self.config)
+
+    def run(self, sample):
+        for rule in self.enabled_rules:
+            result = self.__exec_rule(sample, self.rule_classes[rule])
             if not result.further_analysis:
                 return
 
@@ -75,18 +130,8 @@ class RulesetEngine(object):
         logger.debug("Processing rule '%s' for %s" % (rule_name, sample))
 
         try:
-            # skip disabled rules.
-            if self.config.rule_enabled(rule_name):
-                rule_config = self.config.rule_config(rule_name)
-                rule = rule_class(config=rule_config, db_con=self.db_con)
-                result = rule.evaluate(sample)
-            else:
-                logger.debug("Rule '%s' is disabled." % rule_name)
-                result = RuleResult(
-                    rule_name, result=Result.unchecked,
-                    reason=_("Rule '%s' is disabled.") % rule_name,
-                    further_analysis=True)
-
+            rule = rule_class(config=self.config, db_con=self.db_con)
+            result = rule.evaluate(sample)
             sample.add_rule_result(result)
         except PeekabooAnalysisDeferred:
             # in case the Sample is requesting the Cuckoo report

@@ -40,6 +40,11 @@ class PeekabooRulesetException(PeekabooException):
     pass
 
 
+class PeekabooRulesetConfigError(PeekabooException):
+    """ Used to signal that a rule is unhappy with its configuration. """
+    pass
+
+
 class PeekabooAnalysisDeferred(PeekabooRulesetException):
     """ Analysis has been deferred to a later point in time.
 

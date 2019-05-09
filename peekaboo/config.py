@@ -26,6 +26,7 @@
 defaults as well as reading a configuration file. """
 
 
+import re
 import sys
 import logging
 import configparser
@@ -38,6 +39,8 @@ class PeekabooConfigParser( # pylint: disable=too-many-ancestors
         configparser.ConfigParser):
     """ A config parser that gives error feedback if a required file does not
     exist or cannot be opened. """
+    LOG_LEVEL = object()
+    RELIST = object()
 
     def __init__(self, config_file):
         # super() does not work here because ConfigParser uses old-style
@@ -55,8 +58,217 @@ class PeekabooConfigParser( # pylint: disable=too-many-ancestors
                 'Configuration file "%s" can not be parsed: %s' %
                 (config_file, cperror))
 
+        self.lists = {}
+        self.relists = {}
 
-class PeekabooConfig(object): # pylint: disable=too-many-instance-attributes
+    def getlist(self, section, option, raw=False, vars=None, fallback=None):
+        """ Special getter where multiple options in the config file
+        distinguished by a .<no> suffix form a list. Matches the signature for
+        configparser getters. """
+        # cache results because the following is somewhat inefficient
+        if section not in self.lists:
+            self.lists[section] = {}
+
+        if option in self.lists[section]:
+            return self.lists[section][option]
+
+        if section not in self:
+            self.lists[section][option] = fallback
+            return fallback
+
+        # Go over all options in this section we want to allow "holes" in
+        # the lists, i.e setting.1, setting.2 but no setting.3 followed by
+        # setting.4. We use here that ConfigParser retains option order from
+        # the file.
+        value = []
+        for setting in self[section]:
+            if not setting.startswith(option):
+                continue
+
+            # Parse 'setting' into (key) and 'setting.subscript' into
+            # (key, subscript) and use it to determine if this setting is a
+            # list. Note how we do not use the subscript at all here.
+            name_parts = setting.split('.')
+            key = name_parts[0]
+            is_list = len(name_parts) > 1
+
+            if key != option:
+                continue
+
+            if not is_list:
+                raise PeekabooConfigException(
+                    'Option %s in section %s is supposed to be a list '
+                    'but given as individual setting' % (setting, section))
+
+            # Potential further checks:
+            # - There are no duplicate settings with ConfigParser. The last
+            #   one always wins.
+
+            value.append(self[section].get(setting, raw=raw, vars=vars))
+
+        # it's not gonna get any better on the next call, so cache even the
+        # default
+        if not value:
+            value = fallback
+
+        self.lists[section][option] = value
+        return value
+
+    def getrelist(self, section, option, raw=False, vars=None, fallback=None):
+        """ Special getter for lists of regular expressions. Returns the
+        compiled expression objects in a list ready for matching and searching.
+        """
+        if section not in self.relists:
+            self.relists[section] = {}
+
+        if option in self.relists[section]:
+            return self.relists[section][option]
+
+        if section not in self:
+            self.relists[section][option] = fallback
+            return fallback
+
+        strlist = self[section].getlist(option, raw=raw, vars=vars,
+                                        fallback=fallback)
+        if strlist is None:
+            self.relists[section][option] = None
+            return None
+
+        compiled_res = []
+        for regex in strlist:
+            try:
+                compiled_res.append(re.compile(regex))
+            except (ValueError, TypeError) as error:
+                raise PeekabooConfigException(
+                    'Failed to compile regular expression "%s" (section %s, '
+                    'option %s): %s' % (re, section, option, error))
+
+        # it's not gonna get any better on the next call, so cache even the
+        # default
+        if not compiled_res:
+            compiled_res = fallback
+
+        self.relists[section][option] = compiled_res
+        return compiled_res
+
+    def get_log_level(self, section, option, raw=False, vars=None,
+                      fallback=None):
+        """ Get the log level from the configuration file and parse the string
+        into a logging loglevel such as logging.CRITICAL. Raises config
+        exception if the log level is unknown. Options identical to get(). """
+        levels = {
+            'CRITICAL': logging.CRITICAL,
+            'ERROR': logging.ERROR,
+            'WARNING': logging.WARNING,
+            'INFO': logging.INFO,
+            'DEBUG': logging.DEBUG
+        }
+
+        level = self.get(section, option, raw=raw, vars=vars, fallback=None)
+        if level is None:
+            return fallback
+
+        if level not in levels:
+            raise PeekabooConfigException('Unknown log level %s' % level)
+
+        return levels[level]
+
+    def get_by_type(self, section, option, fallback=None, option_type=None):
+        """ Get an option from the configuration file parser. Automatically
+        detects the type from the type of the default if given and calls the
+        right getter method to coerce the value to the correct type.
+
+        @param section: Which section to look for option in.
+        @type section: string
+        @param option: The option to read.
+        @type option: string
+        @param fallback: (optional) Default value to return if option is not
+                         found. Defaults itself to None so that the method will
+                         return None if the option is not found.
+        @type fallback: int, bool, str or None.
+        @param option_type: Override the option type.
+        @type option_type: int, bool, str or None. """
+        if option_type is None and fallback is not None:
+            option_type = type(fallback)
+
+        getter = {
+            int: self.getint,
+            float: self.getfloat,
+            bool: self.getboolean,
+            list: self.getlist,
+            tuple: self.getlist,
+            str: self.get,
+            None: self.get,
+
+            # these only work when given explicitly as option_type
+            self.LOG_LEVEL: self.get_log_level,
+            self.RELIST: self.getrelist,
+        }
+
+        return getter[option_type](section, option, fallback=fallback)
+
+    def check_config(self, known_options):
+        """ Check this configuration against a list of known options. Raise an
+        exception if any unknown options are found.
+
+        @param known_options: A dict of sections and options, the key being the
+                              section name and the value a list of option names.
+        @type known_options: dict
+
+        @returns: None
+        @raises PeekabooConfigException: if any unknown sections or options are
+                                         found.
+        """
+        known_sections = known_options.keys()
+        self.check_sections(known_sections)
+
+        # go over sections both allowed and in the config
+        for section in known_sections:
+            self.check_section_options(section, known_options[section])
+
+    def check_sections(self, known_sections):
+        """ Check a list of known section names against this configuration
+
+        @param known_sections: names of known sections
+        @type known_sections: list(string)
+
+        @returns: None
+        @raises PeekabooConfigException: if any unknown sections are found in
+                                         the configuration.
+        """
+        section_diff = set(self.sections()) - set(known_sections)
+        if section_diff:
+            raise PeekabooConfigException(
+                'Unknown section(s) found in config: %s'
+                % ', '.join(section_diff))
+
+    def check_section_options(self, section, known_options):
+        """ Check a config section for unknown options.
+
+        @param section: name of section to check
+        @type section: string
+        @param known_options: list of names of known options to check against
+        @type known_options: list(string)
+
+        @returns: None
+        @raises PeekabooConfigException: if any unknown options are found. """
+        try:
+            section_options = map(
+                # account for option.1 list syntax
+                lambda x: x.split('.')[0],
+                self.options(section))
+        except configparser.NoSectionError:
+            # a non-existant section can have no non-allowed options :)
+            return
+
+        option_diff = set(section_options) - set(known_options)
+        if option_diff:
+            raise PeekabooConfigException(
+                'Unknown config option(s) found in section %s: %s'
+                % (section, ', '.join(option_diff)))
+
+
+class PeekabooConfig(PeekabooConfigParser):
     """ This class represents the Peekaboo configuration. """
     def __init__(self, config_file=None, log_level=None):
         """ Initialise the configuration with defaults, overwrite with command
@@ -91,7 +303,7 @@ class PeekabooConfig(object): # pylint: disable=too-many-instance-attributes
         self.cuckoo_exec = '/opt/cuckoo/bin/cuckoo'
         self.cuckoo_submit = '/opt/cuckoo/bin/cuckoo submit'
         self.cluster_instance_id = 0
-        self.cluster_stale_in_flight_threshold = 1*60*60
+        self.cluster_stale_in_flight_threshold = 15*60
         self.cluster_duplicate_check_interval = 60
 
         # section and option names for the configuration file. key is the above
@@ -99,7 +311,7 @@ class PeekabooConfig(object): # pylint: disable=too-many-instance-attributes
         # file value. Third item can be getter function if special parsing is
         # required.
         config_options = {
-            'log_level': ['logging', 'log_level', self.get_log_level],
+            'log_level': ['logging', 'log_level', self.LOG_LEVEL],
             'log_format': ['logging', 'log_format'],
             'user': ['global', 'user'],
             'group': ['global', 'group'],
@@ -114,7 +326,7 @@ class PeekabooConfig(object): # pylint: disable=too-many-instance-attributes
             'processing_info_dir': ['global', 'processing_info_dir'],
             'report_locale': ['global', 'report_locale'],
             'db_url': ['db', 'url'],
-            'db_log_level': ['db', 'log_level', self.get_log_level],
+            'db_log_level': ['db', 'log_level', self.LOG_LEVEL],
             'ruleset_config': ['ruleset', 'config'],
             'cuckoo_mode': ['cuckoo', 'mode'],
             'cuckoo_url': ['cuckoo', 'url'],
@@ -142,84 +354,40 @@ class PeekabooConfig(object): # pylint: disable=too-many-instance-attributes
         # read configuration file. Note that we require a configuration file
         # here. We may change that if we decide that we want to allow the user
         # to run us with the above defaults only.
-        self.__config = PeekabooConfigParser(self.config_file)
+        PeekabooConfigParser.__init__(self, self.config_file)
 
         # overwrite above defaults in our member variables via indirect access
         settings = vars(self)
-        for (option, config_names) in config_options.items():
-            # maybe use special getter
-            get = self.get
+        check_options = {}
+        for (setting, config_names) in config_options.items():
+            section = config_names[0]
+            option = config_names[1]
+
+            # remember for later checking for unknown options
+            if section not in check_options:
+                check_options[section] = []
+            check_options[section].append(option)
+
+            # maybe force the option's value type
+            option_type = None
             if len(config_names) == 3:
-                get = config_names[2]
+                option_type = config_names[2]
 
             # e.g.:
             # self.log_format = self.get('logging', 'log_format',
             #                            self.log_format)
-            settings[option] = get(config_names[0], config_names[1],
-                                   settings[option])
+            settings[setting] = self.get_by_type(
+                section, option, fallback=settings[setting],
+                option_type=option_type)
+
+        # now check for unknown options
+        self.check_config(check_options)
 
         # Update logging with what we just parsed from the config
         self.setup_logging()
 
         # here we could overwrite defaults and config file with additional
         # command line arguments if required
-
-    def get(self, section, option, default=None, option_type=None):
-        """ Get an option from the configuration file parser. Automatically
-        detects the type from the type of the default if given and calls the
-        right getter method to coerce the value to the correct type.
-
-        @param section: Which section to look for option in.
-        @type section: string
-        @param option: The option to read.
-        @type option: string
-        @param default: (optional) Default value to return if option is not
-                        found. Defaults itself to None so that the method will
-                        return None if the option is not found.
-        @type default: int, bool, str or None.
-        @param option_type: Override the option type.
-        @type option_type: int, bool, str or None. """
-        if option_type is None and default is not None:
-            option_type = type(default)
-
-        getter = {
-            int: self.__config.getint,
-            bool: self.__config.getboolean,
-            str: self.__config.get,
-            None: self.__config.get,
-        }
-
-        try:
-            return getter[option_type](section, option)
-        except configparser.NoSectionError:
-            logger.debug('Configuration section %s not found - using '
-                         'default %s', section, default)
-        except configparser.NoOptionError:
-            logger.debug('Configuration option %s not found in section '
-                         '%s - using default: %s', option, section, default)
-
-        return default
-
-    def get_log_level(self, section, option, default=None):
-        """ Get the log level from the configuration file and parse the string
-        into a logging loglevel such as logging.CRITICAL. Raises config
-        exception if the log level is unknown. Options identical to get(). """
-        levels = {
-            'CRITICAL': logging.CRITICAL,
-            'ERROR': logging.ERROR,
-            'WARNING': logging.WARNING,
-            'INFO': logging.INFO,
-            'DEBUG': logging.DEBUG
-        }
-
-        level = self.get(section, option, None)
-        if level is None:
-            return default
-
-        if level not in levels:
-            raise PeekabooConfigException('Unknown log level %s' % level)
-
-        return levels[level]
 
     def setup_logging(self):
         """ Setup logging to console by reconfiguring the root logger so that
@@ -246,91 +414,5 @@ class PeekabooConfig(object): # pylint: disable=too-many-instance-attributes
                 settings[option] = value
 
         return '<PeekabooConfig(%s)>' % settings
-
-    __repr__ = __str__
-
-
-class PeekabooRulesetConfig(object):
-    """
-    This class represents the ruleset configuration file "ruleset.conf".
-
-    The ruleset configuration is stored as a dictionary in the form of
-    ruleset_config[rule_name][config_option] = value | [value1, value2, ...]
-
-    @since: 1.6
-    """
-    def __init__(self, config_file):
-        self.config_file = config_file
-        self.ruleset_config = {}
-
-        config = PeekabooConfigParser(self.config_file)
-        sections = config.sections()
-        for section in sections:
-            self.ruleset_config[section] = {}
-
-        for section in sections:
-            for setting in config.options(section):
-                # Parse 'setting' into (key) and 'setting.subscript' into
-                # (key, subscript) and use it to determine if this setting is a
-                # list. Note how we do not use the subscript at all here.
-                name_parts = setting.split('.')
-                key = name_parts[0]
-                is_list = len(name_parts) > 1
-
-                saved_val = self.ruleset_config[section].get(key)
-                if saved_val is None and is_list:
-                    saved_val = []
-
-                # If the setting wants to add to a list the saved or freshly
-                # initialised value from above should be a list. Otherwise it
-                # should of course not be.
-                if is_list != isinstance(saved_val, list):
-                    raise PeekabooConfigException(
-                        'Setting %s in section %s specified as list as well '
-                        'as individual setting' % (setting, section))
-
-                # Potential further checks:
-                # - There are no duplicate settings with ConfigParser. The last
-                #   one always wins.
-
-                # special keyword enabled is boolean and has the same behaviour
-                # for all rules
-                if key.lower() in ['enabled']:
-                    saved_val = config.getboolean(section, setting)
-                elif is_list:
-                    saved_val.append(config.get(section, setting))
-                else:
-                    saved_val = config.get(section, setting)
-
-                self.ruleset_config[section][key] = saved_val
-
-    def rule_config(self, rule):
-        """ Get the configuration for a rule.
-
-        @param rule: Name of the rule whose configuration to return.
-        @type rule: string
-        @return: dict of rule configuration settings or None if no
-                 configuration is present. """
-        return self.ruleset_config.get(rule)
-
-    def rule_enabled(self, rule):
-        """ Check if a rule is enabled. Cases are:
-        - no config section for that rule is present
-        - enabled keyword is not present in that section or
-        - the value of the enabled is True (i.e. yes, true, 1 in the file)
-
-        @param rule: Name of the rule to check if enabled or not.
-        @type rule: string
-        @return: True or False based on above criteria.
-        """
-        config = self.rule_config(rule)
-        if config is None:
-            return True
-
-        return config.get('enabled', True)
-
-    def __str__(self):
-        return '<PeekabooRulesetConfiguration(filepath="%s", %s)>' % \
-            (self.config_file, self.ruleset_config)
 
     __repr__ = __str__
