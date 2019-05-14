@@ -4,6 +4,8 @@ See documentation for details.
 
 ## devel
 
+- Distribute and install sample configuration files in/from PyPI source
+  distribution
 - Make list of rules to run configurable in members and order. See
   `ruleset.conf.sample` section `[rules]` for details.
 - Lower default for in-flight lock staleness to 15 minutes.

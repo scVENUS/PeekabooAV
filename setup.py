@@ -25,10 +25,10 @@
 ###############################################################################
 
 
-from setuptools import setup, find_packages
 from codecs import open
-from os import path, system
+from os import path
 from sys import path as pythonpath
+from setuptools import setup, find_packages
 
 # Add peekaboo to PYTHONPATH
 pythonpath.append(path.dirname(path.dirname(path.abspath(__file__))))
@@ -70,6 +70,48 @@ setup(
     keywords='Cuckoo, Amavis',
     packages=find_packages(exclude=['docs', 'tests*']),
     include_package_data=True,
+    # package_files augments MANIFEST.in in what is packaged into a
+    # distribution. Files to add must be inside a package. Thus files in the
+    # root of our source directory cannot be packaged with this. Files inside
+    # packages will stay there, totally obscured to the user. Meant for default
+    # configuration or other package-internal data.
+    #  package_files=[...],
+    #
+    # data_files is another way to augment what is installed from the
+    # distribution. Allows paths outside packages for both sources and targets.
+    # Absolute paths are strongly discouraged because they exhibit confusing if
+    # not downright broken behaviour. Relative paths are added to the
+    # distribution and then installed into
+    # site-packages/<package>-<ver>.egg/<relative path> (setup.py) or <python
+    # prefix>/<relative path> (pip). The latter works well with venvs and
+    # distribution-provided pip (e.g. /usr/local/<relative path>).
+    # We go this route for providing sample files because using setup.py
+    # directly is discouraged anyway and "only" tucks the files away in the egg
+    # directory, providing the most consistent option.
+    data_files=[
+        ("share/doc/peekaboo", [
+            "README.md",
+            "CHANGELOG.md",
+            "peekaboo.conf.sample",
+            "ruleset.conf.sample",
+        ]),
+        ("share/doc/peekaboo/systemd", [
+            "systemd/peekaboo.service",
+        ]),
+        ("share/doc/peekaboo/amavis", [
+            "amavis/10-ask_peekaboo",
+        ]),
+    ],
+    # overriding the whole install_data command allows for arbitrary
+    # installation mechanics but does not solve the problem of adding files to
+    # a binary distribution (e.g. wheel, which pip uses internally always) in
+    # such a way that they will later be put at the correct location. Thus they
+    # would go around pip entirely, be missing from any actual wheel
+    # distribution package, pollute the system directly and not be removed upon
+    # uninstall or upgrade.
+    #  cmdclass={
+    #      'install_data': OffsetDataInstall,
+    #  },
     author=__author__,
     install_requires=install_requires,
     dependency_links=dependency_links,
