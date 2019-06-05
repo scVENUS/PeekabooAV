@@ -50,7 +50,9 @@ named ``/opt/peekaboo/etc/peekaboo.conf``. For details, please run
     $ /opt/peekaboo/bin/peekaboo --help
 
 You can configure Peekaboo according to the sample configuration in
-``peekaboo.conf.sample`` and save it to ``/opt/peekaboo/etc/peekaboo.conf``.
+``/opt/peekaboo/share/doc/peekaboo/peekaboo.conf.sample`` and save it
+to ``/opt/peekaboo/etc/peekaboo.conf``.
+The same directory also contains a sample ``ruleset.conf``.
 
 
 Database Configuration

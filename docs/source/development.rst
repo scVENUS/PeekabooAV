@@ -118,3 +118,35 @@ Please do not forget to turn warnings back on and please do not pollute the
 code with loads of these overrides.
 
 .. _git-lint: https://pypi.org/project/git-lint/
+
+Testing PyPI Interaction
+========================
+
+We test PyPI interaction for unreleased versions, e.g. when testing the
+installer, using `devpi`_.
+
+Quick start: Install devpi, start server, configure devpi client, create user,
+log in, create overlay, configure client to use overlay by default, create
+source distribution, upload and test installation using pip:
+
+.. code-block:: shell
+
+    $ /path/to/your/venv/bin/pip install -U devpi-web devpi-client
+    $ /path/to/your/venv/bin/devpi-server --start --init
+    $ /path/to/your/venv/bin/devpi use http://localhost:3141
+    $ /path/to/your/venv/bin/devpi user -c testuser password=123
+    $ /path/to/your/venv/bin/devpi login testuser --password=123
+    $ /path/to/your/venv/bin/devpi index -c dev bases=root/pypi
+    $ /path/to/your/venv/bin/devpi use testuser/dev
+    $ cd PeekabooAV
+    $ ./setup.py sdist
+    $ /path/to/your/venv/bin/devpi upload
+    $ t=$(mktemp -d)
+    $ virtualenv --python=python3 "$t"
+    $ PIP_INDEX_URL=http://localhost:3141/testuser/dev/+simple/ "$t"/bin/pip install peekabooav
+    $ rm -rf "$t"
+
+Overriding the index to use for testing using ``PIP_INDEX_URL`` can also be
+used with other tools such as Ansible or the Peekaboo Installer.
+
+.. _devpi: https://pypi.org/project/devpi/
