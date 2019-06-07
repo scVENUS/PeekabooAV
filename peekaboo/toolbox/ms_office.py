@@ -32,9 +32,9 @@ from oletools.olevba import VBA_Parser
 logger = logging.getLogger(__name__)
 
 MS_OFFICE_EXTENSIONS = [
-    ".doc", ".docm", ".dotm", ".docx",
-    ".ppt", ".pptm", ".pptx", ".potm", ".ppam", ".ppsm",
-    ".xls", ".xlsm", ".xlsx",
+    "doc", "docm", "dotm", "docx",
+    "ppt", "pptm", "pptx", "potm", "ppam", "ppsm",
+    "xls", "xlsm", "xlsx",
 ]
 
 
@@ -52,6 +52,37 @@ def has_office_macros(office_file):
     try:
         # VBA_Parser reports macros for office documents
         vbaparser = VBA_Parser(office_file)
+        return vbaparser.detect_vba_macros()
+    except TypeError:
+        # The given file is not an office document.
+        return False
+    except Exception as error:
+        logger.exception(error)
+        return False
+
+def has_office_macros_with_auto_action(office_file):
+    """
+    Detects macros for Auto_ actions in Microsoft Office documents.
+
+    @param office_file: The MS Office document to check for Auto_ macros.
+    @return: True if Auto_ macros where found, otherwise False.
+             If VBA_Parser crashes it returns False too.
+    """
+
+    SUSPICIOUS_KEYWORDS = ["AutoOpen", "AutoClose"]
+
+    file_extension = office_file.split('.')[-1]
+    if file_extension not in MS_OFFICE_EXTENSIONS:
+        print("/%s/" % file_extension)
+        return False
+    try:
+        # VBA_Parser reports macros for office documents
+        vbaparser = VBA_Parser(office_file)
+        for (filename, stream_path, vba_filename, vba_code) in vbaparser.extract_macros():
+            for w in  SUSPICIOUS_KEYWORDS:
+                if w in vba_code:
+                    return True
+
         return vbaparser.detect_vba_macros()
     except TypeError:
         # The given file is not an office document.

@@ -224,6 +224,22 @@ class OfficeMacroRule(Rule):
                            True)
 
 
+class OfficeMacroRuleWithAutoAction(Rule):
+    """ A rule checking the sample for Office macros. """
+    rule_name = 'office_macro_with_auto_action'
+
+    def evaluate(self, sample):
+        """ Report the sample as bad if it contains a macro. """
+        if sample.office_macros_with_auto_action:
+            return self.result(Result.bad,
+                               _("The file contains an Office macro which runs at document open"),
+                               False)
+
+        return self.result(Result.unknown,
+                           _("The file does not contain a recognizable "
+                             "Office macro that is run at document open"),
+                           True)
+
 class CuckooRule(Rule):
     """ A common base class for rules that evaluate the Cuckoo report. """
     def evaluate(self, sample):
