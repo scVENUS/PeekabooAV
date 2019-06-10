@@ -224,7 +224,7 @@ class OfficeMacroRule(Rule):
                            True)
 
 
-class OfficeMacroRuleWithAutoAction(Rule):
+class OfficeMacroWithAutoActionRule(Rule):
     """ A rule checking the sample for Office macros. """
     rule_name = 'office_macro_with_auto_action'
 

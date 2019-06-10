@@ -49,7 +49,7 @@ class RulesetEngine(object):
         CuckooEvilSigRule,
         CuckooScoreRule,
         OfficeMacroRule,
-        OfficeMacroRuleWithAutoAction,
+        OfficeMacroWithAutoActionRule,
         RequestsEvilDomainRule,
         CuckooAnalysisFailedRule,
         ContainsPeekabooYarRule,
