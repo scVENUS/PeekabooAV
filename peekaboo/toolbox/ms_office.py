@@ -38,7 +38,7 @@ MS_OFFICE_EXTENSIONS = [
 ]
 
 
-def has_office_macros(office_file):
+def has_office_macros(office_file, file_extension):
     """
     Detects macros in Microsoft Office documents.
 
@@ -46,7 +46,6 @@ def has_office_macros(office_file):
     @return: True if macros where found, otherwise False.
              If VBA_Parser crashes it returns False too.
     """
-    file_extension = office_file.split('.')[-1]
     if file_extension not in MS_OFFICE_EXTENSIONS:
         return False
     try:
@@ -60,7 +59,7 @@ def has_office_macros(office_file):
         logger.exception(error)
         return False
 
-def has_office_macros_with_auto_action(office_file):
+def has_office_macros_with_auto_action(office_file, file_extension):
     """
     Detects macros for Auto_ actions in Microsoft Office documents.
 
@@ -70,10 +69,8 @@ def has_office_macros_with_auto_action(office_file):
     """
 
     SUSPICIOUS_KEYWORDS = ["AutoOpen", "AutoClose"]
-
-    file_extension = office_file.split('.')[-1]
+    print(file_extension)
     if file_extension not in MS_OFFICE_EXTENSIONS:
-        print("/%s/" % file_extension)
         return False
     try:
         # VBA_Parser reports macros for office documents

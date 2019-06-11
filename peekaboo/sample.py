@@ -467,7 +467,7 @@ class Sample(object):
     def office_macros(self):
         """ Determines if this sample contains any office macros. """
         if not self.__office_macros:
-            self.__office_macros = has_office_macros(self.__path)
+            self.__office_macros = has_office_macros(self.__path, self.file_extension)
 
         return self.__office_macros
 
@@ -476,7 +476,7 @@ class Sample(object):
         """ Determines if this sample contains any office macros which
         automatically run at AutoOpen """
         if not self.__office_macros_with_auto_action:
-            self.__office_macros_with_auto_action = has_office_macros_with_auto_action(self.__path)
+            self.__office_macros_with_auto_action = has_office_macros_with_auto_action(self.__path, self.file_extension)
 
         return self.__office_macros_with_auto_action
     @property
