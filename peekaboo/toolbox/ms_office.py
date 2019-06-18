@@ -81,7 +81,7 @@ def has_office_macros_with_auto_action(office_file, file_extension):
                 if w in vba_code:
                     return True
 
-        return vbaparser.detect_vba_macros()
+        return False
     except TypeError:
         # The given file is not an office document.
         return False
