@@ -232,13 +232,15 @@ class OfficeMacroWithAutoActionRule(Rule):
         """ Report the sample as bad if it contains a macro. """
         if sample.office_macros_with_auto_action:
             return self.result(Result.bad,
-                               _("The file contains an Office macro which runs at document open"),
+                               _("The file contains an Office macro which "
+                                 "runs at document open"),
                                False)
 
         return self.result(Result.unknown,
                            _("The file does not contain a recognizable "
                              "Office macro that is run at document open"),
                            True)
+
 
 class CuckooRule(Rule):
     """ A common base class for rules that evaluate the Cuckoo report. """
