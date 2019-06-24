@@ -129,6 +129,9 @@ together with all its dependencies into it:
     $ sudo virtualenv /opt/peekaboo
     $ sudo /opt/peekaboo/bin/pip install .
 
+**Note**: Do not use ``./setup.py install`` for installation since there are
+bugs in setuptools which make dependency resolution fail sometimes.
+
 **Note**: If you want to install Peekaboo for your system wide Python, leave
 out the virtualenv command and just run the system pip as ``root``.
 Dependencies can and will be provided by distribution packages if installed
