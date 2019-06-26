@@ -734,9 +734,9 @@ unknown : baz'''
     def test_rule_has_office_macros_with_suspicious_keyword(self):
         """ Test rule has_office_macros_with_suspicious_keyword. """
         config = '''[office_macro_with_suspicious_keyword]
-keyword.1 : .*AutoOpen.*
-keyword.2 : .*AutoClose.*
-keyword.3 : .*suspicious.*'''
+keyword.1 : AutoOpen
+keyword.2 : AutoClose
+keyword.3 : suSPi.ious'''
         rule = OfficeMacroWithSuspiciousKeyword(CreatingConfigParser(config))
         # sample factory to create samples from real files
         factory1 = SampleFactory(
@@ -752,13 +752,13 @@ keyword.3 : .*suspicious.*'''
             # no office document file extension
             [Result.unknown, factory2.make_sample('test.nodoc', 'test')],
             # test with empty file
-            # caught exception in rule file not found
-            [Result.unknown, factory2.make_sample('empty.doc', '')],
+            [Result.unknown, factory1.make_sample(tests_data_dir+'/office/empty.doc')],
             # office document with 'suspicious' in macro code
-            [Result.bad, factory1.make_sample(tests_data_dir+'/office/suspiciousMacro.doc',
-                                              'test')],
+            [Result.bad, factory1.make_sample(tests_data_dir+'/office/suspiciousMacro.doc')],
             # test with blank word doc
-            [Result.unknown, factory1.make_sample(tests_data_dir+'/office/blank.doc', 'test')],
+            [Result.unknown, factory1.make_sample(tests_data_dir+'/office/blank.doc')],
+            # test with legitimate macro
+            [Result.unknown, factory1.make_sample(tests_data_dir+'/office/legitmacro.xls')]
         ]
         for expected, sample in combinations:
             result = rule.evaluate(sample)
