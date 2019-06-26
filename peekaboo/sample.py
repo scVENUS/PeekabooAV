@@ -39,7 +39,7 @@ from datetime import datetime
 from peekaboo.toolbox.files import guess_mime_type_from_file_contents, \
                                    guess_mime_type_from_filename
 from peekaboo.toolbox.ms_office import has_office_macros, \
-                                       has_office_macros_with_auto_action
+                                       has_office_macros_with_suspicious_keyword
 from peekaboo.ruleset import Result
 
 
@@ -103,7 +103,7 @@ class Sample(object):
         self.__mimetypes = None
         self.__file_extension = None
         self.__office_macros = None
-        self.__office_macros_with_auto_action = None
+        self.__office_macros_with_suspicious_keyword = None
         self.__base_dir = base_dir
         self.__job_hash = None
         self.__job_hash_regex = job_hash_regex
@@ -471,15 +471,6 @@ class Sample(object):
                                                      self.file_extension)
 
         return self.__office_macros
-
-    @property
-    def office_macros_with_auto_action(self):
-        """ Determines if this sample contains any office macros which
-        automatically run at AutoOpen """
-        if not self.__office_macros_with_auto_action:
-            self.__office_macros_with_auto_action = has_office_macros_with_auto_action(self.__path, self.file_extension)
-
-        return self.__office_macros_with_auto_action
 
     @property
     def file_size(self):

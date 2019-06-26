@@ -31,6 +31,7 @@ import logging
 from peekaboo.ruleset import Result, RuleResult
 from peekaboo.exceptions import PeekabooAnalysisDeferred, \
         CuckooSubmitFailedException, PeekabooRulesetConfigError
+from peekaboo.toolbox.ms_office import has_office_macros_with_suspicious_keyword
 
 
 logger = logging.getLogger(__name__)
@@ -224,22 +225,42 @@ class OfficeMacroRule(Rule):
                            True)
 
 
-class OfficeMacroWithAutoActionRule(Rule):
+class OfficeMacroWithSuspiciousKeyword(Rule):
     """ A rule checking the sample for Office macros. """
-    rule_name = 'office_macro_with_auto_action'
+    rule_name = 'office_macro_with_suspicious_keyword'
+
+    def get_config(self):
+        # get list of keywords from config file
+        suspicious_keyword_list = self.get_config_value(
+            'keyword', [])
+        # convert into list of regexes
+        self.suspicious_keywords = []
+        # config.get_by_type does not support flags
+        # so we compile ourself
+        try:
+            for r in suspicious_keyword_list:
+                self.suspicious_keywords.append(re.compile('.*'+r+'.*', re.IGNORECASE))
+        except (ValueError, TypeError) as error:
+            raise Exception(
+                'Failed to compile regular expression "%s" (section %s, '
+                'option %s): %s' % (r, self.rule_name, 'keyword', error))
+        if not self.suspicious_keywords:
+            raise PeekabooRulesetConfigError(
+                "Empty suspicious keyword list, check %s rule config." %
+                self.rule_name)
 
     def evaluate(self, sample):
         """ Report the sample as bad if it contains a macro. """
-        if sample.office_macros_with_auto_action:
+        if has_office_macros_with_suspicious_keyword(sample.file_path, sample.file_extension, self.suspicious_keywords):
             return self.result(Result.bad,
                                _("The file contains an Office macro which "
                                  "runs at document open"),
                                False)
-
-        return self.result(Result.unknown,
-                           _("The file does not contain a recognizable "
-                             "Office macro that is run at document open"),
-                           True)
+        else:
+            return self.result(Result.unknown,
+                                _("The file does not contain a recognizable "
+                                    "Office macro that is run at document open"),
+                                True)
 
 
 class CuckooRule(Rule):

@@ -10,7 +10,8 @@ rule.2  : file_larger_than
 rule.3  : file_type_on_whitelist
 rule.4  : file_type_on_greylist
 #rule.5  : office_macro
-#rule.6 : office_macro_with_auto_action
+#rule.6 : office_macro_with_suspicious_keyword
+
 rule.7  : cuckoo_evil_sig
 rule.8  : cuckoo_score
 #rule.9  : requests_evil_domain
@@ -71,6 +72,10 @@ greylist.33 : application/vnd.ms-powerpoint
 greylist.34 : application/vnd.ms-excel.template.macroEnabled.12
 greylist.35 : application/vnd.ms-excel
 greylist.36 : application/msword
+
+[office_macro_with_suspicious_keyword]
+keyword.1 : AutoOpen
+keyword.2 : AutoClose
 
 [cuckoo_evil_sig]
 signature.1  : A potential heapspray has been detected. .*

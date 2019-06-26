@@ -26,6 +26,7 @@
 """ Tool functions for handling office macros. """
 
 import logging
+import re
 from oletools.olevba import VBA_Parser
 
 
@@ -60,28 +61,34 @@ def has_office_macros(office_file, file_extension):
         return False
 
 
-def has_office_macros_with_auto_action(office_file, file_extension):
+def has_office_macros_with_suspicious_keyword(office_file, file_extension, suspicious_keywords):
     """
-    Detects macros for Auto_ actions in Microsoft Office documents.
+    Detects macros with supplied suspicious keywords in Microsoft Office documents.
 
     @param office_file: The MS Office document to check for Auto_ macros.
-    @return: True if Auto_ macros where found, otherwise False.
+    @param file_extension: The file extension of the original file.
+    @param suspicious_keywords: List of suspicious keyword regexes.
+    @return: True if macros with keywords where found, otherwise False.
              If VBA_Parser crashes it returns False too.
     """
-
-    SUSPICIOUS_KEYWORDS = ["AutoOpen", "AutoClose"]
 
     if file_extension not in MS_OFFICE_EXTENSIONS:
         return False
     try:
         # VBA_Parser reports macros for office documents
         vbaparser = VBA_Parser(office_file)
-        for (_, _, _, vba_code) in vbaparser.extract_macros():
-            for w in SUSPICIOUS_KEYWORDS:
-                if w in vba_code:
-                    return True
 
-        return False
+        suspicious = False
+        vba = vbaparser.reveal()
+        for w in suspicious_keywords:
+            if re.match(w, vba):
+                suspicious = True
+                break
+
+        vbaparser.close()
+        return suspicious
+    except IOError:
+        raise
     except TypeError:
         # The given file is not an office document.
         return False
