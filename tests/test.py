@@ -51,7 +51,8 @@ from peekaboo.ruleset.engine import RulesetEngine
 from peekaboo.ruleset.rules import FileTypeOnWhitelistRule, \
         FileTypeOnGreylistRule, CuckooAnalysisFailedRule, \
         KnownRule, FileLargerThanRule, CuckooEvilSigRule, \
-        CuckooScoreRule, RequestsEvilDomainRule, FinalRule
+        CuckooScoreRule, RequestsEvilDomainRule, FinalRule, \
+        OfficeMacroWithSuspiciousKeyword
 from peekaboo.toolbox.cuckoo import CuckooReport
 from peekaboo.db import PeekabooDatabase, PeekabooDatabaseError
 # pylint: enable=wrong-import-position
@@ -729,6 +730,39 @@ unknown : baz'''
         for expected, types in combinations:
             result = rule.evaluate(MimetypeSample(types))
             self.assertEqual(result.further_analysis, expected)
+
+    def test_rule_has_office_macros_with_suspicious_keyword(self):
+        """ Test rule has_office_macros_with_suspicious_keyword. """
+        config = '''[office_macro_with_suspicious_keyword]
+keyword.1 : .*AutoOpen.*
+keyword.2 : .*AutoClose.*
+keyword.3 : .*suspicious.*'''
+        rule = OfficeMacroWithSuspiciousKeyword(CreatingConfigParser(config))
+        # sample factory to create samples from real files
+        factory1 = SampleFactory(
+            cuckoo=None, base_dir=None, job_hash_regex=None,
+            keep_mail_data=False, processing_info_dir=None)
+        # sampe factory to create samples with defined content
+        factory2 = CreatingSampleFactory(
+            cuckoo=None, base_dir=None, job_hash_regex=None,
+            keep_mail_data=False, processing_info_dir=None)
+        tests_data_dir = os.path.dirname(os.path.abspath(__file__))+"/test-data"
+
+        combinations = [
+            # no office document file extension
+            [Result.unknown, factory2.make_sample('test.nodoc', 'test')],
+            # test with empty file
+            # caught exception in rule file not found
+            [Result.unknown, factory2.make_sample('empty.doc', '')],
+            # office document with 'suspicious' in macro code
+            [Result.bad, factory1.make_sample(tests_data_dir+'/office/suspiciousMacro.doc',
+                                              'test')],
+            # test with blank word doc
+            [Result.unknown, factory1.make_sample(tests_data_dir+'/office/blank.doc', 'test')],
+        ]
+        for expected, sample in combinations:
+            result = rule.evaluate(sample)
+            self.assertEqual(result.result, expected)
 
     def test_config_file_type_on_whitelist(self):
         """ Test whitelist rule configuration. """
