@@ -11,7 +11,6 @@ rule.3  : file_type_on_whitelist
 rule.4  : file_type_on_greylist
 #rule.5  : office_macro
 #rule.6 : office_macro_with_suspicious_keyword
-
 rule.7  : cuckoo_evil_sig
 rule.8  : cuckoo_score
 #rule.9  : requests_evil_domain
@@ -165,5 +164,4 @@ domain.1 : canarytokens.com
 # - known
 # - contains_peekabooyar
 # - office_macro
-# - office_macro_with_auto_action
 # - final_rule
