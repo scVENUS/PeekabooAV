@@ -44,6 +44,7 @@ class RulesetEngine(object):
     known_rules = [
         KnownRule,
         FileLargerThanRule,
+        ExpressionRule,
         FileTypeOnWhitelistRule,
         FileTypeOnGreylistRule,
         CuckooEvilSigRule,

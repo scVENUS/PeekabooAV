@@ -29,6 +29,7 @@
 import re
 import logging
 from peekaboo.ruleset import Result, RuleResult
+from peekaboo.ruleset.expressions import ExpressionParser
 from peekaboo.exceptions import PeekabooAnalysisDeferred, \
         CuckooSubmitFailedException, PeekabooRulesetConfigError
 from peekaboo.toolbox.ole import Oletools, OletoolsReport, \
@@ -465,6 +466,44 @@ class CuckooAnalysisFailedRule(CuckooRule):
         logger.debug('Neither success nor failure indicators found, '
                      'considering analysis failed.')
         return self.result(Result.failed, failure_reason, False)
+
+
+class ExpressionRule(Rule):
+    """ A rule checking the sample and cuckoo report against an almost
+    arbitrary logical expression. """
+    rule_name = 'expressions'
+
+    def get_config(self):
+        expressions = self.get_config_value('expression', [])
+        if not expressions:
+            raise PeekabooRulesetConfigError(
+                "List of expressions empty, check %s rule config."
+                % self.rule_name)
+
+        self.rules = []
+        parser = ExpressionParser()
+        for expr in expressions:
+            try:
+                rule = parser.parse(expr)
+                logger.debug("EXPR: %s", expr)
+                logger.debug("RULE: %s", rule)
+                self.rules.append(rule)
+            except SyntaxError as error:
+                raise PeekabooRulesetConfigError(error)
+
+    def evaluate(self, sample):
+        """ Match what rules report against our known result status names. """
+        for rule in self.rules:
+            result = rule.eval(context = {'variables': {'sample': sample}})
+            if result:
+                return self.result(result,
+                                   _("A rule classified the sample as %s")
+                                   % result,
+                                   False)
+
+        return self.result(Result.unknown,
+                           _("No rule classified the sample in any way."),
+                           True)
 
 
 class FinalRule(Rule):

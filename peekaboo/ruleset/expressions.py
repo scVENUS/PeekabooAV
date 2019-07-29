@@ -1,21 +1,44 @@
-#!/usr/bin/env python
-
-# PoC for generic rules evaluating sample and report properties
-# based on pyparsing's eval_arith.py
+###############################################################################
+#                                                                             #
+# Peekaboo Extended Email Attachment Behavior Observation Owl                 #
+#                                                                             #
+# ruleset/                                                                    #
+#         expressions.py                                                      #
+###############################################################################
+#                                                                             #
+# Copyright (C) 2016-2019  science + computing ag                             #
+# Based on pyparsing's eval_arith.py.
 # Copyright 2009, 2011 Paul McGuire
+#                                                                             #
+# This program is free software: you can redistribute it and/or modify        #
+# it under the terms of the GNU General Public License as published by        #
+# the Free Software Foundation, either version 3 of the License, or (at       #
+# your option) any later version.                                             #
+#                                                                             #
+# This program is distributed in the hope that it will be useful, but         #
+# WITHOUT ANY WARRANTY; without even the implied warranty of                  #
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU           #
+# General Public License for more details.                                    #
+#                                                                             #
+# You should have received a copy of the GNU General Public License           #
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.       #
+#                                                                             #
+###############################################################################
+
+""" A simple expression grammar used for writing generic rules. """
 
 from future.builtins import super
 
 import logging
 import operator
 import re
+from peekaboo.ruleset import Result
 from pyparsing import nums, alphas, alphanums, Word, Combine, Suppress, \
     oneOf, opAssoc, infixNotation, Literal, Keyword, Group, \
     delimitedList, QuotedString, ParserElement, ParseException
 
-logging.basicConfig()
+
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 
 class EvalBase(object):
@@ -31,6 +54,7 @@ class EvalBase(object):
         self.value = self.token = tokens[0]
         self.context = None
         self.convert()
+        self.string_repr_format = "(%s)"
 
     def convert(self):
         """ Method to (optionally) convert the input token(s) into something
@@ -64,6 +88,9 @@ class EvalBase(object):
         context for possible feedback to our parent or from our children. """
         self.set_context(context)
         return self.value
+
+    def __str__(self):
+        return self.string_repr_format % " ".join(["%s" % x for x in self.token])
 
 
 class EvalBoolean(EvalBase):
@@ -193,6 +220,10 @@ class EvalRegexIterableMixIn(object):
 
 class EvalList(EvalRegexIterableMixIn, EvalBase):
     """ Class to evaluate a parsed list """
+    def __init__(self, token):
+        super().__init__(token)
+        self.string_repr_format = "[%s]"
+
     def eval(self, context):
         self.set_context(context)
         logger.debug("List: %s", self.value)
@@ -206,6 +237,10 @@ class EvalList(EvalRegexIterableMixIn, EvalBase):
 
 class EvalSet(EvalRegexIterableMixIn, EvalBase):
     """ Class to evaluate a parsed list """
+    def __init__(self, token):
+        super().__init__(token)
+        self.string_repr_format = "{%s}"
+
     def eval(self, context):
         self.set_context(context)
         logger.debug("Set: %s", self.value)
@@ -225,6 +260,21 @@ class EvalIdentifier(EvalBase):
             return self.value
 
         return context['variables'][self.value]
+
+
+class EvalResult(EvalBase):
+    """ Class to evaluate a analysis result """
+    def convert(self):
+        logger.debug("Result: %s", self.token)
+        result_map = {
+            'fail': Result.failed,
+            'ignore': Result.ignored,
+        }
+
+        if self.token in result_map:
+            self.value = result_map[self.token]
+        else:
+            self.value = Result[self.token]
 
 
 class EvalModifier(EvalBase):
@@ -301,7 +351,7 @@ class EvalArith(EvalBase):
                 if ret:
                     ret = self.subeval(val)
                 else:
-                    ret = "unknown"
+                    ret = None
             else:
                 raise ValueError('Invalid operator %s' % op)
 
@@ -340,7 +390,8 @@ class EvalLogic(EvalBase):
         """ Naively implement non-membership test. """
         return a not in b
 
-    def handle_regexes(self, function, val1, val2):
+    @staticmethod
+    def handle_regexes(function, val1, val2):
         """ Special handling of equality and membership checks for regular
         expressions. """
         if (function in (operator.eq, operator.ne)
@@ -380,122 +431,74 @@ class EvalLogic(EvalBase):
         return False
 
 
-class Sample(object):
-    """ A dummy sample. """
-    def __init__(self, a, b):
-        self.a = a
-        self.b = b
-
-
-class Report(object):
-    """ A dummy report. """
-    def __init__(self, a, c):
-        self.a = a
-        self.__c = c
-
-    @property
-    def signatures(self):
-        """ Some dummy signatures. """
-        return ['ra', 'ri', 'reari']
-
-    @property
-    def c(self):
-        """ c """
-        return self.__c
-
-
-def main():
+class ExpressionParser():
     """ Define and run the parser. """
-    # speed up infixNotation considerably at the price of some cache memory
-    ParserElement.enablePackrat()
+    def __init__(self):
+        # speed up infixNotation considerably at the price of some cache memory
+        ParserElement.enablePackrat()
 
-    boolean = Keyword('True') | Keyword('False')
-    integer = Word(nums)
-    real = Combine(Word(nums) + "." + Word(nums))
-    string = QuotedString('"', escChar='\\') | QuotedString("'", escChar='\\')
-    regex = QuotedString('/', escChar='\\')
-    identifier = Word(alphas, alphanums + '_')
-    dereference = infixNotation(identifier, [
-        (Literal('.'), 2, opAssoc.LEFT, EvalArith),
-    ])
-    rval = boolean | real | integer | string | regex | dereference
-    rvallist = Group(Suppress('[') + delimitedList(rval) + Suppress(']'))
-    rvalset = Group(Suppress('{') + delimitedList(rval) + Suppress('}'))
-    operand = rval | rvallist | rvalset
+        boolean = Keyword('True') | Keyword('False')
+        integer = Word(nums)
+        real = Combine(Word(nums) + "." + Word(nums))
+        string = QuotedString('"', escChar='\\') | QuotedString("'", escChar='\\')
+        regex = QuotedString('/', escChar='\\')
+        identifier = Word(alphas, alphanums + '_')
+        dereference = infixNotation(identifier, [
+            (Literal('.'), 2, opAssoc.LEFT, EvalArith),
+        ])
+        result = (Keyword('bad') | Keyword('fail') | Keyword('good')
+                | Keyword('ignore') | Keyword('unknown'))
+        rval = boolean | real | integer | string | regex | result | dereference
+        rvallist = Group(Suppress('[') + delimitedList(rval) + Suppress(']'))
+        rvalset = Group(Suppress('{') + delimitedList(rval) + Suppress('}'))
+        operand = rval | rvallist | rvalset
 
-    # parse actions replace the parsed tokens with an instantiated object which
-    # we can later call into for evaluation of its content
-    boolean.setParseAction(EvalBoolean)
-    integer.setParseAction(EvalInteger)
-    real.setParseAction(EvalReal)
-    string.setParseAction(EvalString)
-    regex.setParseAction(EvalRegex)
-    identifier.setParseAction(EvalIdentifier)
-    rvallist.setParseAction(EvalList)
-    rvalset.setParseAction(EvalSet)
+        # parse actions replace the parsed tokens with an instantiated object which
+        # we can later call into for evaluation of its content
+        boolean.setParseAction(EvalBoolean)
+        integer.setParseAction(EvalInteger)
+        real.setParseAction(EvalReal)
+        string.setParseAction(EvalString)
+        regex.setParseAction(EvalRegex)
+        identifier.setParseAction(EvalIdentifier)
+        result.setParseAction(EvalResult)
+        rvallist.setParseAction(EvalList)
+        rvalset.setParseAction(EvalSet)
 
-    identity_test = Keyword('is') + ~Keyword('not') | Combine(
-        Keyword('is') + Keyword('not'), adjacent=False, joinString=' ')
-    membership_test = Keyword('in') | Combine(
-        Keyword('not') + Keyword('in'), adjacent=False, joinString=' ')
-    comparison_op = oneOf('< <= > >= != == isdisjoint')
-    comparison = identity_test | membership_test | comparison_op
+        identity_test = Keyword('is') + ~Keyword('not') | Combine(
+            Keyword('is') + Keyword('not'), adjacent=False, joinString=' ')
+        membership_test = Keyword('in') | Combine(
+            Keyword('not') + Keyword('in'), adjacent=False, joinString=' ')
+        comparison_op = oneOf('< <= > >= != == isdisjoint')
+        comparison = identity_test | membership_test | comparison_op
 
-    expression = infixNotation(operand, [
-        (Literal('**'), 2, opAssoc.LEFT, EvalPower),
-        (oneOf('+ - ~'), 1, opAssoc.RIGHT, EvalModifier),
-        (oneOf('* / // %'), 2, opAssoc.LEFT, EvalArith),
-        (oneOf('+ -'), 2, opAssoc.LEFT, EvalArith),
-        (oneOf('<< >>'), 2, opAssoc.LEFT, EvalArith),
-        (Literal('&'), 2, opAssoc.LEFT, EvalArith),
-        (Literal('^'), 2, opAssoc.LEFT, EvalArith),
-        (Literal('|'), 2, opAssoc.LEFT, EvalArith),
-        (comparison, 2, opAssoc.LEFT, EvalLogic),
-        (Keyword('not'), 1, opAssoc.RIGHT, EvalModifier),
-        (Keyword('and'), 2, opAssoc.LEFT, EvalLogic),
-        (Keyword('or'), 2, opAssoc.LEFT, EvalLogic),
-        (Keyword('->'), 2, opAssoc.LEFT, EvalArith),
-    ])
+        self.parser = infixNotation(operand, [
+            (Literal('**'), 2, opAssoc.LEFT, EvalPower),
+            (oneOf('+ - ~'), 1, opAssoc.RIGHT, EvalModifier),
+            (oneOf('* / // %'), 2, opAssoc.LEFT, EvalArith),
+            (oneOf('+ -'), 2, opAssoc.LEFT, EvalArith),
+            (oneOf('<< >>'), 2, opAssoc.LEFT, EvalArith),
+            (Literal('&'), 2, opAssoc.LEFT, EvalArith),
+            (Literal('^'), 2, opAssoc.LEFT, EvalArith),
+            (Literal('|'), 2, opAssoc.LEFT, EvalArith),
+            (comparison, 2, opAssoc.LEFT, EvalLogic),
+            (Keyword('not'), 1, opAssoc.RIGHT, EvalModifier),
+            (Keyword('and'), 2, opAssoc.LEFT, EvalLogic),
+            (Keyword('or'), 2, opAssoc.LEFT, EvalLogic),
+            (Keyword('->'), 2, opAssoc.LEFT, EvalArith),
+        ])
 
-    rules = [
-        '(sample1.a - sample2.b) == 0',
-        '(sample2.a - report1.c) == 9',
-        'sample2.a - sample2.b / 2',
-        '(sample2.a - sample2.b) / 5',
-        'sample2.a in [5, 7]',
-        'sample2.a not in [sample2.a, 7]',
-        'sample1.a is sample1.a',
-        'sample1.a is not sample2.a',
-        '{sample1.a, 5, "10"} == {sample2.a }',
-        '1 >= 0 and 2 <= 1 or 5>=1 and True',
-        '/re/ != ["ra", "re"]',
-        '/ri/ != ["ra", "rarera"]',
-        '/re/ in ["ra", "re"]',
-        '/ri/ not in ["ra", "rarera"]',
-        '[/ra/, /re/] in report1.signatures -> "bar"',
-    ]
-
-    context = {
-        'variables': {
-            'sample1': Sample(10, 5),
-            'sample2': Sample(11, 6),
-            'report1': Report(1, 2),
-            'report2': Report(3, 4),
-        },
-    }
-
-    for rule in rules:
+    def parse(self, expression):
+        """ Parse an expression and return an object supporting evaluation of
+        that expression against a context. """
         try:
-            ret = expression.parseString(rule, parseAll=True)
+            return self.parser.parseString(expression, parseAll=True)[0]
         except ParseException as parse_error:
             col = parse_error.col
-            logger.error(
-                "Expression parse error near character %d: %s>>%s<<%s",
-                parse_error.col, rule[0:col], rule[col], rule[col+1:])
-            break
-
-        print(ret)
-        print(rule, ret[0].eval(context))
+            raise SyntaxError(
+                "Expression parse error near character %d: %s>>%s<<%s" % (
+                parse_error.col, expression[0:col], expression[col],
+                expression[col+1:]))
 
 if __name__ == '__main__':
-    main()
+    print(ExpressionParser().parse('foo == (bar - blub)'))
