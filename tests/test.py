@@ -52,7 +52,9 @@ from peekaboo.ruleset.rules import FileTypeOnWhitelistRule, \
         FileTypeOnGreylistRule, CuckooAnalysisFailedRule, \
         KnownRule, FileLargerThanRule, CuckooEvilSigRule, \
         CuckooScoreRule, RequestsEvilDomainRule, FinalRule, \
-        OfficeMacroRule, OfficeMacroWithSuspiciousKeyword
+        OfficeMacroRule, OfficeMacroWithSuspiciousKeyword, \
+        ExpressionRule
+
 from peekaboo.toolbox.cuckoo import CuckooReport
 from peekaboo.db import PeekabooDatabase, PeekabooDatabaseError
 # pylint: enable=wrong-import-position
@@ -779,6 +781,25 @@ unknown : baz'''
         for expected, sample in combinations:
             result = rule.evaluate(sample)
             self.assertEqual(result.result, expected)
+
+    def test_rule_ignore_smime_signature(self):
+        """ Test rule to ignore smime signatures. """
+        config = '''[expressions]
+expression.4  : sample.meta_info_name_declared == 'smime.p7s' and sample.meta_info_type_declared in {'application/pkcs7-signature', 'application/x-pkcs7-signature', 'application/pkcs7-mime', 'application/x-pkcs7-mime'} -> ignore'''
+
+        part = { "full_name": "smime.p7s",
+                 "name_declared": "smime.p7s",
+                 "type_declared": "application/pkcs7-signature"
+               }
+
+        factory = SampleFactory(
+            cuckoo=None, base_dir=None, job_hash_regex=None,
+            keep_mail_data=False, processing_info_dir=None)
+        sample = factory.make_sample('', metainfo=part)
+
+        rule = ExpressionRule(CreatingConfigParser(config))
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.ignored)
 
     def test_config_file_type_on_whitelist(self):
         """ Test whitelist rule configuration. """
