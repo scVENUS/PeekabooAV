@@ -423,25 +423,6 @@ class Sample(object):
         if self.name_declared:
             declared_filename = self.name_declared
 
-        # check if the sample is an S/MIME signature (smime.p7s)
-        # If so, don't overwrite the MIME type since we do not want to analyse
-        # S/MIME signatures.
-        # FIXME: This is oddly specific for this generic routine. Should it be
-        # some sort of callback or plugin?
-        leave_alone_types = {
-            'p7s': [
-                'application/pkcs7-signature',
-                'application/x-pkcs7-signature',
-                'application/pkcs7-mime',
-                'application/x-pkcs7-mime',
-            ]
-        }
-
-        if declared_filename == 'smime.p7s' and declared_mt in leave_alone_types['p7s']:
-            logger.info('S/MIME signature detected. Using declared MIME type over detected ones.')
-            self.__mimetypes = set([declared_mt])
-            return self.__mimetypes
-
         # determine mime on original p[0-9]* file
         # result of __submit_path would be "inode/symlink"
         content_based_mime_type = guess_mime_type_from_file_contents(self.__path)
