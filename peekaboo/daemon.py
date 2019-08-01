@@ -351,6 +351,7 @@ def run():
     # otherwise it's the new API method and default
     else:
         cuckoo = CuckooApi(job_queue, config.cuckoo_url,
+                           config.cuckoo_api_token,
                            config.cuckoo_poll_interval)
 
     sig_handler = SignalHandler()

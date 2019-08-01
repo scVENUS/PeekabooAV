@@ -268,10 +268,11 @@ class WhitelistRetry(urllib3.util.retry.Retry):
 
 class CuckooApi(Cuckoo):
     """ Interfaces with a Cuckoo installation via its REST API. """
-    def __init__(self, job_queue, url="http://localhost:8090", poll_interval=5,
+    def __init__(self, job_queue, url="http://localhost:8090", api_token="", poll_interval=5,
                  retries=5, backoff=0.5):
         super().__init__(job_queue)
         self.url = url
+        self.api_token = api_token
         self.poll_interval = poll_interval
 
         # urrlib3 backoff formula:
@@ -305,9 +306,10 @@ class CuckooApi(Cuckoo):
     def __get(self, path):
         request_url = "%s/%s" % (self.url, path)
         logger.debug("Getting %s", request_url)
+        headers = {"Authorization": "Bearer %s" % self.api_token}
 
         try:
-            response = self.session.get(request_url)
+            response = self.session.get(request_url, headers=headers)
         # all requests exceptions are derived from RequestsException, including
         # RetryError, TooManyRedirects and Timeout
         except requests.exceptions.RequestException as error:
@@ -336,10 +338,11 @@ class CuckooApi(Cuckoo):
         files = {"file": (filename, open(path, 'rb'))}
         logger.debug("Creating Cuckoo task with content from %s and "
                      "filename %s", path, filename)
+        headers = {"Authorization": "Bearer %s" % self.api_token}
 
         try:
             response = self.session.post(
-                "%s/tasks/create/file" % self.url, files=files)
+                "%s/tasks/create/file" % self.url, headers=headers, files=files)
         except requests.exceptions.RequestException as error:
             raise CuckooSubmitFailedException(
                 'Error creating Cuckoo task: %s' % error)
