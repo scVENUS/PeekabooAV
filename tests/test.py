@@ -787,7 +787,7 @@ unknown : baz'''
         config = '''[expressions]
 expression.4  : sample.meta_info_name_declared == 'smime.p7s' and sample.meta_info_type_declared in {'application/pkcs7-signature', 'application/x-pkcs7-signature', 'application/pkcs7-mime', 'application/x-pkcs7-mime'} -> ignore'''
 
-        part = { "full_name": "smime.p7s",
+        part = { "full_name": "p001",
                  "name_declared": "smime.p7s",
                  "type_declared": "application/pkcs7-signature"
                }
@@ -795,11 +795,16 @@ expression.4  : sample.meta_info_name_declared == 'smime.p7s' and sample.meta_in
         factory = SampleFactory(
             cuckoo=None, base_dir=None, job_hash_regex=None,
             keep_mail_data=False, processing_info_dir=None)
-        sample = factory.make_sample('', metainfo=part)
 
+        sample = factory.make_sample('', metainfo=part)
         rule = ExpressionRule(CreatingConfigParser(config))
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.ignored)
+
+        sample.meta_info_name_declared = "file"
+        rule = ExpressionRule(CreatingConfigParser(config))
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.unknown)
 
     def test_config_file_type_on_whitelist(self):
         """ Test whitelist rule configuration. """
