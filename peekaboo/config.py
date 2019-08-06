@@ -298,6 +298,7 @@ class PeekabooConfig(PeekabooConfigParser):
         self.ruleset_config = '/opt/peekaboo/etc/ruleset.conf'
         self.cuckoo_mode = "api"
         self.cuckoo_url = 'http://127.0.0.1:8090'
+        self.cuckoo_api_token = ''
         self.cuckoo_poll_interval = 5
         self.cuckoo_storage = '/var/lib/peekaboo/.cuckoo/storage'
         self.cuckoo_exec = '/opt/cuckoo/bin/cuckoo'
@@ -330,6 +331,7 @@ class PeekabooConfig(PeekabooConfigParser):
             'ruleset_config': ['ruleset', 'config'],
             'cuckoo_mode': ['cuckoo', 'mode'],
             'cuckoo_url': ['cuckoo', 'url'],
+            'cuckoo_api_token': ['cuckoo', 'api_token'],
             'cuckoo_poll_interval': ['cuckoo', 'poll_interval'],
             'cuckoo_storage': ['cuckoo', 'storage_path'],
             'cuckoo_exec': ['cuckoo', 'exec'],

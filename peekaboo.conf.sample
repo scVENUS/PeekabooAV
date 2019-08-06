@@ -79,6 +79,10 @@
 # api mode
 #url              :    http://127.0.0.1:8090
 #poll_interval    :    5
+# From version 2.0.7 cuckoo API has authentication support.
+# New installations create a bearer token by default and require it but upgraded
+# installations don't automatically get one.
+#api_token        :    <empty>
 
 [cluster]
 # if multiple instances are to run in parallel and avoid concurrent analysis of
