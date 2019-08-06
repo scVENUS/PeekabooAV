@@ -252,6 +252,10 @@ class EvalSet(EvalRegexIterableMixIn, EvalBase):
         return ret
 
 
+class IdentifierMissingException(KeyError):
+    pass
+
+
 class EvalIdentifier(EvalBase):
     """ Class to evaluate a parsed object name """
     def eval(self, context):
@@ -259,7 +263,10 @@ class EvalIdentifier(EvalBase):
         if 'member' in context and context['member']:
             return self.value
 
-        return context['variables'][self.value]
+        try:
+            return context['variables'][self.value]
+        except KeyError as e:
+            raise IdentifierMissingException(e.message)
 
 
 class EvalResult(EvalBase):

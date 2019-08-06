@@ -806,6 +806,29 @@ expression.4  : sample.meta_info_name_declared == 'smime.p7s' and sample.meta_in
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
+    def test_rule_expressions(self):
+        """ Test generic rule on cuckoo report. """
+        config = '''[expressions]
+            expression.1  : /DDE/ in cuckooreport.signature_descriptions -> bad
+        '''
+
+        report = {
+            "signatures": [
+                { "description": "Malicious document featuring Office DDE has been identified" }
+            ]
+        }
+        cuckooreport = CuckooReport(report)
+
+        factory = SampleFactory(
+            cuckoo=None, base_dir=None, job_hash_regex=None,
+            keep_mail_data=False, processing_info_dir=None)
+
+        sample = factory.make_sample('')
+        sample.register_cuckoo_report(cuckooreport)
+        rule = ExpressionRule(CreatingConfigParser(config))
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.bad)
+
     def test_config_file_type_on_whitelist(self):
         """ Test whitelist rule configuration. """
         config = '''[file_type_on_whitelist]

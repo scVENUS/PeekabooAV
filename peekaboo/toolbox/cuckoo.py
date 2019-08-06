@@ -535,6 +535,20 @@ class CuckooReport(object):
             return []
 
     @property
+    def signature_descriptions(self):
+        """
+        Gets the description of triggered Cuckoo signatures from report.
+
+        @returns: The description of triggered signatures from the Cuckoo
+                  report or empty list if there was an error parsing the
+                  Cuckoo report.
+        """
+        descriptions = []
+        for sig in self.signatures:
+            descriptions.append(sig['description'])
+        return descriptions
+
+    @property
     def score(self):
         """
         Gets the score from the Cuckoo report.
