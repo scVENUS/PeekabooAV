@@ -782,6 +782,32 @@ unknown : baz'''
             result = rule.evaluate(sample)
             self.assertEqual(result.result, expected)
 
+    def test_rule_ignore_generic_whitelist(self):
+        """ Test rule to ignore file types on whitelist. """
+        config = '''[expressions]
+            expression.4  : sample.mimetypes <= {'text/plain', 'inode/x-empty', 'image/jpeg'} -> ignore
+        '''
+        factory = CreatingSampleFactory(
+            cuckoo=None, base_dir="",
+            job_hash_regex="", keep_mail_data=False,
+            processing_info_dir=None)
+
+        sample = factory.create_sample('file.txt', 'abc')
+        rule = ExpressionRule(CreatingConfigParser(config))
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.ignored)
+
+        sample = factory.create_sample('file.html', '<html')
+        rule = ExpressionRule(CreatingConfigParser(config))
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.unknown)
+
+        # bzip2 compressed data
+        sample = factory.create_sample('file.txt', 'BZh91AY=')
+        rule = ExpressionRule(CreatingConfigParser(config))
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.unknown)
+
     def test_rule_ignore_smime_signature(self):
         """ Test rule to ignore smime signatures. """
         config = '''[expressions]
