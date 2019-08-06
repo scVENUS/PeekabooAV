@@ -231,27 +231,16 @@ class OfficeMacroWithSuspiciousKeyword(Rule):
 
     def get_config(self):
         # get list of keywords from config file
-        suspicious_keyword_list = self.get_config_value(
-            'keyword', [])
-        # convert into list of regexes
-        self.suspicious_keywords = []
-        # config.get_by_type does not support flags
-        # so we compile ourself
-        try:
-            for r in suspicious_keyword_list:
-                self.suspicious_keywords.append(re.compile('.*'+r+'.*', re.IGNORECASE))
-        except (ValueError, TypeError) as error:
-            raise Exception(
-                'Failed to compile regular expression "%s" (section %s, '
-                'option %s): %s' % (r, self.rule_name, 'keyword', error))
-        if not self.suspicious_keywords:
+        self.suspicious_keyword_list = self.get_config_value(
+            'keyword', [], option_type=self.config.IRELIST)
+        if not self.suspicious_keyword_list:
             raise PeekabooRulesetConfigError(
                 "Empty suspicious keyword list, check %s rule config." %
                 self.rule_name)
 
     def evaluate(self, sample):
         """ Report the sample as bad if it contains a macro. """
-        if has_office_macros_with_suspicious_keyword(sample.file_path, sample.file_extension, self.suspicious_keywords):
+        if has_office_macros_with_suspicious_keyword(sample.file_path, sample.file_extension, self.suspicious_keyword_list):
             return self.result(Result.bad,
                                _("The file contains an Office macro which "
                                  "runs at document open"),

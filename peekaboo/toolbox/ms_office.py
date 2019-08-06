@@ -81,7 +81,7 @@ def has_office_macros_with_suspicious_keyword(office_file, file_extension, suspi
         suspicious = False
         vba = vbaparser.reveal()
         for w in suspicious_keywords:
-            if re.match(w, vba):
+            if re.search(w, vba):
                 suspicious = True
                 break
 
