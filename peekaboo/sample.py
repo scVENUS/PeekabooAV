@@ -38,8 +38,6 @@ from builtins import open
 from datetime import datetime
 from peekaboo.toolbox.files import guess_mime_type_from_file_contents, \
                                    guess_mime_type_from_filename
-from peekaboo.toolbox.ms_office import has_office_macros, \
-                                       has_office_macros_with_suspicious_keyword
 from peekaboo.ruleset import Result
 
 
@@ -92,6 +90,7 @@ class Sample(object):
         self.__submit_path = None
         self.__cuckoo_job_id = -1
         self.__cuckoo_report = None
+        self.__oletools_report = None
         self.__done = False
         self.__status_change = status_change
         self.__result = Result.unchecked
@@ -102,8 +101,6 @@ class Sample(object):
         self.__sha256sum = None
         self.__mimetypes = None
         self.__file_extension = None
-        self.__office_macros = None
-        self.__office_macros_with_suspicious_keyword = None
         self.__base_dir = base_dir
         self.__job_hash = None
         self.__job_hash_regex = job_hash_regex
@@ -464,15 +461,6 @@ class Sample(object):
         return self.__cuckoo_job_id
 
     @property
-    def office_macros(self):
-        """ Determines if this sample contains any office macros. """
-        if not self.__office_macros:
-            self.__office_macros = has_office_macros(self.__path,
-                                                     self.file_extension)
-
-        return self.__office_macros
-
-    @property
     def file_size(self):
         """ Determine and cache sample file size
 
@@ -486,6 +474,11 @@ class Sample(object):
     def cuckoo_report(self):
         """ Returns the cuckoo report """
         return self.__cuckoo_report
+
+    @property
+    def oletools_report(self):
+        """ Returns the oletools report """
+        return self.__oletools_report
 
     @property
     def submit_path(self):
@@ -508,6 +501,10 @@ class Sample(object):
     def register_cuckoo_report(self, report):
         """ Records a Cuckoo report for later evaluation. """
         self.__cuckoo_report = report
+
+    def register_oletools_report(self, report):
+        """ Records a Oletools report for alter evaluation. """
+        self.__oletools_report = report
 
     def cleanup(self):
         """ Clean up after the sample has been analysed, removing a potentially

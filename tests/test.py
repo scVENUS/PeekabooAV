@@ -52,7 +52,7 @@ from peekaboo.ruleset.rules import FileTypeOnWhitelistRule, \
         FileTypeOnGreylistRule, CuckooAnalysisFailedRule, \
         KnownRule, FileLargerThanRule, CuckooEvilSigRule, \
         CuckooScoreRule, RequestsEvilDomainRule, FinalRule, \
-        OfficeMacroWithSuspiciousKeyword
+        OfficeMacroRule, OfficeMacroWithSuspiciousKeyword
 from peekaboo.toolbox.cuckoo import CuckooReport
 from peekaboo.db import PeekabooDatabase, PeekabooDatabaseError
 # pylint: enable=wrong-import-position
@@ -538,7 +538,6 @@ class TestSample(unittest.TestCase):
         self.assertEqual(self.sample.cuckoo_report, None)
         self.assertEqual(self.sample.done, False)
         self.assertEqual(self.sample.submit_path, None)
-        self.assertFalse(self.sample.office_macros)
         self.assertEqual(self.sample.file_size, 4)
 
     def test_4_initialised_sample_attributes(self):
@@ -566,7 +565,6 @@ class TestSample(unittest.TestCase):
         self.assertEqual(self.sample.done, False)
         self.assertRegexpMatches(
             self.sample.submit_path, '/%s.py$' % self.sample.sha256sum)
-        self.assertFalse(self.sample.office_macros)
         self.assertEqual(self.sample.file_size, 4)
 
     def test_5_mark_done(self):
@@ -731,12 +729,12 @@ unknown : baz'''
             result = rule.evaluate(MimetypeSample(types))
             self.assertEqual(result.further_analysis, expected)
 
-    def test_rule_has_office_macros_with_suspicious_keyword(self):
-        """ Test rule has_office_macros_with_suspicious_keyword. """
+    def test_rule_office_ole(self):
+        """ Test rule office_ole. """
         config = '''[office_macro_with_suspicious_keyword]
-keyword.1 : AutoOpen
-keyword.2 : AutoClose
-keyword.3 : suSPi.ious'''
+            keyword.1 : AutoOpen
+            keyword.2 : AutoClose
+            keyword.3 : suSPi.ious'''
         rule = OfficeMacroWithSuspiciousKeyword(CreatingConfigParser(config))
         # sample factory to create samples from real files
         factory1 = SampleFactory(
@@ -759,6 +757,24 @@ keyword.3 : suSPi.ious'''
             [Result.unknown, factory1.make_sample(tests_data_dir+'/office/blank.doc')],
             # test with legitimate macro
             [Result.unknown, factory1.make_sample(tests_data_dir+'/office/legitmacro.xls')]
+        ]
+        for expected, sample in combinations:
+            result = rule.evaluate(sample)
+            self.assertEqual(result.result, expected)
+
+        # test if macro present
+        rule = OfficeMacroRule(CreatingConfigParser(config))
+        combinations = [
+            # no office document file extension
+            [Result.unknown, factory2.make_sample('test.nodoc', 'test')],
+            # test with empty file
+            [Result.unknown, factory1.make_sample(tests_data_dir+'/office/empty.doc')],
+            # office document with 'suspicious' in macro code
+            [Result.bad, factory1.make_sample(tests_data_dir+'/office/suspiciousMacro.doc')],
+            # test with blank word doc
+            [Result.unknown, factory1.make_sample(tests_data_dir+'/office/blank.doc')],
+            # test with legitimate macro
+            [Result.bad, factory1.make_sample(tests_data_dir+'/office/legitmacro.xls')]
         ]
         for expected, sample in combinations:
             result = rule.evaluate(sample)

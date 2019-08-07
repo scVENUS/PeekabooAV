@@ -31,7 +31,8 @@ import logging
 from peekaboo.ruleset import Result, RuleResult
 from peekaboo.exceptions import PeekabooAnalysisDeferred, \
         CuckooSubmitFailedException, PeekabooRulesetConfigError
-from peekaboo.toolbox.ms_office import has_office_macros_with_suspicious_keyword
+from peekaboo.toolbox.ole import Oletools, OletoolsReport, \
+        OleNotAnOfficeDocumentException
 
 
 logger = logging.getLogger(__name__)
@@ -208,13 +209,40 @@ class FileTypeOnGreylistRule(Rule):
                            False)
 
 
-class OfficeMacroRule(Rule):
+class OleRule(Rule):
+    """ A common base class for rules that evaluate the Ole report. """
+    def evaluate(self, sample):
+        """ Report the sample as bad if it contains a macro. """
+        if sample.oletools_report is None:
+            try:
+                ole = Oletools()
+                report = ole.get_report(sample)
+                sample.register_oletools_report(OletoolsReport(report))
+            except OleNotAnOfficeDocumentException:
+                return self.result(Result.unknown,
+                                   _("File is not an office document"),
+                                   True)
+            except Exception:
+                raise
+
+        return self.evaluate_report(sample.oletools_report)
+
+    def evaluate_report(self, report):
+        """ Evaluate an Ole report.
+
+        @param report: The Ole report.
+        @returns: RuleResult containing verdict.
+        """
+        raise NotImplementedError
+
+
+class OfficeMacroRule(OleRule):
     """ A rule checking the sample for Office macros. """
     rule_name = 'office_macro'
 
-    def evaluate(self, sample):
+    def evaluate_report(self, report):
         """ Report the sample as bad if it contains a macro. """
-        if sample.office_macros:
+        if report.has_office_macros():
             return self.result(Result.bad,
                                _("The file contains an Office macro"),
                                False)
@@ -225,7 +253,7 @@ class OfficeMacroRule(Rule):
                            True)
 
 
-class OfficeMacroWithSuspiciousKeyword(Rule):
+class OfficeMacroWithSuspiciousKeyword(OleRule):
     """ A rule checking the sample for Office macros. """
     rule_name = 'office_macro_with_suspicious_keyword'
 
@@ -238,18 +266,17 @@ class OfficeMacroWithSuspiciousKeyword(Rule):
                 "Empty suspicious keyword list, check %s rule config." %
                 self.rule_name)
 
-    def evaluate(self, sample):
-        """ Report the sample as bad if it contains a macro. """
-        if has_office_macros_with_suspicious_keyword(sample.file_path, sample.file_extension, self.suspicious_keyword_list):
+    def evaluate_report(self, report):
+        if report.has_office_macros_with_suspicious_keyword(self.suspicious_keyword_list):
             return self.result(Result.bad,
                                _("The file contains an Office macro which "
                                  "runs at document open"),
                                False)
-        else:
-            return self.result(Result.unknown,
-                                _("The file does not contain a recognizable "
-                                    "Office macro that is run at document open"),
-                                True)
+
+        return self.result(Result.unknown,
+                           _("The file does not contain a recognizable "
+                             "Office macro that is run at document open"),
+                           True)
 
 
 class CuckooRule(Rule):
