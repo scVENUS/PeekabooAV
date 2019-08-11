@@ -153,6 +153,30 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
         # here we know that all samples have reported back
         self.report(submitted)
 
+    def submit_sample(self, api_data):
+        """ Submit API supplied file as Sample """
+        path = api_data['full_name']
+        logger.info("Got run_analysis request for %s", path)
+        if not os.path.exists(path):
+            self.talk_back(_('ERROR: Path does not exist or no '
+                             'permission to access it.'))
+            logger.error('Path does not exist or no permission '
+                         'to access it.')
+            return None
+
+        if not os.path.isfile(path):
+            self.talk_back(_('ERRROR: Input is not a file'))
+            logger.error('Input is not a file')
+            return None
+
+        sample = self.sample_factory.make_sample(
+            path, status_change=self.status_change, metainfo=api_data)
+        if not self.job_queue.submit(sample, self.__class__):
+            self.talk_back(_('Error submitting sample to job queue'))
+            # submit will have logged an error
+            return None
+        return sample
+
     def parse(self):
         """ Reads and parses an analysis request. This is expected to be a JSON
         structure containing the path of the directory / file to analyse.
@@ -182,35 +206,14 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
 
         submitted = []
         for part in parts:
-            if 'full_name' not in part:
+            if 'full_name' in part:
+                sample = self.submit_sample(part)
+                submitted.append(sample)
+                logger.debug('Created and submitted sample %s', sample)
+            else:
                 self.talk_back(_('ERROR: Incomplete data structure.'))
                 logger.error('Incomplete data structure.')
                 return None
-
-            path = part['full_name']
-            logger.info("Got run_analysis request for %s", path)
-            if not os.path.exists(path):
-                self.talk_back(_('ERROR: Path does not exist or no '
-                                 'permission to access it.'))
-                logger.error('Path does not exist or no permission '
-                             'to access it.')
-                return None
-
-            if not os.path.isfile(path):
-                self.talk_back(_('ERRROR: Input is not a file'))
-                logger.error('Input is not a file')
-                return None
-
-            sample = self.sample_factory.make_sample(
-                path, status_change=self.status_change, metainfo=part)
-            if not self.job_queue.submit(sample, self.__class__):
-                self.talk_back(_('Error submitting sample to job queue'))
-                # submit will have logged an error
-                return None
-
-            submitted.append(sample)
-            logger.debug('Created and submitted sample %s', sample)
-
         return submitted
 
     def wait(self, to_be_analysed):
