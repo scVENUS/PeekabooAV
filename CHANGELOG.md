@@ -18,6 +18,8 @@ See documentation for details.
 - Improve REST API access robustness by introducing configurable urllib3 retry
   handling with backoff and defined endless retry or failure report to client.
   (#43)
+- Introduce peekaboo-util.py as a super charged replacement for scan_file.py
+  (#107)
 
 ## 1.7
 
