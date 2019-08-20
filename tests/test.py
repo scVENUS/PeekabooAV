@@ -808,8 +808,8 @@ unknown : baz'''
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
-    def test_rule_ignore_smime_signature(self):
-        """ Test rule to ignore smime signatures. """
+    def test_rule_ignore_mail_signatures(self):
+        """ Test rule to ignore cryptographic mail signatures. """
         config = '''[expressions]
             expression.4  : sample.meta_info_name_declared == 'smime.p7s'
                 and sample.meta_info_type_declared in {
@@ -817,6 +817,10 @@ unknown : baz'''
                     'application/x-pkcs7-signature',
                     'application/pkcs7-mime',
                     'application/x-pkcs7-mime'
+                } -> ignore
+            expression.3  : sample.meta_info_name_declared == 'signature.asc'
+                and sample.meta_info_type_declared in {
+                    'application/pgp-signature'
                 } -> ignore'''
 
         part = { "full_name": "p001",
@@ -828,6 +832,7 @@ unknown : baz'''
             cuckoo=None, base_dir=None, job_hash_regex=None,
             keep_mail_data=False, processing_info_dir=None)
 
+        # test smime signatures
         sample = factory.make_sample('', metainfo=part)
         rule = ExpressionRule(CreatingConfigParser(config))
         result = rule.evaluate(sample)
@@ -837,6 +842,17 @@ unknown : baz'''
         rule = ExpressionRule(CreatingConfigParser(config))
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
+
+        # test gpg signatures
+        sample.meta_info_name_declared = "signature.asc"
+        rule = ExpressionRule(CreatingConfigParser(config))
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.unknown)
+
+        sample.meta_info_type_declared = "application/pgp-signature"
+        rule = ExpressionRule(CreatingConfigParser(config))
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.ignored)
 
     def test_rule_expressions(self):
         """ Test generic rule on cuckoo report. """
