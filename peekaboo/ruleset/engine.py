@@ -49,6 +49,7 @@ class RulesetEngine(object):
         CuckooEvilSigRule,
         CuckooScoreRule,
         OfficeMacroRule,
+        OfficeMacroWithSuspiciousKeyword,
         RequestsEvilDomainRule,
         CuckooAnalysisFailedRule,
         ContainsPeekabooYarRule,
@@ -127,7 +128,7 @@ class RulesetEngine(object):
         rule wrapper for in/out logging and reporting
         """
         rule_name = rule_class.rule_name
-        logger.debug("Processing rule '%s' for %s" % (rule_name, sample))
+        logger.debug("Processing rule '%s' for %s", rule_name, sample)
 
         try:
             rule = rule_class(config=self.config, db_con=self.db_con)
@@ -138,8 +139,8 @@ class RulesetEngine(object):
             raise
         # catch all other exceptions for this rule
         except Exception as e:
-            logger.warning("Unexpected error in '%s' for %s" % (rule_name,
-                                                                sample))
+            logger.warning("Unexpected error in '%s' for %s", rule_name,
+                           sample)
             logger.exception(e)
             # create "fake" RuleResult
             result = RuleResult("RulesetEngine", result=Result.failed,
@@ -147,5 +148,5 @@ class RulesetEngine(object):
                                 further_analysis=False)
             sample.add_rule_result(result)
 
-        logger.info("Rule '%s' processed for %s" % (rule_name, sample))
+        logger.info("Rule '%s' processed for %s", rule_name, sample)
         return result

@@ -41,6 +41,7 @@ class PeekabooConfigParser( # pylint: disable=too-many-ancestors
     exist or cannot be opened. """
     LOG_LEVEL = object()
     RELIST = object()
+    IRELIST = object()
 
     def __init__(self, config_file):
         # super() does not work here because ConfigParser uses old-style
@@ -114,7 +115,14 @@ class PeekabooConfigParser( # pylint: disable=too-many-ancestors
         self.lists[section][option] = value
         return value
 
-    def getrelist(self, section, option, raw=False, vars=None, fallback=None):
+    def getirelist(self, section, option, raw=False, vars=None, fallback=None, flags=None):
+        """ Special getter for lists of regular expressions that are compiled to match
+        case insesitive (IGNORECASE). Returns the compiled expression objects in a
+        list ready for matching and searching.
+        """
+        return self.getrelist(section, option, raw=raw, vars=vars, fallback=fallback, flags=re.IGNORECASE)
+
+    def getrelist(self, section, option, raw=False, vars=None, fallback=None, flags=0):
         """ Special getter for lists of regular expressions. Returns the
         compiled expression objects in a list ready for matching and searching.
         """
@@ -137,7 +145,7 @@ class PeekabooConfigParser( # pylint: disable=too-many-ancestors
         compiled_res = []
         for regex in strlist:
             try:
-                compiled_res.append(re.compile(regex))
+                compiled_res.append(re.compile(regex, flags))
             except (ValueError, TypeError) as error:
                 raise PeekabooConfigException(
                     'Failed to compile regular expression "%s" (section %s, '
@@ -203,6 +211,7 @@ class PeekabooConfigParser( # pylint: disable=too-many-ancestors
             # these only work when given explicitly as option_type
             self.LOG_LEVEL: self.get_log_level,
             self.RELIST: self.getrelist,
+            self.IRELIST: self.getirelist,
         }
 
         return getter[option_type](section, option, fallback=fallback)
