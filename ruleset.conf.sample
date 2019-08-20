@@ -79,7 +79,13 @@ keyword.2 : AutoClose
 
 [expressions]
 expression.1  : sample.mimetypes <= {'text/plain', 'inode/x-empty'} -> ignore
-expression.2  : sample.meta_info_name_declared == 'smime.p7s' and sample.meta_info_type_declared in {'application/pkcs7-signature', 'application/x-pkcs7-signature', 'application/pkcs7-mime', 'application/x-pkcs7-mime'} -> ignore
+expression.2  : sample.meta_info_name_declared == 'smime.p7s'
+                    and sample.meta_info_type_declared in {
+                        'application/pkcs7-signature',
+                        'application/x-pkcs7-signature',
+                        'application/pkcs7-mime',
+                        'application/x-pkcs7-mime'
+                    } -> ignore
 
 [cuckoo_evil_sig]
 signature.1  : A potential heapspray has been detected. .*

@@ -811,7 +811,13 @@ unknown : baz'''
     def test_rule_ignore_smime_signature(self):
         """ Test rule to ignore smime signatures. """
         config = '''[expressions]
-expression.4  : sample.meta_info_name_declared == 'smime.p7s' and sample.meta_info_type_declared in {'application/pkcs7-signature', 'application/x-pkcs7-signature', 'application/pkcs7-mime', 'application/x-pkcs7-mime'} -> ignore'''
+            expression.4  : sample.meta_info_name_declared == 'smime.p7s'
+                and sample.meta_info_type_declared in {
+                    'application/pkcs7-signature',
+                    'application/x-pkcs7-signature',
+                    'application/pkcs7-mime',
+                    'application/x-pkcs7-mime'
+                } -> ignore'''
 
         part = { "full_name": "p001",
                  "name_declared": "smime.p7s",
