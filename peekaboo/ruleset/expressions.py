@@ -32,10 +32,10 @@ from future.builtins import super
 import logging
 import operator
 import re
-from peekaboo.ruleset import Result
 from pyparsing import nums, alphas, alphanums, Word, Combine, Suppress, \
     oneOf, opAssoc, infixNotation, Literal, Keyword, Group, \
     delimitedList, QuotedString, ParserElement, ParseException
+from peekaboo.ruleset import Result
 
 
 logger = logging.getLogger(__name__)
@@ -90,7 +90,8 @@ class EvalBase(object):
         return self.value
 
     def __str__(self):
-        return self.string_repr_format % " ".join(["%s" % x for x in self.token])
+        return self.string_repr_format % (
+            " ".join(["%s" % x for x in self.token]))
 
 
 class EvalBoolean(EvalBase):
@@ -131,7 +132,8 @@ class OperatorRegex(object):
         """ Implement handling of iterable operands. """
         if isinstance(other, (list, set)):
             for val in other:
-                logger.debug("Regular expression match: %s == %s", function, val)
+                logger.debug("Regular expression match: %s == %s",
+                             function, val)
                 if function(val):
                     return True
             return False
@@ -265,8 +267,8 @@ class EvalIdentifier(EvalBase):
 
         try:
             return context['variables'][self.value]
-        except KeyError as e:
-            raise IdentifierMissingException(e.message)
+        except KeyError as error:
+            raise IdentifierMissingException(error.args[0])
 
 
 class EvalResult(EvalBase):
@@ -317,7 +319,7 @@ class EvalPower(EvalBase):
         return res
 
 
-def OperatorOperands(tokenlist):
+def operator_operands(tokenlist):
     """ Generator to extract operators and operands in pairs """
     iterator = iter(tokenlist)
     while True:
@@ -335,7 +337,7 @@ class EvalArith(EvalBase):
     def eval(self, context):
         self.set_context(context)
         ret = self.subeval(self.value[0])
-        for op, val in OperatorOperands(self.value[1:]):
+        for op, val in operator_operands(self.value[1:]):
             if op == '+':
                 ret += self.subeval(val)
             elif op == '-':
@@ -425,7 +427,7 @@ class EvalLogic(EvalBase):
     def eval(self, context):
         self.set_context(context)
         val1 = self.subeval(self.value[0])
-        for op, parseobj in OperatorOperands(self.value[1:]):
+        for op, parseobj in operator_operands(self.value[1:]):
             val2 = self.subeval(parseobj)
             logger.debug("Comparison: %s %s %s", val1, op, val2)
             function = self.operator_map[op]
@@ -438,7 +440,7 @@ class EvalLogic(EvalBase):
         return False
 
 
-class ExpressionParser():
+class ExpressionParser(object):
     """ Define and run the parser. """
     def __init__(self):
         # speed up infixNotation considerably at the price of some cache memory
@@ -447,21 +449,22 @@ class ExpressionParser():
         boolean = Keyword('True') | Keyword('False')
         integer = Word(nums)
         real = Combine(Word(nums) + "." + Word(nums))
-        string = QuotedString('"', escChar='\\') | QuotedString("'", escChar='\\')
+        string = (QuotedString('"', escChar='\\')
+                  | QuotedString("'", escChar='\\'))
         regex = QuotedString('/', escChar='\\')
         identifier = Word(alphas, alphanums + '_')
         dereference = infixNotation(identifier, [
             (Literal('.'), 2, opAssoc.LEFT, EvalArith),
         ])
         result = (Keyword('bad') | Keyword('fail') | Keyword('good')
-                | Keyword('ignore') | Keyword('unknown'))
+                  | Keyword('ignore') | Keyword('unknown'))
         rval = boolean | real | integer | string | regex | result | dereference
         rvallist = Group(Suppress('[') + delimitedList(rval) + Suppress(']'))
         rvalset = Group(Suppress('{') + delimitedList(rval) + Suppress('}'))
         operand = rval | rvallist | rvalset
 
-        # parse actions replace the parsed tokens with an instantiated object which
-        # we can later call into for evaluation of its content
+        # parse actions replace the parsed tokens with an instantiated object
+        # which we can later call into for evaluation of its content
         boolean.setParseAction(EvalBoolean)
         integer.setParseAction(EvalInteger)
         real.setParseAction(EvalReal)
@@ -504,8 +507,9 @@ class ExpressionParser():
             col = parse_error.col
             raise SyntaxError(
                 "Expression parse error near character %d: %s>>%s<<%s" % (
-                parse_error.col, expression[0:col], expression[col],
-                expression[col+1:]))
+                    parse_error.col, expression[0:col], expression[col],
+                    expression[col+1:]))
+
 
 if __name__ == '__main__':
     print(ExpressionParser().parse('foo == (bar - blub)'))
