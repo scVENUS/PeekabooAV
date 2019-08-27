@@ -19,8 +19,8 @@ Following sections
 ==================
 
 The following sections are processed (if enabled in rules section) and
-contain for example the whitelist mime types. Comments also here can disable
-entries.
+contain for example the whitelist mime types. Individual entries within
+for example the whitelist can be disabled by putting an ``#`` in front.
 
 Expressions
 ===========
