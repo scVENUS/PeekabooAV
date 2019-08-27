@@ -52,7 +52,9 @@ from peekaboo.ruleset.rules import FileTypeOnWhitelistRule, \
         FileTypeOnGreylistRule, CuckooAnalysisFailedRule, \
         KnownRule, FileLargerThanRule, CuckooEvilSigRule, \
         CuckooScoreRule, RequestsEvilDomainRule, FinalRule, \
-        OfficeMacroRule, OfficeMacroWithSuspiciousKeyword
+        OfficeMacroRule, OfficeMacroWithSuspiciousKeyword, \
+        ExpressionRule
+
 from peekaboo.toolbox.cuckoo import CuckooReport
 from peekaboo.db import PeekabooDatabase, PeekabooDatabaseError
 # pylint: enable=wrong-import-position
@@ -779,6 +781,85 @@ unknown : baz'''
         for expected, sample in combinations:
             result = rule.evaluate(sample)
             self.assertEqual(result.result, expected)
+
+    def test_rule_ignore_generic_whitelist(self):
+        """ Test rule to ignore file types on whitelist. """
+        config = '''[expressions]
+            expression.4  : sample.mimetypes <= {'text/plain', 'inode/x-empty', 'image/jpeg'} -> ignore
+        '''
+        factory = CreatingSampleFactory(
+            cuckoo=None, base_dir="",
+            job_hash_regex="", keep_mail_data=False,
+            processing_info_dir=None)
+
+        sample = factory.create_sample('file.txt', 'abc')
+        rule = ExpressionRule(CreatingConfigParser(config))
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.ignored)
+
+        sample = factory.create_sample('file.html', '<html')
+        rule = ExpressionRule(CreatingConfigParser(config))
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.unknown)
+
+        # bzip2 compressed data
+        sample = factory.create_sample('file.txt', 'BZh91AY=')
+        rule = ExpressionRule(CreatingConfigParser(config))
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.unknown)
+
+    def test_rule_ignore_smime_signature(self):
+        """ Test rule to ignore smime signatures. """
+        config = '''[expressions]
+            expression.4  : sample.meta_info_name_declared == 'smime.p7s'
+                and sample.meta_info_type_declared in {
+                    'application/pkcs7-signature',
+                    'application/x-pkcs7-signature',
+                    'application/pkcs7-mime',
+                    'application/x-pkcs7-mime'
+                } -> ignore'''
+
+        part = { "full_name": "p001",
+                 "name_declared": "smime.p7s",
+                 "type_declared": "application/pkcs7-signature"
+               }
+
+        factory = SampleFactory(
+            cuckoo=None, base_dir=None, job_hash_regex=None,
+            keep_mail_data=False, processing_info_dir=None)
+
+        sample = factory.make_sample('', metainfo=part)
+        rule = ExpressionRule(CreatingConfigParser(config))
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.ignored)
+
+        sample.meta_info_name_declared = "file"
+        rule = ExpressionRule(CreatingConfigParser(config))
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.unknown)
+
+    def test_rule_expressions(self):
+        """ Test generic rule on cuckoo report. """
+        config = '''[expressions]
+            expression.1  : /DDE/ in cuckooreport.signature_descriptions -> bad
+        '''
+
+        report = {
+            "signatures": [
+                { "description": "Malicious document featuring Office DDE has been identified" }
+            ]
+        }
+        cuckooreport = CuckooReport(report)
+
+        factory = SampleFactory(
+            cuckoo=None, base_dir=None, job_hash_regex=None,
+            keep_mail_data=False, processing_info_dir=None)
+
+        sample = factory.make_sample('')
+        sample.register_cuckoo_report(cuckooreport)
+        rule = ExpressionRule(CreatingConfigParser(config))
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.bad)
 
     def test_config_file_type_on_whitelist(self):
         """ Test whitelist rule configuration. """

@@ -11,11 +11,12 @@ rule.3  : file_type_on_whitelist
 rule.4  : file_type_on_greylist
 #rule.5  : office_macro
 #rule.6 : office_macro_with_suspicious_keyword
-rule.7  : cuckoo_evil_sig
-rule.8  : cuckoo_score
-#rule.9  : requests_evil_domain
-rule.10  : cuckoo_analysis_failed
-#rule.11 : contains_peekabooyar
+rule.7  : expressions
+rule.8  : cuckoo_evil_sig
+rule.9  : cuckoo_score
+#rule.10  : requests_evil_domain
+rule.11  : cuckoo_analysis_failed
+#rule.12 : contains_peekabooyar
 rule.12 : final_rule
 
 # rule specific configuration options
@@ -75,6 +76,16 @@ greylist.36 : application/msword
 [office_macro_with_suspicious_keyword]
 keyword.1 : AutoOpen
 keyword.2 : AutoClose
+
+[expressions]
+expression.1  : sample.mimetypes <= {'text/plain', 'inode/x-empty'} -> ignore
+expression.2  : sample.meta_info_name_declared == 'smime.p7s'
+                    and sample.meta_info_type_declared in {
+                        'application/pkcs7-signature',
+                        'application/x-pkcs7-signature',
+                        'application/pkcs7-mime',
+                        'application/x-pkcs7-mime'
+                    } -> ignore
 
 [cuckoo_evil_sig]
 signature.1  : A potential heapspray has been detected. .*

@@ -9,3 +9,4 @@ yara-python>=3.6.3
 requests>=2.19.0
 configparser
 future
+pyparsing

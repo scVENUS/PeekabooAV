@@ -29,6 +29,8 @@
 import re
 import logging
 from peekaboo.ruleset import Result, RuleResult
+from peekaboo.ruleset.expressions import ExpressionParser, \
+        IdentifierMissingException
 from peekaboo.exceptions import PeekabooAnalysisDeferred, \
         CuckooSubmitFailedException, PeekabooRulesetConfigError
 from peekaboo.toolbox.ole import Oletools, OletoolsReport, \
@@ -103,6 +105,33 @@ class Rule(object):
         self.config_options[option] = True
         return self.config.get_by_type(
             self.rule_name, option, fallback=default, option_type=option_type)
+
+    def get_cuckoo_report(self, sample):
+        """ Get the samples cuckoo_report or submit the sample for analysis by
+            Cuckoo.
+
+            @returns: CuckooReport
+        """
+        report = sample.cuckoo_report
+        if report is not None:
+            return report
+
+        try:
+            job_id = sample.submit_to_cuckoo()
+        except CuckooSubmitFailedException as failed:
+            logger.error("Submit to Cuckoo failed: %s", failed)
+            # exception message intentionally not present in message
+            # delivered back to client as to not disclose internal
+            # information, should request user to contact admin instead
+            return self.result(
+                Result.failed,
+                _("Behavioral analysis by Cuckoo has produced an error "
+                  "and did not finish successfully"),
+                False)
+
+        logger.info('Sample submitted to Cuckoo. Job ID: %s. '
+                    'Sample: %s', job_id, sample)
+        raise PeekabooAnalysisDeferred()
 
 
 class KnownRule(Rule):
@@ -293,24 +322,7 @@ class CuckooRule(Rule):
         @raises PeekabooAnalysisDeferred: if the sample was submitted to Cuckoo
         @returns: RuleResult containing verdict.
         """
-        report = sample.cuckoo_report
-        if report is None:
-            try:
-                job_id = sample.submit_to_cuckoo()
-            except CuckooSubmitFailedException as failed:
-                logger.error("Submit to Cuckoo failed: %s", failed)
-                # exception message intentionally not present in message
-                # delivered back to client as to not disclose internal
-                # information, should request user to contact admin instead
-                return self.result(
-                    Result.failed,
-                    _("Behavioral analysis by Cuckoo has produced an error "
-                      "and did not finish successfully"),
-                    False)
-
-            logger.info('Sample submitted to Cuckoo. Job ID: %s. '
-                        'Sample: %s', job_id, sample)
-            raise PeekabooAnalysisDeferred()
+        report = self.get_cuckoo_report(sample)
 
         # call report evaluation function if we get here
         return self.evaluate_report(report)
@@ -465,6 +477,62 @@ class CuckooAnalysisFailedRule(CuckooRule):
         logger.debug('Neither success nor failure indicators found, '
                      'considering analysis failed.')
         return self.result(Result.failed, failure_reason, False)
+
+
+class ExpressionRule(Rule):
+    """ A rule checking the sample and cuckoo report against an almost
+    arbitrary logical expression. """
+    rule_name = 'expressions'
+
+    def get_config(self):
+        expressions = self.get_config_value('expression', [])
+        if not expressions:
+            raise PeekabooRulesetConfigError(
+                "List of expressions empty, check %s rule config."
+                % self.rule_name)
+
+        self.rules = []
+        parser = ExpressionParser()
+        for expr in expressions:
+            try:
+                rule = parser.parse(expr)
+                logger.debug("EXPR: %s", expr)
+                logger.debug("RULE: %s", rule)
+                self.rules.append(rule)
+            except SyntaxError as error:
+                raise PeekabooRulesetConfigError(error)
+
+    def evaluate(self, sample):
+        """ Match what rules report against our known result status names. """
+        for rule in self.rules:
+            result = None
+            context = {'variables': {'sample': sample}}
+
+            while result is None:
+                try:
+                    result = rule.eval(context = context)
+                    # otherwise this is an endless loop
+                    if result is None:
+                        break
+                except IdentifierMissingException as error:
+                    if error.message == "cuckooreport":
+                        context['variables']['cuckooreport'] = self.get_cuckoo_report(sample)
+                    # here elif for other reports
+                    else:
+                        return self.result(
+                            Result.failed,
+                            _("Evaluation of expression uses undefined identifier."),
+                            False)
+
+            if result:
+                return self.result(result,
+                                   _("A rule classified the sample as %s")
+                                   % result,
+                                   False)
+
+        return self.result(Result.unknown,
+                           _("No rule classified the sample in any way."),
+                           True)
 
 
 class FinalRule(Rule):
