@@ -60,6 +60,20 @@ from peekaboo.db import PeekabooDatabase, PeekabooDatabaseError
 # pylint: enable=wrong-import-position
 
 
+""" Since Python 3.2 assertRegexpMatches and assertRaisesRegexp
+have been renamed to assertRegex() and assertRaisesRegex(). """
+if sys.version_info[0] < 3:
+    class CompatibleTestCase(unittest.TestCase):
+        def assertRaisesRegex(self, exc, r, callable=None, *args, **kwds):
+            return self.assertRaisesRegexp(exc, r, callable, *args, **kwds)
+
+        def assertRegex(self, text, regex, msg=None):
+            return self.assertRegexpMatches(text, regex, msg)
+else:
+    class CompatibleTestCase(unittest.TestCase):
+        pass
+
+
 class CreatingConfigMixIn(object):
     """ A class for adding config file creation logic to any other class. """
     def create_config(self, content):
@@ -98,7 +112,7 @@ class CreatingPeekabooConfig(PeekabooConfig, CreatingConfigMixIn):
         self.remove_config()
 
 
-class TestConfigParser(unittest.TestCase):
+class TestConfigParser(CompatibleTestCase):
     """ Test a configuration with all values different from the defaults. """
     @classmethod
     def setUpClass(cls):
@@ -130,7 +144,7 @@ rule.3 : rule3
 option1: foo
 option1.1: bar'''
 
-        with self.assertRaisesRegexp(
+        with self.assertRaisesRegex(
                 PeekabooConfigException,
                 'Option option1 in section rule1 is supposed to be a list but '
                 'given as individual setting'):
@@ -138,7 +152,7 @@ option1.1: bar'''
 
 
 
-class TestDefaultConfig(unittest.TestCase):
+class TestDefaultConfig(CompatibleTestCase):
     """ Test a configuration of all defaults. """
     @classmethod
     def setUpClass(cls):
@@ -183,7 +197,7 @@ class TestDefaultConfig(unittest.TestCase):
         self.assertEqual(self.config.cluster_duplicate_check_interval, 60)
 
 
-class TestValidConfig(unittest.TestCase):
+class TestValidConfig(CompatibleTestCase):
     """ Test a configuration with all values different from the defaults. """
     @classmethod
     def setUpClass(cls):
@@ -255,11 +269,11 @@ duplicate_check_interval: 61
         self.assertEqual(self.config.cluster_duplicate_check_interval, 61)
 
 
-class TestInvalidConfig(unittest.TestCase):
+class TestInvalidConfig(CompatibleTestCase):
     """ Various tests of invalid config files. """
     def test_1_section_header(self):
         """ Test correct error is thrown if section header syntax is wrong """
-        with self.assertRaisesRegexp(
+        with self.assertRaisesRegex(
                 PeekabooConfigException,
                 'Configuration file ".*" can not be parsed: File contains no '
                 'section headers'):
@@ -268,7 +282,7 @@ user: peekaboo''')
 
     def test_2_value_separator(self):
         """ Test correct error is thrown if the value separator is wrong """
-        with self.assertRaisesRegexp(
+        with self.assertRaisesRegex(
                 PeekabooConfigException,
                 'Configuration file ".*" can not be parsed: (File|Source) '
                 'contains parsing errors:'):
@@ -280,7 +294,7 @@ user; peekaboo''')
         _, config_file = tempfile.mkstemp()
         os.unlink(config_file)
 
-        with self.assertRaisesRegexp(
+        with self.assertRaisesRegex(
                 PeekabooConfigException,
                 'Configuration file "%s" can not be opened for reading: '
                 r'\[Errno 2\] No such file or directory' % config_file):
@@ -289,7 +303,7 @@ user; peekaboo''')
     def test_4_unknown_section(self):
         """ Test correct error is thrown if an unknown section name is given.
         """
-        with self.assertRaisesRegexp(
+        with self.assertRaisesRegex(
                 PeekabooConfigException,
                 r'Unknown section\(s\) found in config: globl'):
             CreatingPeekabooConfig('''[globl]''')
@@ -297,7 +311,7 @@ user; peekaboo''')
     def test_5_unknown_option(self):
         """ Test correct error is thrown if an unknown option name is given.
         """
-        with self.assertRaisesRegexp(
+        with self.assertRaisesRegex(
                 PeekabooConfigException,
                 r'Unknown config option\(s\) found in section global: foo'):
             CreatingPeekabooConfig('''[global]
@@ -305,7 +319,7 @@ foo: bar''')
 
     def test_6_unknown_loglevel(self):
         """ Test with an unknown log level """
-        with self.assertRaisesRegexp(
+        with self.assertRaisesRegex(
                 PeekabooConfigException,
                 'Unknown log level FOO'):
             CreatingPeekabooConfig('''[logging]
@@ -339,7 +353,7 @@ class CreatingSampleFactory(SampleFactory):
         shutil.rmtree(self.directory)
 
 
-class TestDatabase(unittest.TestCase):
+class TestDatabase(CompatibleTestCase):
     """ Unittests for Peekaboo's database module. """
     @classmethod
     def setUpClass(cls):
@@ -389,7 +403,7 @@ class TestDatabase(unittest.TestCase):
         self.assertFalse(self.db_con.mark_sample_in_flight(self.sample, 1))
         self.assertIsNone(self.db_con.clear_sample_in_flight(self.sample, 1))
         # unlocking twice should fail
-        self.assertRaisesRegexp(
+        self.assertRaisesRegex(
             PeekabooDatabaseError, "Unexpected inconsistency: Sample .* not "
             "recoreded as in-flight upon clearing flag",
             self.db_con.clear_sample_in_flight, self.sample, 1)
@@ -484,7 +498,7 @@ class TestDatabase(unittest.TestCase):
         del cls.factory
 
 
-class TestSample(unittest.TestCase):
+class TestSample(CompatibleTestCase):
     """ Unittests for Samples. """
     @classmethod
     def setUpClass(cls):
@@ -533,7 +547,7 @@ class TestSample(unittest.TestCase):
         self.assertEqual(self.sample.job_id, -1)
         self.assertEqual(self.sample.result, Result.unchecked)
         self.assertEqual(self.sample.reason, None)
-        self.assertRegexpMatches(
+        self.assertRegex(
             self.sample.peekaboo_report[0],
             'File "%s" is considered "unchecked"'
             % self.sample.filename)
@@ -556,16 +570,16 @@ class TestSample(unittest.TestCase):
         self.assertEqual(self.sample.job_id, -1)
         self.assertEqual(self.sample.result, Result.unchecked)
         self.assertEqual(self.sample.reason, None)
-        self.assertRegexpMatches(
+        self.assertRegex(
             self.sample.peekaboo_report[0], 'File "%s" %s is being analyzed'
             % (self.sample.filename, self.sample.sha256sum))
-        self.assertRegexpMatches(
+        self.assertRegex(
             self.sample.peekaboo_report[1],
             'File "%s" is considered "unchecked"'
             % self.sample.filename)
         self.assertEqual(self.sample.cuckoo_report, None)
         self.assertEqual(self.sample.done, False)
-        self.assertRegexpMatches(
+        self.assertRegex(
             self.sample.submit_path, '/%s.py$' % self.sample.sha256sum)
         self.assertEqual(self.sample.file_size, 4)
 
@@ -615,12 +629,12 @@ class TestSample(unittest.TestCase):
         del cls.factory
 
 
-class TestRulesetEngine(unittest.TestCase):
+class TestRulesetEngine(CompatibleTestCase):
     """ Unittests for the Ruleset Engine. """
     def test_no_rules_configured(self):
         """ Test that correct error is shown if no rules are configured. """
         config = CreatingConfigParser()
-        with self.assertRaisesRegexp(
+        with self.assertRaisesRegex(
                 PeekabooRulesetConfigError,
                 r'No enabled rules found, check ruleset config.'):
             RulesetEngine(ruleset_config=config, db_con=None)
@@ -629,7 +643,7 @@ class TestRulesetEngine(unittest.TestCase):
         """ Test that correct error is shown if an unknown rule is enabled. """
         config = CreatingConfigParser('''[rules]
 rule.1: foo''')
-        with self.assertRaisesRegexp(
+        with self.assertRaisesRegex(
                 PeekabooRulesetConfigError,
                 r'Unknown rule\(s\) enabled: foo'):
             RulesetEngine(ruleset_config=config, db_con=None)
@@ -643,7 +657,7 @@ rule.1: cuckoo_score
 
 [cuckoo_score]
 higher_than: foo''')
-        with self.assertRaisesRegexp(
+        with self.assertRaisesRegex(
                 ValueError,
                 r"could not convert string to float: '?foo'?"):
             RulesetEngine(ruleset_config=config, db_con=None)
@@ -674,7 +688,7 @@ class CuckooReportSample(object):  # pylint: disable=too-few-public-methods
         self.cuckoo_report = CuckooReport(report)
 
 
-class TestRules(unittest.TestCase):
+class TestRules(CompatibleTestCase):
     """ Unittests for Rules. """
     @classmethod
     def setUpClass(cls):
@@ -710,7 +724,7 @@ unknown : baz'''
         # there is no exception here since empty config is acceptable
         FileLargerThanRule(CreatingConfigParser())
 
-        with self.assertRaisesRegexp(
+        with self.assertRaisesRegex(
                 PeekabooConfigException,
                 r'Unknown config option\(s\) found in section '
                 r'file_larger_than: unknown'):
@@ -882,12 +896,12 @@ unknown : baz'''
         config = '''[file_type_on_whitelist]
 whitelist.1 : foo/bar
 unknown : baz'''
-        with self.assertRaisesRegexp(
+        with self.assertRaisesRegex(
                 PeekabooRulesetConfigError,
                 r'Empty whitelist, check file_type_on_whitelist rule config.'):
             FileTypeOnWhitelistRule(CreatingConfigParser())
 
-        with self.assertRaisesRegexp(
+        with self.assertRaisesRegex(
                 PeekabooConfigException,
                 r'Unknown config option\(s\) found in section '
                 r'file_type_on_whitelist: unknown'):
@@ -914,12 +928,12 @@ unknown : baz'''
         config = '''[file_type_on_greylist]
 greylist.1 : foo/bar
 unknown : baz'''
-        with self.assertRaisesRegexp(
+        with self.assertRaisesRegex(
                 PeekabooRulesetConfigError,
                 r'Empty greylist, check file_type_on_greylist rule config.'):
             FileTypeOnGreylistRule(CreatingConfigParser())
 
-        with self.assertRaisesRegexp(
+        with self.assertRaisesRegex(
                 PeekabooConfigException,
                 r'Unknown config option\(s\) found in section '
                 r'file_type_on_greylist: unknown'):
@@ -975,13 +989,13 @@ unknown : baz'''
         config = '''[cuckoo_evil_sig]
 signature.1  : foo
 unknown : baz'''
-        with self.assertRaisesRegexp(
+        with self.assertRaisesRegex(
                 PeekabooRulesetConfigError,
                 r'Empty bad signature list, check cuckoo_evil_sig rule '
                 r'config.'):
             CuckooEvilSigRule(CreatingConfigParser())
 
-        with self.assertRaisesRegexp(
+        with self.assertRaisesRegex(
                 PeekabooConfigException,
                 r'Unknown config option\(s\) found in section '
                 r'cuckoo_evil_sig: unknown'):
@@ -994,7 +1008,7 @@ higher_than : 10
 unknown : baz'''
         CuckooScoreRule(CreatingConfigParser())
 
-        with self.assertRaisesRegexp(
+        with self.assertRaisesRegex(
                 PeekabooConfigException,
                 r'Unknown config option\(s\) found in section '
                 r'cuckoo_score: unknown'):
@@ -1005,13 +1019,13 @@ unknown : baz'''
         config = '''[requests_evil_domain]
 domain.1 : foo
 unknown : baz'''
-        with self.assertRaisesRegexp(
+        with self.assertRaisesRegex(
                 PeekabooRulesetConfigError,
                 r'Empty evil domain list, check requests_evil_domain rule '
                 r'config.'):
             RequestsEvilDomainRule(CreatingConfigParser())
 
-        with self.assertRaisesRegexp(
+        with self.assertRaisesRegex(
                 PeekabooConfigException,
                 r'Unknown config option\(s\) found in section '
                 r'requests_evil_domain: unknown'):
@@ -1026,7 +1040,7 @@ unknown : baz'''
         # there should be no exception here since empty config is acceptable
         CuckooAnalysisFailedRule(CreatingConfigParser())
 
-        with self.assertRaisesRegexp(
+        with self.assertRaisesRegex(
                 PeekabooConfigException,
                 r'Unknown config option\(s\) found in section '
                 r'cuckoo_analysis_failed: unknown'):
