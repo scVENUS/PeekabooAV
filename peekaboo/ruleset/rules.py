@@ -515,7 +515,7 @@ class ExpressionRule(Rule):
                     if result is None:
                         break
                 except IdentifierMissingException as error:
-                    if error.message == "cuckooreport":
+                    if "cuckooreport" == error.args[0]:
                         context['variables']['cuckooreport'] = self.get_cuckoo_report(sample)
                     # here elif for other reports
                     else:
