@@ -1,3 +1,5 @@
+<img align="right" src="peekaboo200.png">
+
 * PeekabooAV is an Anti Virus software
 * It gets email attachments from AMaViSd, checks them, uses Cuckoo for behavioral checks, and evaluates and rates fully automatic
 * PeekabooAV is written in Python, multi-threaded, scalable, has a very powerful ruleset, and is easy to extend and personalize
