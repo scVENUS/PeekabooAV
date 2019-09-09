@@ -77,7 +77,7 @@ class Oletools(object):
             pass
         except Exception as error:
             logger.exception(error)
-        sample.register_oletools_report(report)
+        sample.register_oletools_report(OletoolsReport(report))
         return report
 
 
@@ -86,6 +86,10 @@ class OletoolsReport(object):
     def __init__(self, report):
         self.report = report
 
+    def __str__(self):
+        return "<OletoolsReport('%s'>" % self.report
+
+    @property
     def has_office_macros(self):
         """
         Detects macros in Microsoft Office documents.
@@ -93,11 +97,22 @@ class OletoolsReport(object):
         @return: True if macros where found, otherwise False.
                 If VBA_Parser crashes it returns False too.
         """
-        
+
         try:
             return self.report['has_macros']
         except KeyError:
             return False
+
+    @property
+    def vba_code(self):
+        """
+        Extracts vba code from Microsoft Office documents.
+        @return: vba code if found, otherwise empty string.
+        """
+        try:
+            return self.report['vba']
+        except KeyError:
+            return ""
 
     def has_office_macros_with_suspicious_keyword(self, suspicious_keywords):
         """
