@@ -822,6 +822,43 @@ unknown : baz'''
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
+    def test_rule_ignore_no_name_declared(self):
+        """ Test rule to ignore file with no name_declared. """
+        config = '''[expressions]
+            expression.3  : not sample.name_declared -> ignore
+        '''
+
+        factory = CreatingSampleFactory(
+            cuckoo=None, base_dir="",
+            job_hash_regex="", keep_mail_data=False,
+            processing_info_dir=None)
+
+        part = {"full_name": "file1.gif",
+                "name_declared": "file1.gif",
+                "type_declared": "image/gif"
+               }
+
+        sample = factory.create_sample('file1.gif', 'GIF87...', metainfo=part)
+        rule = ExpressionRule(CreatingConfigParser(config))
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.unknown)
+
+        sample = factory.create_sample('file2.gif', 'GIF87...')
+        sample.meta_info_name_declared = None
+        rule = ExpressionRule(CreatingConfigParser(config))
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.ignored)
+
+        config = '''[expressions]
+            expression.3  : sample.name_declared is None -> ignore
+        '''
+
+        sample = factory.create_sample('file2.gif', 'GIF87...')
+        sample.meta_info_name_declared = None
+        rule = ExpressionRule(CreatingConfigParser(config))
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.ignored)
+
     def test_rule_ignore_mail_signatures(self):
         """ Test rule to ignore cryptographic mail signatures. """
         config = '''[expressions]

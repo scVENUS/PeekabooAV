@@ -101,6 +101,13 @@ class EvalBoolean(EvalBase):
         self.value = self.token == "True"
 
 
+class EvalNone(EvalBase):
+    """ Class to evaluate a parsed none constant """
+    def convert(self):
+        logger.debug("None: %s", self.value)
+        self.value = None
+
+
 class EvalInteger(EvalBase):
     """ Class to evaluate a parsed integer constant """
     def convert(self):
@@ -447,6 +454,7 @@ class ExpressionParser(object):
         ParserElement.enablePackrat()
 
         boolean = Keyword('True') | Keyword('False')
+        none = Keyword('None')
         integer = Word(nums)
         real = Combine(Word(nums) + "." + Word(nums))
         string = (QuotedString('"', escChar='\\')
@@ -458,7 +466,7 @@ class ExpressionParser(object):
         ])
         result = (Keyword('bad') | Keyword('fail') | Keyword('good')
                   | Keyword('ignore') | Keyword('unknown'))
-        rval = boolean | real | integer | string | regex | result | dereference
+        rval = boolean | none | real | integer | string | regex | result | dereference
         rvallist = Group(Suppress('[') + delimitedList(rval) + Suppress(']'))
         rvalset = Group(Suppress('{') + delimitedList(rval) + Suppress('}'))
         operand = rval | rvallist | rvalset
@@ -466,6 +474,7 @@ class ExpressionParser(object):
         # parse actions replace the parsed tokens with an instantiated object
         # which we can later call into for evaluation of its content
         boolean.setParseAction(EvalBoolean)
+        none.setParseAction(EvalNone)
         integer.setParseAction(EvalInteger)
         real.setParseAction(EvalReal)
         string.setParseAction(EvalString)
