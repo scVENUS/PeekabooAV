@@ -60,6 +60,9 @@ Rules can then be constructed like:
                             'application/x-pkcs7-mime'
                         } -> ignore
     expression.3  : /DDE/ in cuckooreport.signature_descriptions -> bad
+    expression.4  : /suspicious/ in olereport.vba_code -> bad
+    expression.5  : olereport.has_office_macros == True
+                        and cuckooreport.score > 4 -> bad
 
 Attributes of sample
 --------------------
@@ -86,3 +89,11 @@ Attributes of cuckooreport
     score
     errors
     cuckoo_server_messages
+
+Attributes of olereport
+-----------------------
+
+.. code-block:: shell
+
+    has_office_macro
+    vba_code

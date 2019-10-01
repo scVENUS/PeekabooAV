@@ -862,21 +862,21 @@ unknown : baz'''
     def test_rule_ignore_mail_signatures(self):
         """ Test rule to ignore cryptographic mail signatures. """
         config = '''[expressions]
-            expression.4  : sample.meta_info_name_declared == 'smime.p7s'
+            expression.1  : sample.meta_info_name_declared == 'smime.p7s'
                 and sample.meta_info_type_declared in {
                     'application/pkcs7-signature',
                     'application/x-pkcs7-signature',
                     'application/pkcs7-mime',
                     'application/x-pkcs7-mime'
                 } -> ignore
-            expression.3  : sample.meta_info_name_declared == 'signature.asc'
+            expression.2  : sample.meta_info_name_declared == 'signature.asc'
                 and sample.meta_info_type_declared in {
                     'application/pgp-signature'
                 } -> ignore'''
 
-        part = { "full_name": "p001",
-                 "name_declared": "smime.p7s",
-                 "type_declared": "application/pkcs7-signature"
+        part = {"full_name": "p001",
+                "name_declared": "smime.p7s",
+                "type_declared": "application/pkcs7-signature"
                }
 
         factory = SampleFactory(
@@ -924,6 +924,55 @@ unknown : baz'''
 
         sample = factory.make_sample('')
         sample.register_cuckoo_report(cuckooreport)
+        rule = ExpressionRule(CreatingConfigParser(config))
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.bad)
+
+    def test_rule_expressions_cuckooreport_context(self):
+        """ Test generic rule cuckooreport context """
+        config = '''[expressions]
+            expression.3  : "EVIL" in cuckooreport.signature_descriptions
+                and cuckooreport.score > 4 -> bad
+        '''
+
+        factory = CreatingSampleFactory(
+            cuckoo=None, base_dir=None, job_hash_regex=None,
+            keep_mail_data=False, processing_info_dir=None)
+        tests_data_dir = os.path.dirname(os.path.abspath(__file__))+"/test-data"
+
+        report = {
+            "signatures": [
+                {"description": "EVIL"}
+            ],
+            "info": {"score": 4.2}
+        }
+        cuckooreport = CuckooReport(report)
+
+        sample = factory.make_sample(tests_data_dir+'/office/blank.doc')
+        sample.register_cuckoo_report(cuckooreport)
+        rule = ExpressionRule(CreatingConfigParser(config))
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.bad)
+
+    def test_rule_expressions_olereport_context(self):
+        """ Test generic rule olereport context """
+        config = '''[expressions]
+            expression.3  : olereport.has_office_macros == True -> bad
+        '''
+
+        factory = CreatingSampleFactory(
+            cuckoo=None, base_dir=None, job_hash_regex=None,
+            keep_mail_data=False, processing_info_dir=None)
+        tests_data_dir = os.path.dirname(os.path.abspath(__file__))+"/test-data"
+
+        sample = factory.make_sample(tests_data_dir+'/office/suspiciousMacro.doc')
+        rule = ExpressionRule(CreatingConfigParser(config))
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.bad)
+
+        config = '''[expressions]
+            expression.3  : /suspicious/ in olereport.vba_code -> bad
+        '''
         rule = ExpressionRule(CreatingConfigParser(config))
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)

@@ -133,6 +133,19 @@ class Rule(object):
                     'Sample: %s', job_id, sample)
         raise PeekabooAnalysisDeferred()
 
+    def get_oletools_report(self, sample):
+        """ Get the samples oletools_report or generate it.
+
+            @returns: OleReport
+        """
+        report = sample.oletools_report
+        if report is not None:
+            return report
+
+        oletool = Oletools()
+        report = OletoolsReport(oletool.get_report(sample))
+        return report
+
 
 class KnownRule(Rule):
     """ A rule determining if a sample is known by looking at the database for
@@ -271,7 +284,7 @@ class OfficeMacroRule(OleRule):
 
     def evaluate_report(self, report):
         """ Report the sample as bad if it contains a macro. """
-        if report.has_office_macros():
+        if report.has_office_macros:
             return self.result(Result.bad,
                                _("The file contains an Office macro"),
                                False)
@@ -485,15 +498,15 @@ class ExpressionRule(Rule):
     rule_name = 'expressions'
 
     def get_config(self):
-        expressions = self.get_config_value('expression', [])
-        if not expressions:
+        self.expressions = self.get_config_value('expression', [])
+        if not self.expressions:
             raise PeekabooRulesetConfigError(
                 "List of expressions empty, check %s rule config."
                 % self.rule_name)
 
         self.rules = []
         parser = ExpressionParser()
-        for expr in expressions:
+        for expr in self.expressions:
             try:
                 rule = parser.parse(expr)
                 logger.debug("EXPR: %s", expr)
@@ -504,19 +517,21 @@ class ExpressionRule(Rule):
 
     def evaluate(self, sample):
         """ Match what rules report against our known result status names. """
-        for rule in self.rules:
+        for i, rule in enumerate(self.rules):
             result = None
             context = {'variables': {'sample': sample}}
 
             while result is None:
                 try:
-                    result = rule.eval(context = context)
+                    result = rule.eval(context=context)
                     # otherwise this is an endless loop
                     if result is None:
                         break
                 except IdentifierMissingException as error:
-                    if "cuckooreport" == error.args[0]:
+                    if error.args[0] == "cuckooreport":
                         context['variables']['cuckooreport'] = self.get_cuckoo_report(sample)
+                    elif error.args[0] == "olereport":
+                        context['variables']['olereport'] = self.get_oletools_report(sample)
                     # here elif for other reports
                     else:
                         return self.result(

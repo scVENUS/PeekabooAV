@@ -90,6 +90,8 @@ expression.3  : sample.meta_info_name_declared == 'signature.asc'
                     and sample.meta_info_type_declared in {
                         'application/pgp-signature'
                     } -> ignore
+expression.4  : olereport.has_office_macros == True
+                    and cuckooreport.score > 4 -> bad
 
 [cuckoo_evil_sig]
 signature.1  : A potential heapspray has been detected. .*
