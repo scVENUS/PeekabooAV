@@ -4,6 +4,8 @@ See documentation for details.
 
 ## devel
 
+- Generic rules allow to evaluate expressions with sample, cuckooreport and
+  olereport
 - Distribute and install sample configuration files in/from PyPI source
   distribution
 - Make list of rules to run configurable in members and order. See
