@@ -752,27 +752,23 @@ unknown : baz'''
             keyword.2 : AutoClose
             keyword.3 : suSPi.ious'''
         rule = OfficeMacroWithSuspiciousKeyword(CreatingConfigParser(config))
-        # sample factory to create samples from real files
-        factory1 = SampleFactory(
-            cuckoo=None, base_dir=None, job_hash_regex=None,
-            keep_mail_data=False, processing_info_dir=None)
-        # sampe factory to create samples with defined content
-        factory2 = CreatingSampleFactory(
+        # sampe factory to create samples
+        factory = CreatingSampleFactory(
             cuckoo=None, base_dir=None, job_hash_regex=None,
             keep_mail_data=False, processing_info_dir=None)
         tests_data_dir = os.path.dirname(os.path.abspath(__file__))+"/test-data"
 
         combinations = [
             # no office document file extension
-            [Result.unknown, factory2.make_sample('test.nodoc', 'test')],
+            [Result.unknown, factory.create_sample('test.nodoc', 'test')],
             # test with empty file
-            [Result.unknown, factory1.make_sample(tests_data_dir+'/office/empty.doc')],
+            [Result.unknown, factory.make_sample(tests_data_dir+'/office/empty.doc')],
             # office document with 'suspicious' in macro code
-            [Result.bad, factory1.make_sample(tests_data_dir+'/office/suspiciousMacro.doc')],
+            [Result.bad, factory.make_sample(tests_data_dir+'/office/suspiciousMacro.doc')],
             # test with blank word doc
-            [Result.unknown, factory1.make_sample(tests_data_dir+'/office/blank.doc')],
+            [Result.unknown, factory.make_sample(tests_data_dir+'/office/blank.doc')],
             # test with legitimate macro
-            [Result.unknown, factory1.make_sample(tests_data_dir+'/office/legitmacro.xls')]
+            [Result.unknown, factory.make_sample(tests_data_dir+'/office/legitmacro.xls')]
         ]
         for expected, sample in combinations:
             result = rule.evaluate(sample)
@@ -782,15 +778,15 @@ unknown : baz'''
         rule = OfficeMacroRule(CreatingConfigParser(config))
         combinations = [
             # no office document file extension
-            [Result.unknown, factory2.make_sample('test.nodoc', 'test')],
+            [Result.unknown, factory.create_sample('test.nodoc', 'test')],
             # test with empty file
-            [Result.unknown, factory1.make_sample(tests_data_dir+'/office/empty.doc')],
+            [Result.unknown, factory.make_sample(tests_data_dir+'/office/empty.doc')],
             # office document with 'suspicious' in macro code
-            [Result.bad, factory1.make_sample(tests_data_dir+'/office/suspiciousMacro.doc')],
+            [Result.bad, factory.make_sample(tests_data_dir+'/office/suspiciousMacro.doc')],
             # test with blank word doc
-            [Result.unknown, factory1.make_sample(tests_data_dir+'/office/blank.doc')],
+            [Result.unknown, factory.make_sample(tests_data_dir+'/office/blank.doc')],
             # test with legitimate macro
-            [Result.bad, factory1.make_sample(tests_data_dir+'/office/legitmacro.xls')]
+            [Result.bad, factory.make_sample(tests_data_dir+'/office/legitmacro.xls')]
         ]
         for expected, sample in combinations:
             result = rule.evaluate(sample)
@@ -957,13 +953,28 @@ unknown : baz'''
     def test_rule_expressions_olereport_context(self):
         """ Test generic rule olereport context """
         config = '''[expressions]
-            expression.3  : olereport.has_office_macros == True -> bad
+            expression.3  : sample.file_extension in {'doc', 'rtf'} and olereport.has_office_macros == True -> bad
         '''
 
         factory = CreatingSampleFactory(
             cuckoo=None, base_dir=None, job_hash_regex=None,
             keep_mail_data=False, processing_info_dir=None)
         tests_data_dir = os.path.dirname(os.path.abspath(__file__))+"/test-data"
+
+        sample = factory.make_sample(tests_data_dir+'/office/blank.doc')
+        rule = ExpressionRule(CreatingConfigParser(config))
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.unknown)
+
+        sample = factory.make_sample(tests_data_dir+'/office/example.rtf')
+        rule = ExpressionRule(CreatingConfigParser(config))
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.unknown)
+
+        sample = factory.make_sample(tests_data_dir+'/office/suspiciousMacro.rtf')
+        rule = ExpressionRule(CreatingConfigParser(config))
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.bad)
 
         sample = factory.make_sample(tests_data_dir+'/office/suspiciousMacro.doc')
         rule = ExpressionRule(CreatingConfigParser(config))

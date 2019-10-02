@@ -90,7 +90,11 @@ expression.3  : sample.meta_info_name_declared == 'signature.asc'
                     and sample.meta_info_type_declared in {
                         'application/pgp-signature'
                     } -> ignore
-expression.4  : olereport.has_office_macros == True
+expression.4  : sample.file_extension in {
+                        'doc', 'docm', 'dotm', 'docx',
+                        'ppt', 'pptm', 'pptx', 'potm', 'ppam', 'ppsm',
+                        'xls', 'xlsm', 'xlsx' }
+                    and olereport.has_office_macros == True
                     and cuckooreport.score > 4 -> bad
 
 [cuckoo_evil_sig]

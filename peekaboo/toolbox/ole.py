@@ -36,21 +36,12 @@ class OleNotAnOfficeDocumentException(Exception):
 
 class Oletools(object):
     """ Parent class, defines interface to Oletools. """
-    def __init__(self):
-        self.MS_OFFICE_EXTENSIONS = [
-            "doc", "docm", "dotm", "docx",
-            "ppt", "pptm", "pptx", "potm", "ppam", "ppsm",
-            "xls", "xlsm", "xlsx",
-        ]
-
     def get_report(self, sample):
         """ Return oletools report or create if not already cached. """
         if sample.oletools_report != None:
             return sample.oletools_report
 
         report = {}
-        if sample.file_extension not in self.MS_OFFICE_EXTENSIONS:
-            raise OleNotAnOfficeDocumentException(sample.file_extension)
 
         try:
             vbaparser = VBA_Parser(sample.file_path)
