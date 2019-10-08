@@ -140,7 +140,6 @@ signature.43 : Wscript.exe initiated network communications indicative of a scri
 signature.44 : The process powershell.exe wrote an executable file to disk
 signature.45 : Creates a suspicious Powershell process
 signature.46 : Appends a new file extension or content to .* files indicative of a ransomware file encryption process
-signature.47 : Creates a shortcut to an executable file
 
 #[cuckoo_score]
 # defaults:
