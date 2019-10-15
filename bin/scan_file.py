@@ -71,7 +71,7 @@ def main():
     while True:
         data = peekaboo.recv(1024)
         if data:
-            buf += data
+            buf += data.decode('utf-8')
         else:
             peekaboo.close()
             break
