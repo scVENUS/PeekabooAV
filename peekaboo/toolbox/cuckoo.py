@@ -204,7 +204,8 @@ class CuckooEmbed(Cuckoo):
             try:
                 report = json.load(data)
             except ValueError as e:
-                logger.exception(e)
+                logger.warning("Error loading JSON report for cuckoo "
+                               "job id %d", job_id)
 
         return report
 
