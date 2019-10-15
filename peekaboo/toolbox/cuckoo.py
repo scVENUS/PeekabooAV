@@ -194,7 +194,7 @@ class CuckooEmbed(Cuckoo):
                 'analyses/%d/reports/report.json' % job_id)
 
         if not os.path.isfile(path):
-            raise OSError('Cuckoo report not found at %s.' % path)
+            return None
 
         logger.debug('Accessing Cuckoo report for task %d at %s ' %
                 (job_id, path))
