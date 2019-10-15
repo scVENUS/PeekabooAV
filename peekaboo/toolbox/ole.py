@@ -26,13 +26,10 @@
 
 import logging
 import re
-from oletools.olevba import VBA_Parser
+from oletools.olevba import VBA_Parser, FileOpenError
 
 logger = logging.getLogger(__name__)
 
-
-class OleNotAnOfficeDocumentException(Exception):
-    pass
 
 class Oletools(object):
     """ Parent class, defines interface to Oletools. """
@@ -46,13 +43,6 @@ class Oletools(object):
         try:
             vbaparser = VBA_Parser(sample.file_path)
 
-            # List from oletools/olevba.py#L553
-            oletype = ('OLE', 'OpenXML', 'FlatOPC_XML', 'Word2003_XML', 'MHTML', 'PPT')
-
-            # check if ole detects it as an office file
-            if vbaparser.type not in oletype:
-                raise OleNotAnOfficeDocumentException(sample.file_extension)
-
             # VBA_Parser reports macros for office documents
             report['has_macros'] = vbaparser.detect_vba_macros() or vbaparser.detect_xlm_macros()
             try:
@@ -63,7 +53,7 @@ class Oletools(object):
             vbaparser.close()
         except IOError:
             raise
-        except TypeError:
+        except (TypeError, FileOpenError):
             # The given file is not an office document.
             pass
         except Exception as error:
