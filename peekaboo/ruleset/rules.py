@@ -33,8 +33,7 @@ from peekaboo.ruleset.expressions import ExpressionParser, \
         IdentifierMissingException
 from peekaboo.exceptions import PeekabooAnalysisDeferred, \
         CuckooSubmitFailedException, PeekabooRulesetConfigError
-from peekaboo.toolbox.ole import Oletools, OletoolsReport, \
-        OleNotAnOfficeDocumentException
+from peekaboo.toolbox.ole import Oletools, OletoolsReport
 
 
 logger = logging.getLogger(__name__)
@@ -260,10 +259,11 @@ class OleRule(Rule):
                 ole = Oletools()
                 report = ole.get_report(sample)
                 sample.register_oletools_report(OletoolsReport(report))
-            except OleNotAnOfficeDocumentException:
-                return self.result(Result.unknown,
-                                   _("File is not an office document"),
-                                   True)
+
+                if not report:
+                    return self.result(Result.unknown,
+                                       _("File is not an office document"),
+                                       True)
             except Exception:
                 raise
 
