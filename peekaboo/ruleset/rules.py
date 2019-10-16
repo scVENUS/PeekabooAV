@@ -122,11 +122,7 @@ class Rule(object):
             # exception message intentionally not present in message
             # delivered back to client as to not disclose internal
             # information, should request user to contact admin instead
-            return self.result(
-                Result.failed,
-                _("Behavioral analysis by Cuckoo has produced an error "
-                  "and did not finish successfully"),
-                False)
+            return None
 
         logger.info('Sample submitted to Cuckoo. Job ID: %s. '
                     'Sample: %s', job_id, sample)
@@ -530,6 +526,11 @@ class ExpressionRule(Rule):
                 except IdentifierMissingException as error:
                     if error.args[0] == "cuckooreport":
                         context['variables']['cuckooreport'] = self.get_cuckoo_report(sample)
+                        if not context['variables']['cuckooreport']:
+                            return self.result(
+                                Result.failed,
+                                _("Evaluation of expression couldn't get cuckoo report."),
+                                False)
                     elif error.args[0] == "olereport":
                         context['variables']['olereport'] = self.get_oletools_report(sample)
                     # here elif for other reports
