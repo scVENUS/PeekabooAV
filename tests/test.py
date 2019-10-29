@@ -858,7 +858,7 @@ unknown : baz'''
     def test_rule_ignore_mail_signatures(self):
         """ Test rule to ignore cryptographic mail signatures. """
         config = '''[expressions]
-            expression.1  : sample.meta_info_name_declared == 'smime.p7s'
+            expression.1  : sample.meta_info_name_declared == /smime.p7[mcs]/
                 and sample.meta_info_type_declared in {
                     'application/pkcs7-signature',
                     'application/x-pkcs7-signature',
@@ -884,6 +884,26 @@ unknown : baz'''
         rule = ExpressionRule(CreatingConfigParser(config))
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.ignored)
+
+        sample.meta_info_name_declared = "asmime.p7m"
+        rule = ExpressionRule(CreatingConfigParser(config))
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.unknown)
+
+        sample.meta_info_name_declared = "smime.p7m"
+        rule = ExpressionRule(CreatingConfigParser(config))
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.ignored)
+
+        sample.meta_info_name_declared = "smime.p7o"
+        rule = ExpressionRule(CreatingConfigParser(config))
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.unknown)
+
+        sample.meta_info_name_declared = "smime.p7"
+        rule = ExpressionRule(CreatingConfigParser(config))
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.unknown)
 
         sample.meta_info_name_declared = "file"
         rule = ExpressionRule(CreatingConfigParser(config))
