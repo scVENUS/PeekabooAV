@@ -542,8 +542,8 @@ class ExpressionRule(Rule):
 
             if result:
                 return self.result(result,
-                                   _("A rule classified the sample as %s")
-                                   % result,
+                                   _("The rule (%d) classified the sample as %s")
+                                   % (i, result),
                                    False)
 
         return self.result(Result.unknown,
