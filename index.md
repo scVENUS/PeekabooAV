@@ -5,6 +5,19 @@
 * PeekabooAV is written in Python, multi-threaded, scalable, has a very powerful ruleset, and is easy to extend and personalize
 * It is able to detect: malware by its behavior, exploitation of zero days, and targeted attacks
 
+
+Third PeekabooAV Workshop and Developers Meeting
+------------------------------------------------
+
+Our third Workshop and Developers Meeting will take place **04.12.2019 in Tübingen**, Hagellocher Weg 73.
+
+We will start at 🕘 9 o'clock with an introduction by Felix Bauer, there will be an opportunity for our users to present,
+time to get to know the new features for the upcoming version, time for discussion, coffee and snacks.
+
+Please let us know you are coming and if you can share your experience with Peekaboo. 
+The event will be organised by Felix (felix@peekabooav.de)
+
+
 We can offer
 ------------
 * Support for peekaboo
