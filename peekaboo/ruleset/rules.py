@@ -34,6 +34,7 @@ from peekaboo.ruleset.expressions import ExpressionParser, \
 from peekaboo.exceptions import PeekabooAnalysisDeferred, \
         CuckooSubmitFailedException, PeekabooRulesetConfigError
 from peekaboo.toolbox.ole import Oletools, OletoolsReport
+from peekaboo.toolbox.files import Filetools, FiletoolsReport
 
 
 logger = logging.getLogger(__name__)
@@ -139,6 +140,19 @@ class Rule(object):
 
         oletool = Oletools()
         report = OletoolsReport(oletool.get_report(sample))
+        return report
+
+    def get_filetools_report(self, sample):
+        """ Get the samples filetools_report or generate it.
+
+            @returns: FiletoolsReport
+        """
+        report = sample.filetools_report
+        if report is not None:
+            return report
+
+        filetools = Filetools()
+        report = FiletoolsReport(filetools.get_report(sample))
         return report
 
 
@@ -531,6 +545,8 @@ class ExpressionRule(Rule):
                                 Result.failed,
                                 _("Evaluation of expression couldn't get cuckoo report."),
                                 False)
+                    elif error.args[0] == "filereport":
+                        context['variables']['filereport'] = self.get_filetools_report(sample)
                     elif error.args[0] == "olereport":
                         context['variables']['olereport'] = self.get_oletools_report(sample)
                     # here elif for other reports
