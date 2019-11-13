@@ -145,6 +145,9 @@ class OperatorRegex(object):
                     return True
             return False
 
+        if other is None:
+            return False
+
         return function(other)
 
     def __eq__(self, other):

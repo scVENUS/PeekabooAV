@@ -858,7 +858,7 @@ unknown : baz'''
     def test_rule_ignore_mail_signatures(self):
         """ Test rule to ignore cryptographic mail signatures. """
         config = '''[expressions]
-            expression.1  : sample.meta_info_name_declared == 'smime.p7s'
+            expression.1  : sample.meta_info_name_declared == /smime.p7[mcs]/
                 and sample.meta_info_type_declared in {
                     'application/pkcs7-signature',
                     'application/x-pkcs7-signature',
@@ -868,7 +868,9 @@ unknown : baz'''
             expression.2  : sample.meta_info_name_declared == 'signature.asc'
                 and sample.meta_info_type_declared in {
                     'application/pgp-signature'
-                } -> ignore'''
+                } -> ignore
+            '''
+        rule = ExpressionRule(CreatingConfigParser(config))
 
         part = {"full_name": "p001",
                 "name_declared": "smime.p7s",
@@ -879,14 +881,32 @@ unknown : baz'''
             cuckoo=None, base_dir=None, job_hash_regex=None,
             keep_mail_data=False, processing_info_dir=None)
 
+        sample = factory.make_sample('file.1')
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.unknown)
+
         # test smime signatures
         sample = factory.make_sample('', metainfo=part)
-        rule = ExpressionRule(CreatingConfigParser(config))
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.ignored)
 
+        sample.meta_info_name_declared = "asmime.p7m"
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.unknown)
+
+        sample.meta_info_name_declared = "smime.p7m"
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.ignored)
+
+        sample.meta_info_name_declared = "smime.p7o"
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.unknown)
+
+        sample.meta_info_name_declared = "smime.p7"
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.unknown)
+
         sample.meta_info_name_declared = "file"
-        rule = ExpressionRule(CreatingConfigParser(config))
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
