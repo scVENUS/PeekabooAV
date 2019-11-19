@@ -50,14 +50,14 @@ class PeekabooUtil(object):
         """ Send request to peekaboo and return its answer """
         logger.debug('Sending request: %s', request)
 
-        self.peekaboo.send(request)
+        self.peekaboo.send(request.encode('utf-8'))
         print ('Waiting for response...')
 
         buf = ''
         while True:
             data = self.peekaboo.recv(1024)
             if data:
-                buf += data
+                buf += data.decode('utf-8')
                 if output:
                     print(data, end='')
             else:
