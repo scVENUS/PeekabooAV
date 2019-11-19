@@ -751,13 +751,15 @@ unknown : baz'''
             keyword.1 : AutoOpen
             keyword.2 : AutoClose
             keyword.3 : suSPi.ious'''
-        rule = OfficeMacroWithSuspiciousKeyword(CreatingConfigParser(config))
+
         # sampe factory to create samples
         factory = CreatingSampleFactory(
             cuckoo=None, base_dir=None, job_hash_regex=None,
             keep_mail_data=False, processing_info_dir=None)
         tests_data_dir = os.path.dirname(os.path.abspath(__file__))+"/test-data"
 
+        # test if macro with suspicious keyword
+        rule = OfficeMacroWithSuspiciousKeyword(CreatingConfigParser(config))
         combinations = [
             # no office document file extension
             [Result.unknown, factory.create_sample('test.nodoc', 'test')],
@@ -980,6 +982,16 @@ unknown : baz'''
             cuckoo=None, base_dir=None, job_hash_regex=None,
             keep_mail_data=False, processing_info_dir=None)
         tests_data_dir = os.path.dirname(os.path.abspath(__file__))+"/test-data"
+
+        sample = factory.make_sample(tests_data_dir+'/office/empty.doc')
+        rule = ExpressionRule(CreatingConfigParser(config))
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.unknown)
+
+        sample = factory.make_sample(tests_data_dir+'/office/file.txt')
+        rule = ExpressionRule(CreatingConfigParser(config))
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.unknown)
 
         sample = factory.make_sample(tests_data_dir+'/office/blank.doc')
         rule = ExpressionRule(CreatingConfigParser(config))

@@ -48,8 +48,19 @@ class Oletools(object):
             try:
                 report['vba'] = vbaparser.reveal()
             except TypeError:
-                # no macros
+                # office document with no macros
                 pass
+
+            all_macros = vbaparser.extract_all_macros()
+            if (report['has_macros'] and len(all_macros) == 1
+                and type(all_macros[0]) is tuple
+                and len(all_macros[0]) >= 3
+                and all_macros[0][2] == sample.file_path):
+                logger.warning("Buggy oletools version detected, result "
+                    "overridden. May lead to false negatives, please update to "
+                    "fixed version")
+                report['has_macros'] = False
+
             vbaparser.close()
         except IOError:
             raise
