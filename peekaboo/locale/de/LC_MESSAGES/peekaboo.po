@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PeekabooAV 1.6.2\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2019-10-16 11:51+0200\n"
+"POT-Creation-Date: 2019-12-20 13:13+0000\n"
 "PO-Revision-Date: 2019-02-14 22:02+0000\n"
 "Last-Translator: Michael Weiser <michael.weiser@gmx.de>\n"
 "Language: de\n"
@@ -45,40 +45,40 @@ msgstr "Erfolgreich an Cuckoo gegeben %s als Job %d"
 msgid "Hello, this is Peekaboo."
 msgstr "Hallo das ist Peekaboo"
 
-#: peekaboo/server.py:174
+#: peekaboo/server.py:161
+msgid "ERROR: Path does not exist or no permission to access it."
+msgstr "FEHLER: Pfad existiert nicht oder Zugriff verweigert."
+
+#: peekaboo/server.py:168
+msgid "ERRROR: Input is not a file"
+msgstr "FEHLER: Eingabe ist keine Datei"
+
+#: peekaboo/server.py:175
+msgid "Error submitting sample to job queue"
+msgstr "Fehler beim Einstellen in Warteschlange"
+
+#: peekaboo/server.py:198
 #, fuzzy
 msgid "Error: Invalid JSON in request."
 msgstr "FEHLER: Ungültiges JSON."
 
-#: peekaboo/server.py:179
+#: peekaboo/server.py:203
 msgid "ERROR: Invalid data structure."
 msgstr "FEHLER: Ungültiges Datenformat."
 
-#: peekaboo/server.py:186
+#: peekaboo/server.py:214
 msgid "ERROR: Incomplete data structure."
 msgstr "FEHLER: Unvollständige Datenstruktur."
 
-#: peekaboo/server.py:193
-msgid "ERROR: Path does not exist or no permission to access it."
-msgstr "FEHLER: Pfad existiert nicht oder Zugriff verweigert."
-
-#: peekaboo/server.py:200
-msgid "ERRROR: Input is not a file"
-msgstr "FEHLER: Eingabe ist keine Datei"
-
-#: peekaboo/server.py:207
-msgid "Error submitting sample to job queue"
-msgstr "Fehler beim Einstellen in Warteschlange"
-
-#: peekaboo/server.py:239
+#: peekaboo/server.py:242
 msgid "Files are being analyzed..."
 msgstr "Dateien werden analysiert..."
 
-#: peekaboo/server.py:262
+#: peekaboo/server.py:265
 msgid "Peekaboo is shutting down."
 msgstr "Peekaboo wird beendet."
 
-#: peekaboo/server.py:314
+#: peekaboo/server.py:317
 #, python-format
 msgid "The file collection has been categorized \"%s\""
 msgstr "Die Datensammlung wurde als \"%s\" eingestuft"
@@ -104,61 +104,61 @@ msgstr "Nein"
 msgid "Rule aborted with error"
 msgstr "Regel mit Fehler abgebrochen"
 
-#: peekaboo/ruleset/rules.py:159
+#: peekaboo/ruleset/rules.py:156
 msgid "File is not yet known to the system"
 msgstr "Datei ist dem System noch nicht bekannt"
 
-#: peekaboo/ruleset/rules.py:180
+#: peekaboo/ruleset/rules.py:177
 #, python-format
 msgid "Failure to determine sample file size: %s"
 msgstr "Ermittlung der Dateigröße fehlgeschlagen: %s"
 
-#: peekaboo/ruleset/rules.py:185
+#: peekaboo/ruleset/rules.py:182
 #, python-format
 msgid "File has more than %d bytes"
 msgstr "Datei hat mehr als %d bytes"
 
-#: peekaboo/ruleset/rules.py:191
+#: peekaboo/ruleset/rules.py:188
 #, python-format
 msgid "File is only %d bytes long"
 msgstr "Die Datei ist nur %d bytes groß"
 
-#: peekaboo/ruleset/rules.py:213
+#: peekaboo/ruleset/rules.py:210
 msgid "File type is on whitelist"
 msgstr "Dateityp ist auf Whitelist"
 
-#: peekaboo/ruleset/rules.py:217
+#: peekaboo/ruleset/rules.py:214
 msgid "File type is not on whitelist"
 msgstr "Dateityp ist nicht auf Whitelist"
 
-#: peekaboo/ruleset/rules.py:239
+#: peekaboo/ruleset/rules.py:236
 msgid "File type is on the list of types to analyze"
 msgstr "Dateityp ist auf der Liste der zu analysiserenden Typen"
 
-#: peekaboo/ruleset/rules.py:244
+#: peekaboo/ruleset/rules.py:241
 #, python-format
 msgid "File type is not on the list of types to analyse (%s)"
 msgstr "Dateityp ist nicht auf der Liste der zu analysierenden Typen (%s)"
 
-#: peekaboo/ruleset/rules.py:261
+#: peekaboo/ruleset/rules.py:258
 msgid "File is not an office document"
 msgstr "Die Datei ist kein Office Dokument"
 
-#: peekaboo/ruleset/rules.py:285
+#: peekaboo/ruleset/rules.py:282
 msgid "The file contains an Office macro"
 msgstr "Die Datei beinhaltet ein Office-Makro"
 
-#: peekaboo/ruleset/rules.py:289
+#: peekaboo/ruleset/rules.py:286
 msgid "The file does not contain a recognizable Office macro"
 msgstr "Die Datei beinhaltet kein erkennbares Office-Makro"
 
-#: peekaboo/ruleset/rules.py:310
+#: peekaboo/ruleset/rules.py:307
 msgid "The file contains an Office macro which runs at document open"
 msgstr ""
 "Die Datei beinhaltet ein Office Makro welches beim Öffnen der Datei "
 "ausgeführt wird"
 
-#: peekaboo/ruleset/rules.py:315
+#: peekaboo/ruleset/rules.py:312
 msgid ""
 "The file does not contain a recognizable Office macro that is run at "
 "document open"
@@ -166,37 +166,7 @@ msgstr ""
 "Die Datei beinhaltet kein erkennbares Office Makro welches beim Öffnen "
 "ausgeführt wird"
 
-#: peekaboo/ruleset/rules.py:386
-msgid "No signature suggesting malware detected"
-msgstr "Keine Signatur erkannt die auf Schadcode hindeutet"
-
-#: peekaboo/ruleset/rules.py:391
-#, python-format
-msgid "The following signatures have been recognized: %s"
-msgstr "Folgende Signaturen wurden erkannt: %s"
-
-#: peekaboo/ruleset/rules.py:410
-#, python-format
-msgid "Cuckoo score >= %s: %s"
-msgstr ""
-
-#: peekaboo/ruleset/rules.py:415
-#, python-format
-msgid "Cuckoo score < %s: %s"
-msgstr ""
-
-#: peekaboo/ruleset/rules.py:439
-#, python-format
-msgid "The file attempts to contact at least one domain on the blacklist (%s)"
-msgstr ""
-"Die Datei versucht mindestens eine Domain aus der Blacklist zu "
-"kontaktieren (%s)"
-
-#: peekaboo/ruleset/rules.py:445
-msgid "File does not seem to attempt contact with domains on the blacklist"
-msgstr "Datei scheint keine Domains aus der Blacklist kontaktieren zu wollen"
-
-#: peekaboo/ruleset/rules.py:466
+#: peekaboo/ruleset/rules.py:338 peekaboo/ruleset/rules.py:472
 msgid ""
 "Behavioral analysis by Cuckoo has produced an error and did not finish "
 "successfully"
@@ -204,31 +174,58 @@ msgstr ""
 "Die Verhaltensanalyse durch Cuckoo hat einen Fehler produziert und konnte"
 " nicht erfolgreich abgeschlossen werden"
 
-#: peekaboo/ruleset/rules.py:482
+#: peekaboo/ruleset/rules.py:392
+msgid "No signature suggesting malware detected"
+msgstr "Keine Signatur erkannt die auf Schadcode hindeutet"
+
+#: peekaboo/ruleset/rules.py:397
+#, python-format
+msgid "The following signatures have been recognized: %s"
+msgstr "Folgende Signaturen wurden erkannt: %s"
+
+#: peekaboo/ruleset/rules.py:416
+#, python-format
+msgid "Cuckoo score >= %s: %s"
+msgstr ""
+
+#: peekaboo/ruleset/rules.py:421
+#, python-format
+msgid "Cuckoo score < %s: %s"
+msgstr ""
+
+#: peekaboo/ruleset/rules.py:445
+#, python-format
+msgid "The file attempts to contact at least one domain on the blacklist (%s)"
+msgstr ""
+"Die Datei versucht mindestens eine Domain aus der Blacklist zu "
+"kontaktieren (%s)"
+
+#: peekaboo/ruleset/rules.py:451
+msgid "File does not seem to attempt contact with domains on the blacklist"
+msgstr "Datei scheint keine Domains aus der Blacklist kontaktieren zu wollen"
+
+#: peekaboo/ruleset/rules.py:488
 msgid "Behavioral analysis by Cuckoo completed successfully"
 msgstr "Die Verhaltensanalyse durch Cuckoo wurde erfolgreich abgeschlossen"
 
-#: peekaboo/ruleset/rules.py:532
+#: peekaboo/ruleset/rules.py:538
 msgid "Evaluation of expression couldn't get cuckoo report."
 msgstr "Auswertung des Ausdrucks konnte Cuckoo Report nicht bekommen."
 
-#: peekaboo/ruleset/rules.py:540
+#: peekaboo/ruleset/rules.py:547
 msgid "Evaluation of expression uses undefined identifier."
 msgstr "Auswertung des Ausdrucks nutzt nicht definierten Bezeichner."
 
-#: peekaboo/ruleset/rules.py:545
+#: peekaboo/ruleset/rules.py:552
 #, python-format
-msgid "A rule classified the sample as %s"
-msgstr "Eine Regel klassifizierte die Datei als %s"
+msgid "The rule (%d) classified the sample as %s"
+msgstr "Die Regel (%d) klassifizierte die Datei als %s"
 
-#: peekaboo/ruleset/rules.py:550
+#: peekaboo/ruleset/rules.py:557
 msgid "No rule classified the sample in any way."
 msgstr "Keine Regel klassifizierte die Datei in irgendeiner Weise."
 
-#: peekaboo/ruleset/rules.py:562
+#: peekaboo/ruleset/rules.py:569
 msgid "File does not seem to exhibit recognizable malicious behaviour"
 msgstr "Datei scheint keine erkennbaren Schadroutinen zu starten"
-
-#~ msgid "The rule (%s) classified the sample as %s"
-#~ msgstr "Die Regel (%s) klassifizierte die Datei als %s"
 
