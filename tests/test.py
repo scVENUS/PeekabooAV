@@ -54,6 +54,7 @@ from peekaboo.ruleset.rules import FileTypeOnWhitelistRule, \
         CuckooScoreRule, RequestsEvilDomainRule, FinalRule, \
         OfficeMacroRule, OfficeMacroWithSuspiciousKeyword, \
         ExpressionRule
+from peekaboo.ruleset.expressions import ExpressionParser
 
 from peekaboo.toolbox.cuckoo import CuckooReport
 from peekaboo.db import PeekabooDatabase, PeekabooDatabaseError
@@ -1187,6 +1188,46 @@ unknown : baz'''
         FinalRule(CreatingConfigParser(config))
 
 
+class TestExpressionParser(CompatibleTestCase):
+    """ Unittests for the expression parser. """
+    @classmethod
+    def setUpClass(cls):
+        """ Set up common test case resources. """
+        cls.parser = ExpressionParser()
+
+    def test_basic_expressions(self):
+        """ Test basic expressions. """
+        combinations = [
+            ["True", True],
+            ["False", False],
+            ["5", 5],
+            ["5 == 5", True],
+            ["5 == 7", False],
+            ["5+2 == 7", True],
+            ["(5+2)*2==14", True],
+            ["'foo' == 'bar'", False],
+            ["'foo' == 'foo'", True],
+            ["'foo' in 'bar'", False],
+            # re.search()
+            ["'foo' in 'foobar'", True],
+            ["/foo/ in 'afoobar'", True],
+            # re.match() is implicit /^<pattern>/
+            ["/foo/ == 'afoobar'", False],
+            ["/foo/ == 'foobar'", True],
+            ["/[fb][oa][or]/ in 'foo'", True],
+            ["/[fb][oa][or]/ in 'bar'", True],
+            ["/[fb][oa][or]/ in 'snafu'", False],
+            ["/[fb][oa][or]/ in ['afoob', 'snafu']", True],
+            ["/[fb][oa][or]/ == ['afoob', 'snafu']", False],
+            ["[/foo/, /bar/] in ['snafu', 'fuba']", False],
+            ["[/foo/, /bar/, /ub/] in ['snafu', 'fuba']", True],
+            ["[/foo/, /bar/, /naf/] in ['snafu', 'fuba']", True],
+        ]
+        for rule, expected in combinations:
+            parsed = self.parser.parse(rule)
+            self.assertEqual(parsed.eval({}), expected, "Rule: %s" % rule)
+
+
 class PeekabooTestResult(unittest.TextTestResult):
     """ Subclassed test result for custom formatting. """
     def getDescription(self, test):
@@ -1221,6 +1262,7 @@ def main():
     suite.addTest(unittest.makeSuite(TestDatabase))
     suite.addTest(unittest.makeSuite(TestRulesetEngine))
     suite.addTest(unittest.makeSuite(TestRules))
+    suite.addTest(unittest.makeSuite(TestExpressionParser))
     # TODO: We need more tests!!!
 
     # Disable all logging to avoid spurious messages.
