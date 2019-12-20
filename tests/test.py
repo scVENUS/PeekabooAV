@@ -1198,6 +1198,16 @@ class PeekabooTestResult(unittest.TextTestResult):
 
         return str(test)
 
+
+def enable_debug():
+    """ Allow to enable debug messages by calling this function anywhere. """
+    logging.disable(logging.NOTSET)
+    _logger = logging.getLogger()
+    to_console_log_handler = logging.StreamHandler(sys.stdout)
+    _logger.addHandler(to_console_log_handler)
+    _logger.setLevel(logging.DEBUG)
+
+
 def main():
     """ Run the testsuite. """
     gettext.NullTranslations().install()
