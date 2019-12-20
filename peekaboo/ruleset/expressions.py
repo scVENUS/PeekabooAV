@@ -52,7 +52,6 @@ class EvalBase(object):
         rvallist = Group(Suppress('[') + delimitedList(rval) + Suppress(']'))
         """
         self.value = self.token = tokens[0]
-        self.context = None
         self.convert()
         self.string_repr_format = "(%s)"
 
@@ -61,32 +60,9 @@ class EvalBase(object):
         else. Particularly used for conversion to base types. """
         self.value = self.token
 
-    def feedback(self, info):
-        """ Accept and process feedback evaluation children. """
-        # by default propagate feedback upwards if we have a context
-        if self.context and 'parent' in self.context:
-            self.context['parent'].feedback(info)
-
-    def subeval(self, expression, update=None):
-        """ Evaluate a subexpression with an updated evaluation context
-        containing common metadata such as that we're it's parent and optional
-        additional data. """
-        context = self.context.copy()
-        context['parent'] = self
-        if update:
-            context.update(update)
-        return expression.eval(context)
-
-    def set_context(self, context):
-        """ Save an evaluation context internally for later use by e.g.
-        feedback(). """
-        self.context = context
-
     def eval(self, context):
         """ Evaluate the object content against a context. Just return the
-        stored (and optionally converted) value by default and remember our
-        context for possible feedback to our parent or from our children. """
-        self.set_context(context)
+        stored (and optionally converted) value by default. """
         return self.value
 
     def __str__(self):
@@ -168,8 +144,6 @@ class EvalRegex(EvalBase):
         self.value = OperatorRegex(self.token)
 
     def eval(self, context):
-        self.set_context(context)
-        self.feedback({'regex_parsed': True})
         return self.value
 
 
@@ -213,53 +187,42 @@ class RegexSet(RegexIterableMixIn, set):
     membership operators. """
 
 
-class EvalRegexIterableMixIn(object):
-    """ Common functionality for iterables which may contain regular
-    expressions. """
-    def __init__(self, tokens):
-        super().__init__(tokens)
-        self.contains_regexes = False
-
-    def feedback(self, info):
-        """ Mark this object as containing regular expressions if a child
-        object reports so in its feedback to us. """
-        if 'regex_parsed' in info:
-            self.contains_regexes = True
-            del info['regex_parsed']
-
-        super().feedback(info)
-
-
-class EvalList(EvalRegexIterableMixIn, EvalBase):
+class EvalList(EvalBase):
     """ Class to evaluate a parsed list """
     def __init__(self, token):
         super().__init__(token)
         self.string_repr_format = "[%s]"
 
     def eval(self, context):
-        self.set_context(context)
         logger.debug("List: %s", self.value)
         ret = []
+        regexes = False
         for val in self.value:
-            ret.append(self.subeval(val))
-        if self.contains_regexes:
+            element = val.eval(context)
+            if isinstance(element, OperatorRegex):
+                regexes = True
+            ret.append(element)
+        if regexes:
             return RegexList(ret)
         return ret
 
 
-class EvalSet(EvalRegexIterableMixIn, EvalBase):
-    """ Class to evaluate a parsed list """
+class EvalSet(EvalBase):
+    """ Class to evaluate a parsed set """
     def __init__(self, token):
         super().__init__(token)
         self.string_repr_format = "{%s}"
 
     def eval(self, context):
-        self.set_context(context)
         logger.debug("Set: %s", self.value)
         ret = set()
+        regexes = False
         for val in self.value:
-            ret.add(self.subeval(val))
-        if self.contains_regexes:
+            element = val.eval(context)
+            if isinstance(element, OperatorRegex):
+                regexes = True
+            ret.add(element)
+        if regexes:
             return RegexSet(ret)
         return ret
 
@@ -272,10 +235,13 @@ class EvalIdentifier(EvalBase):
     """ Class to evaluate a parsed object name """
     def eval(self, context):
         logger.debug("Identifier: %s", self.value)
-        if 'member' in context and context['member']:
+
+        # return the literal identifier name if dereferencing it is disabled
+        if isinstance(context, dict) and not context.get('deref', True):
             return self.value
 
         try:
+            # look the identifier up in the variables part of the context
             return context['variables'][self.value]
         except KeyError as error:
             raise IdentifierMissingException(error.args[0])
@@ -304,8 +270,7 @@ class EvalModifier(EvalBase):
         self.operator, self.value = tokens[0]
 
     def eval(self, context):
-        self.set_context(context)
-        val = self.subeval(self.value)
+        val = self.value.eval(context)
         if self.operator == '+':
             return val
         elif self.operator == '-':
@@ -321,10 +286,9 @@ class EvalModifier(EvalBase):
 class EvalPower(EvalBase):
     """ Class to evaluate exponentiation expressions """
     def eval(self, context):
-        self.set_context(context)
-        res = self.subeval(self.value[-1])
+        res = self.value[-1].eval(context)
         for val in self.value[-3::-2]:
-            res = self.subeval(val)**res
+            res = val.eval(context)**res
 
         return res
 
@@ -345,30 +309,35 @@ class EvalArith(EvalBase):
     precedence is handled by the order in which they're evaluated by the
     parser, i.e. given to infixNotation. """
     def eval(self, context):
-        self.set_context(context)
-        ret = self.subeval(self.value[0])
+        ret = self.value[0].eval(context)
         for op, val in operator_operands(self.value[1:]):
             if op == '+':
-                ret += self.subeval(val)
+                ret += val.eval(context)
             elif op == '-':
-                ret -= self.subeval(val)
+                ret -= val.eval(context)
             elif op == '*':
-                ret *= self.subeval(val)
+                ret *= val.eval(context)
             elif op == '/':
-                ret /= self.subeval(val)
+                ret /= val.eval(context)
             elif op == '//':
-                ret //= self.subeval(val)
+                ret //= val.eval(context)
             elif op == '%':
-                ret %= self.subeval(val)
+                ret %= val.eval(context)
             elif op == '<<':
-                ret <<= self.subeval(val)
+                ret <<= val.eval(context)
             elif op == '>>':
-                ret >>= self.subeval(val)
+                ret >>= val.eval(context)
             elif op == '.':
-                ret = getattr(ret, self.subeval(val, update={'member': True}))
+                # expect op to be an identifier, have it return its name by
+                # setting deref to False and then resolve that property in
+                # current ret by calling getattr() on it
+                property_context = context.copy()
+                property_context['deref'] = False
+                property_name = val.eval(property_context)
+                ret = getattr(ret, property_name)
             elif op == "->":
                 if ret:
-                    ret = self.subeval(val)
+                    ret = val.eval(context)
                 else:
                     ret = None
             else:
@@ -435,10 +404,9 @@ class EvalLogic(EvalBase):
         return function(val1, val2)
 
     def eval(self, context):
-        self.set_context(context)
-        val1 = self.subeval(self.value[0])
+        val1 = self.value[0].eval(context)
         for op, parseobj in operator_operands(self.value[1:]):
-            val2 = self.subeval(parseobj)
+            val2 = parseobj.eval(context)
             logger.debug("Comparison: %s %s %s", val1, op, val2)
             function = self.operator_map[op]
             if not self.handle_regexes(function, val1, val2):
