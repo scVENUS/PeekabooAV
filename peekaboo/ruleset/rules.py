@@ -119,9 +119,6 @@ class Rule(object):
             job_id = sample.submit_to_cuckoo()
         except CuckooSubmitFailedException as failed:
             logger.error("Submit to Cuckoo failed: %s", failed)
-            # exception message intentionally not present in message
-            # delivered back to client as to not disclose internal
-            # information, should request user to contact admin instead
             return None
 
         logger.info('Sample submitted to Cuckoo. Job ID: %s. '
@@ -332,6 +329,15 @@ class CuckooRule(Rule):
         @returns: RuleResult containing verdict.
         """
         report = self.get_cuckoo_report(sample)
+        if report is None:
+            # exception message intentionally not present in message
+            # delivered back to client as to not disclose internal
+            # information, should request user to contact admin instead
+            return self.result(
+                Result.failed,
+                _("Behavioral analysis by Cuckoo has produced an error "
+                  "and did not finish successfully"),
+                False)
 
         # call report evaluation function if we get here
         return self.evaluate_report(report)
@@ -525,12 +531,13 @@ class ExpressionRule(Rule):
                         break
                 except IdentifierMissingException as error:
                     if error.args[0] == "cuckooreport":
-                        context['variables']['cuckooreport'] = self.get_cuckoo_report(sample)
-                        if not context['variables']['cuckooreport']:
+                        report = self.get_cuckoo_report(sample)
+                        if report is None:
                             return self.result(
                                 Result.failed,
                                 _("Evaluation of expression couldn't get cuckoo report."),
                                 False)
+                        context['variables']['cuckooreport'] = report
                     elif error.args[0] == "olereport":
                         context['variables']['olereport'] = self.get_oletools_report(sample)
                     # here elif for other reports
