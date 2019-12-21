@@ -523,12 +523,11 @@ class ExpressionRule(Rule):
             result = None
             context = {'variables': {'sample': sample}}
 
-            while result is None:
+            # retry until rule evaluation doesn't throw exceptions any more
+            while True:
                 try:
                     result = rule.eval(context=context)
-                    # otherwise this is an endless loop
-                    if result is None:
-                        break
+                    break
                 except IdentifierMissingException as error:
                     if error.args[0] == "cuckooreport":
                         report = self.get_cuckoo_report(sample)
@@ -546,6 +545,7 @@ class ExpressionRule(Rule):
                             Result.failed,
                             _("Evaluation of expression uses undefined identifier."),
                             False)
+                # beware: here we intentionally loop on through for retry
 
             if result:
                 return self.result(result,
