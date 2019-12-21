@@ -112,35 +112,28 @@ class RulesetEngine(object):
         @param sample: sample to evaluate ruleset against
         @returns: Nothing, all state is recorded in the sample """
         for rule in self.rules:
-            result = self.__exec_rule(sample, rule)
+            rule_name = rule.rule_name
+            logger.debug("Processing rule '%s' for %s", rule_name, sample)
+
+            try:
+                result = rule.evaluate(sample)
+                sample.add_rule_result(result)
+            except PeekabooAnalysisDeferred:
+                # in case the Sample is requesting the Cuckoo report
+                raise
+            # catch all other exceptions for this rule
+            except Exception as error:
+                logger.warning("Unexpected error in '%s' for %s", rule_name,
+                               sample)
+                logger.exception(error)
+                # create "fake" RuleResult
+                result = RuleResult("RulesetEngine", result=Result.failed,
+                                    reason=_("Rule aborted with error"),
+                                    further_analysis=False)
+                sample.add_rule_result(result)
+
+            logger.info("Rule '%s' processed for %s", rule_name, sample)
             if not result.further_analysis:
                 return
 
         logger.info("Rules evaluated")
-
-    def __exec_rule(self, sample, rule):
-        """
-        rule wrapper for in/out logging and reporting
-        """
-        rule_name = rule.rule_name
-        logger.debug("Processing rule '%s' for %s", rule_name, sample)
-
-        try:
-            result = rule.evaluate(sample)
-            sample.add_rule_result(result)
-        except PeekabooAnalysisDeferred:
-            # in case the Sample is requesting the Cuckoo report
-            raise
-        # catch all other exceptions for this rule
-        except Exception as e:
-            logger.warning("Unexpected error in '%s' for %s", rule_name,
-                           sample)
-            logger.exception(e)
-            # create "fake" RuleResult
-            result = RuleResult("RulesetEngine", result=Result.failed,
-                                reason=_("Rule aborted with error"),
-                                further_analysis=False)
-            sample.add_rule_result(result)
-
-        logger.info("Rule '%s' processed for %s", rule_name, sample)
-        return result
