@@ -297,7 +297,6 @@ class PeekabooConfig(PeekabooConfigParser):
         self.worker_count = 3
         self.sample_base_dir = '/tmp'
         self.job_hash_regex = '/amavis/tmp/([^/]+)/parts/'
-        self.use_debug_module = False
         self.keep_mail_data = False
         self.processing_info_dir = '/var/lib/peekaboo/malware_reports'
         self.report_locale = None
@@ -331,7 +330,6 @@ class PeekabooConfig(PeekabooConfigParser):
             'worker_count': ['global', 'worker_count'],
             'sample_base_dir': ['global', 'sample_base_dir'],
             'job_hash_regex': ['global', 'job_hash_regex'],
-            'use_debug_module': ['global', 'use_debug_module'],
             'keep_mail_data': ['global', 'keep_mail_data'],
             'processing_info_dir': ['global', 'processing_info_dir'],
             'report_locale': ['global', 'report_locale'],
