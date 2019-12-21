@@ -35,9 +35,6 @@ class Oletools(object):
     """ Parent class, defines interface to Oletools. """
     def get_report(self, sample):
         """ Return oletools report or create if not already cached. """
-        if sample.oletools_report != None:
-            return sample.oletools_report
-
         report = {}
 
         try:
@@ -69,7 +66,9 @@ class Oletools(object):
             pass
         except Exception as error:
             logger.exception(error)
-        sample.register_oletools_report(OletoolsReport(report))
+
+        report = OletoolsReport(report)
+        sample.register_oletools_report(report)
         return report
 
 

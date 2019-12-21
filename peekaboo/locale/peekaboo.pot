@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2019-12-20 13:13+0000\n"
+"POT-Creation-Date: 2019-12-23 10:47+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -103,120 +103,116 @@ msgstr ""
 msgid "Rule aborted with error"
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:156
+#: peekaboo/ruleset/rules.py:154
 msgid "File is not yet known to the system"
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:177
+#: peekaboo/ruleset/rules.py:175
 #, python-format
 msgid "Failure to determine sample file size: %s"
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:182
+#: peekaboo/ruleset/rules.py:180
 #, python-format
 msgid "File has more than %d bytes"
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:188
+#: peekaboo/ruleset/rules.py:186
 #, python-format
 msgid "File is only %d bytes long"
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:210
+#: peekaboo/ruleset/rules.py:208
 msgid "File type is on whitelist"
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:214
+#: peekaboo/ruleset/rules.py:212
 msgid "File type is not on whitelist"
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:236
+#: peekaboo/ruleset/rules.py:234
 msgid "File type is on the list of types to analyze"
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:241
+#: peekaboo/ruleset/rules.py:239
 #, python-format
 msgid "File type is not on the list of types to analyse (%s)"
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:258
-msgid "File is not an office document"
-msgstr ""
-
-#: peekaboo/ruleset/rules.py:282
+#: peekaboo/ruleset/rules.py:268
 msgid "The file contains an Office macro"
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:286
+#: peekaboo/ruleset/rules.py:272
 msgid "The file does not contain a recognizable Office macro"
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:307
+#: peekaboo/ruleset/rules.py:293
 msgid "The file contains an Office macro which runs at document open"
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:312
+#: peekaboo/ruleset/rules.py:298
 msgid ""
 "The file does not contain a recognizable Office macro that is run at "
 "document open"
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:338 peekaboo/ruleset/rules.py:472
+#: peekaboo/ruleset/rules.py:324 peekaboo/ruleset/rules.py:458
 msgid ""
 "Behavioral analysis by Cuckoo has produced an error and did not finish "
 "successfully"
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:392
+#: peekaboo/ruleset/rules.py:378
 msgid "No signature suggesting malware detected"
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:397
+#: peekaboo/ruleset/rules.py:383
 #, python-format
 msgid "The following signatures have been recognized: %s"
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:416
+#: peekaboo/ruleset/rules.py:402
 #, python-format
 msgid "Cuckoo score >= %s: %s"
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:421
+#: peekaboo/ruleset/rules.py:407
 #, python-format
 msgid "Cuckoo score < %s: %s"
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:445
+#: peekaboo/ruleset/rules.py:431
 #, python-format
 msgid "The file attempts to contact at least one domain on the blacklist (%s)"
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:451
+#: peekaboo/ruleset/rules.py:437
 msgid "File does not seem to attempt contact with domains on the blacklist"
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:488
+#: peekaboo/ruleset/rules.py:474
 msgid "Behavioral analysis by Cuckoo completed successfully"
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:538
+#: peekaboo/ruleset/rules.py:523
 msgid "Evaluation of expression couldn't get cuckoo report."
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:547
+#: peekaboo/ruleset/rules.py:532
 msgid "Evaluation of expression uses undefined identifier."
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:552
+#: peekaboo/ruleset/rules.py:538
 #, python-format
 msgid "The rule (%d) classified the sample as %s"
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:557
+#: peekaboo/ruleset/rules.py:543
 msgid "No rule classified the sample in any way."
 msgstr ""
 
-#: peekaboo/ruleset/rules.py:569
+#: peekaboo/ruleset/rules.py:555
 msgid "File does not seem to exhibit recognizable malicious behaviour"
 msgstr ""
 

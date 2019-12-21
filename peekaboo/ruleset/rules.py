@@ -33,7 +33,7 @@ from peekaboo.ruleset.expressions import ExpressionParser, \
         IdentifierMissingException
 from peekaboo.exceptions import PeekabooAnalysisDeferred, \
         CuckooSubmitFailedException, PeekabooRulesetConfigError
-from peekaboo.toolbox.ole import Oletools, OletoolsReport
+from peekaboo.toolbox.ole import Oletools
 
 
 logger = logging.getLogger(__name__)
@@ -134,9 +134,7 @@ class Rule(object):
         if report is not None:
             return report
 
-        oletool = Oletools()
-        report = OletoolsReport(oletool.get_report(sample))
-        return report
+        return Oletools().get_report(sample)
 
 
 class KnownRule(Rule):
@@ -247,20 +245,8 @@ class OleRule(Rule):
     """ A common base class for rules that evaluate the Ole report. """
     def evaluate(self, sample):
         """ Report the sample as bad if it contains a macro. """
-        if sample.oletools_report is None:
-            try:
-                ole = Oletools()
-                report = ole.get_report(sample)
-                sample.register_oletools_report(OletoolsReport(report))
-
-                if not report:
-                    return self.result(Result.unknown,
-                                       _("File is not an office document"),
-                                       True)
-            except Exception:
-                raise
-
-        return self.evaluate_report(sample.oletools_report)
+        # we always get a report, albeit a maybe empty one
+        return self.evaluate_report(self.get_oletools_report(sample))
 
     def evaluate_report(self, report):
         """ Evaluate an Ole report.
