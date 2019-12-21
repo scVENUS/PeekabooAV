@@ -28,7 +28,6 @@ from threading import Thread, Event, Lock
 from queue import Queue, Empty
 from time import sleep
 from peekaboo.ruleset import Result, RuleResult
-from peekaboo.ruleset.engine import RulesetEngine
 from peekaboo.exceptions import PeekabooAnalysisDeferred, \
     PeekabooDatabaseError
 
@@ -38,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 class JobQueue:
     """ Peekaboo's queuing system. """
-    def __init__(self, ruleset_config, db_con, worker_count=4,
+    def __init__(self, ruleset_engine, db_con, worker_count=4,
                  queue_timeout=300, shutdown_timeout=60,
                  cluster_duplicate_check_interval=5):
         """ Initialise job queue by creating n Peekaboo worker threads to
@@ -70,7 +69,7 @@ class JobQueue:
 
         for i in range(0, self.worker_count):
             logger.debug("Create Worker %d" % i)
-            worker = Worker(i, self, ruleset_config, db_con)
+            worker = Worker(i, self, ruleset_engine, db_con)
             self.workers.append(worker)
             worker.start()
 
@@ -335,7 +334,7 @@ class ClusterDuplicateHandler(Thread):
 
 class Worker(Thread):
     """ A Worker thread to process a sample. """
-    def __init__(self, wid, job_queue, ruleset_config, db_con):
+    def __init__(self, wid, job_queue, ruleset_engine, db_con):
         # whether we should run
         self.shutdown_requested = Event()
         self.shutdown_requested.clear()
@@ -344,7 +343,7 @@ class Worker(Thread):
         self.running_flag.clear()
         self.worker_id = wid
         self.job_queue = job_queue
-        self.ruleset_config = ruleset_config
+        self.ruleset_engine = ruleset_engine
         self.db_con = db_con
         Thread.__init__(self, name="Worker-%d" % wid)
 
@@ -384,9 +383,8 @@ class Worker(Thread):
                 self.job_queue.done(sample.sha256sum)
                 continue
 
-            engine = RulesetEngine(self.ruleset_config, self.db_con)
             try:
-                engine.run(sample)
+                self.ruleset_engine.run(sample)
             except PeekabooAnalysisDeferred:
                 logger.debug("Report for sample %s still pending", sample)
                 continue

@@ -320,16 +320,16 @@ def run():
                            "interval to %d seconds.",
                            cldup_check_interval)
 
-    # workers of the job queue need the ruleset configuration to create the
-    # ruleset engine with it
+    # read in the ruleset configuration
     try:
         ruleset_config = PeekabooConfigParser(config.ruleset_config)
     except PeekabooConfigException as error:
         logging.critical(error)
         sys.exit(1)
 
-    # verify the ruleset configuration by spawning a ruleset engine and having
-    # it verify it
+    # create a single ruleset engine for all workers, instantiates all the
+    # rules based on the ruleset configuration, is otherwise stateless to avoid
+    # concurrent use by multiple worker threads
     try:
         engine = RulesetEngine(ruleset_config, db_con)
     except (KeyError, ValueError, PeekabooConfigException) as error:
@@ -340,7 +340,7 @@ def run():
         sys.exit(1)
 
     job_queue = JobQueue(
-        worker_count=config.worker_count, ruleset_config=ruleset_config,
+        worker_count=config.worker_count, ruleset_engine=engine,
         db_con=db_con,
         cluster_duplicate_check_interval=cldup_check_interval)
 

@@ -45,7 +45,7 @@ class Rule(object):
     connection) or helper functions. """
     rule_name = 'unimplemented'
 
-    def __init__(self, config=None, db_con=None):
+    def __init__(self, config, db_con):
         """ Initialize common configuration and resources """
         self.db_con = db_con
         self.config = config
@@ -65,7 +65,10 @@ class Rule(object):
                           further_analysis=further_analysis)
 
     def evaluate(self, sample):
-        """ Evaluate a rule against a sample.
+        """ Evaluate a rule agaimst a sample. Findings are recorded in the
+        sample or returned in the rule result. *Must not* change the rule
+        object's internal state because it will be called by multiple workers
+        in parallel.
 
         @param sample: The sample to evaluate.
         @returns: RuleResult containing verdict, reason, source of this
