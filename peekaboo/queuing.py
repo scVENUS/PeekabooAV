@@ -70,9 +70,9 @@ class JobQueue:
 
         for i in range(0, self.worker_count):
             logger.debug("Create Worker %d" % i)
-            w = Worker(i, self, ruleset_config, db_con)
-            self.workers.append(w)
-            w.start()
+            worker = Worker(i, self, ruleset_config, db_con)
+            self.workers.append(worker)
+            worker.start()
 
         logger.info('Created %d Workers.' % self.worker_count)
 
