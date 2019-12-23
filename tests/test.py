@@ -54,7 +54,8 @@ from peekaboo.ruleset.rules import FileTypeOnWhitelistRule, \
         CuckooScoreRule, RequestsEvilDomainRule, FinalRule, \
         OfficeMacroRule, OfficeMacroWithSuspiciousKeyword, \
         ExpressionRule
-from peekaboo.ruleset.expressions import ExpressionParser
+from peekaboo.ruleset.expressions import ExpressionParser, \
+        IdentifierMissingException
 
 from peekaboo.toolbox.cuckoo import CuckooReport
 from peekaboo.db import PeekabooDatabase, PeekabooDatabaseError
@@ -1227,6 +1228,17 @@ class TestExpressionParser(CompatibleTestCase):
         for rule, expected in combinations:
             parsed = self.parser.parse(rule)
             self.assertEqual(parsed.eval({}), expected, "Rule: %s" % rule)
+
+    def test_identifier_missing(self):
+        """ Missing identifier exceptions. """
+        parsed = self.parser.parse("foo == 'bar'")
+        with self.assertRaisesRegex(KeyError, "variables") as keyerr:
+            parsed.eval({})
+        # make sure this really is a key error and no subclass of it
+        self.assertNotIsInstance(keyerr.exception, IdentifierMissingException)
+
+        # now that really should work
+        parsed.eval({"variables": {"foo": "bar"}})
 
 
 class PeekabooTestResult(unittest.TextTestResult):

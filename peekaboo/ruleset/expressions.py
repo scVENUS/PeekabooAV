@@ -240,11 +240,14 @@ class EvalIdentifier(EvalBase):
         if isinstance(context, dict) and not context.get('deref', True):
             return self.value
 
+        # potentially raise an actual KeyError here to not mask it as missing
+        # identifier
+        variables = context['variables']
         try:
             # look the identifier up in the variables part of the context
-            return context['variables'][self.value]
+            return variables[self.value]
         except KeyError as error:
-            raise IdentifierMissingException(error.args[0])
+            raise IdentifierMissingException(self.value)
 
 
 class EvalResult(EvalBase):
