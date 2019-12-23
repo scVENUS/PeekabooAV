@@ -519,23 +519,26 @@ class ExpressionRule(Rule):
                     break
                 except IdentifierMissingException as missing:
                     identifier = missing.name
-                    if identifier == "cuckooreport":
-                        value = self.get_cuckoo_report(sample)
-                        if value is None:
-                            return self.result(
-                                Result.failed,
-                                _("Evaluation of expression couldn't get cuckoo report."),
-                                False)
-                    elif identifier == "olereport":
-                        value = self.get_oletools_report(sample)
-                    # here elif for other reports
-                    else:
+
+                if identifier == "cuckooreport":
+                    value = self.get_cuckoo_report(sample)
+                    if value is None:
                         return self.result(
                             Result.failed,
-                            _("Evaluation of expression uses undefined identifier."),
+                            _("Evaluation of expression couldn't get cuckoo "
+                              "report."),
                             False)
+                elif identifier == "olereport":
+                    value = self.get_oletools_report(sample)
+                # elif here for other identifiers
+                else:
+                    return self.result(
+                        Result.failed,
+                        _("Evaluation of expression uses undefined "
+                          "identifier."),
+                        False)
 
-                    context['variables'][identifier] = value
+                context['variables'][identifier] = value
                 # beware: here we intentionally loop on through for retry
 
             if result:
