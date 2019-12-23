@@ -53,7 +53,6 @@ class EvalBase(object):
         """
         self.value = self.token = tokens[0]
         self.convert()
-        self.string_repr_format = "(%s)"
 
     def convert(self):
         """ Method to (optionally) convert the input token(s) into something
@@ -66,8 +65,7 @@ class EvalBase(object):
         return self.value
 
     def __str__(self):
-        return self.string_repr_format % (
-            " ".join(["%s" % x for x in self.token]))
+        return "%s" % self.token
 
 
 class EvalBoolean(EvalBase):
@@ -103,6 +101,9 @@ class EvalString(EvalBase):
     def convert(self):
         logger.debug("String: %s", self.token)
         self.value = self.token
+
+    def __str__(self):
+        return '"%s"' % self.token
 
 
 class OperatorRegex(object):
@@ -145,6 +146,9 @@ class EvalRegex(EvalBase):
 
     def eval(self, context):
         return self.value
+
+    def __str__(self):
+        return "/%s/" % self.token
 
 
 class RegexIterableMixIn(object):
@@ -189,10 +193,6 @@ class RegexSet(RegexIterableMixIn, set):
 
 class EvalList(EvalBase):
     """ Class to evaluate a parsed list """
-    def __init__(self, token):
-        super().__init__(token)
-        self.string_repr_format = "[%s]"
-
     def eval(self, context):
         logger.debug("List: %s", self.value)
         ret = []
@@ -206,13 +206,11 @@ class EvalList(EvalBase):
             return RegexList(ret)
         return ret
 
+    def __str__(self):
+        return "[%s]" % (", ".join(["%s" % x for x in self.token]))
 
 class EvalSet(EvalBase):
     """ Class to evaluate a parsed set """
-    def __init__(self, token):
-        super().__init__(token)
-        self.string_repr_format = "{%s}"
-
     def eval(self, context):
         logger.debug("Set: %s", self.value)
         ret = set()
@@ -225,6 +223,9 @@ class EvalSet(EvalBase):
         if regexes:
             return RegexSet(ret)
         return ret
+
+    def __str__(self):
+        return "{%s}" % (", ".join(["%s" % x for x in self.token]))
 
 
 class IdentifierMissingException(KeyError):
@@ -287,6 +288,9 @@ class EvalModifier(EvalBase):
 
         raise ValueError('Invalid operator %s' % self.operator)
 
+    def __str__(self):
+        return "(%s%s)" % (self.operator, self.value)
+
 
 class EvalPower(EvalBase):
     """ Class to evaluate exponentiation expressions """
@@ -296,6 +300,9 @@ class EvalPower(EvalBase):
             res = val.eval(context)**res
 
         return res
+
+    def __str__(self):
+        return "(%s)" % (" ".join(["%s" % x for x in self.token]))
 
 
 def operator_operands(tokenlist):
@@ -349,6 +356,9 @@ class EvalArith(EvalBase):
                 raise ValueError('Invalid operator %s' % op)
 
         return ret
+
+    def __str__(self):
+        return "(%s)" % (" ".join(["%s" % x for x in self.token]))
 
 
 class EvalLogic(EvalBase):
@@ -421,6 +431,9 @@ class EvalLogic(EvalBase):
             return True
 
         return False
+
+    def __str__(self):
+        return "(%s)" % (" ".join(["%s" % x for x in self.token]))
 
 
 class ExpressionParser(object):
