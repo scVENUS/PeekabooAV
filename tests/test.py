@@ -174,7 +174,6 @@ class TestDefaultConfig(CompatibleTestCase):
         self.assertEqual(self.config.sample_base_dir, '/tmp')
         self.assertEqual(
             self.config.job_hash_regex, '/amavis/tmp/([^/]+)/parts/')
-        self.assertEqual(self.config.use_debug_module, False)
         self.assertEqual(self.config.keep_mail_data, False)
         self.assertEqual(
             self.config.processing_info_dir,
@@ -211,7 +210,6 @@ interpreter      :    /inter/1
 worker_count     :    18
 sample_base_dir  :    /tmp/1
 job_hash_regex   :    /var/2
-use_debug_module :    yes
 keep_mail_data   :    yes
 processing_info_dir : /var/3
 
@@ -251,7 +249,6 @@ duplicate_check_interval: 61
         self.assertEqual(self.config.worker_count, 18)
         self.assertEqual(self.config.sample_base_dir, '/tmp/1')
         self.assertEqual(self.config.job_hash_regex, '/var/2')
-        self.assertEqual(self.config.use_debug_module, True)
         self.assertEqual(self.config.keep_mail_data, True)
         self.assertEqual(self.config.processing_info_dir, '/var/3')
         self.assertEqual(self.config.ruleset_config, '/rules/1')

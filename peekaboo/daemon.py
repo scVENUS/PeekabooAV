@@ -289,13 +289,6 @@ def run():
                         'at %s: %s', config.db_url, dberr)
         sys.exit(1)
 
-    # Import debug module if we are in debug mode
-    debugger = None
-    if config.use_debug_module:
-        from peekaboo.debug import PeekabooDebugger
-        debugger = PeekabooDebugger()
-        debugger.start()
-
     # initialize the daemon infrastructure such as PID file and dropping
     # privileges, automatically cleans up after itself when going out of scope
     daemon_infrastructure = PeekabooDaemonInfrastructure(
@@ -373,8 +366,6 @@ def run():
     except Exception as error:
         logger.critical('Failed to start Peekaboo Server: %s', error)
         job_queue.shut_down()
-        if debugger is not None:
-            debugger.shut_down()
         sys.exit(1)
 
     exit_code = 1
@@ -392,9 +383,6 @@ def run():
             db_con.clear_stale_in_flight_samples()
         except PeekabooDatabaseError as dberr:
             logger.error(dberr)
-
-        if debugger is not None:
-            debugger.shut_down()
 
     sys.exit(exit_code)
 
