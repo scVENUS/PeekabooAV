@@ -517,23 +517,25 @@ class ExpressionRule(Rule):
                 try:
                     result = rule.eval(context=context)
                     break
-                except IdentifierMissingException as error:
-                    if error.args[0] == "cuckooreport":
-                        report = self.get_cuckoo_report(sample)
-                        if report is None:
+                except IdentifierMissingException as missing:
+                    identifier = missing.name
+                    if identifier == "cuckooreport":
+                        value = self.get_cuckoo_report(sample)
+                        if value is None:
                             return self.result(
                                 Result.failed,
                                 _("Evaluation of expression couldn't get cuckoo report."),
                                 False)
-                        context['variables']['cuckooreport'] = report
-                    elif error.args[0] == "olereport":
-                        context['variables']['olereport'] = self.get_oletools_report(sample)
+                    elif identifier == "olereport":
+                        value = self.get_oletools_report(sample)
                     # here elif for other reports
                     else:
                         return self.result(
                             Result.failed,
                             _("Evaluation of expression uses undefined identifier."),
                             False)
+
+                    context['variables'][identifier] = value
                 # beware: here we intentionally loop on through for retry
 
             if result:

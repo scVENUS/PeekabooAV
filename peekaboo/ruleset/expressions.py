@@ -228,7 +228,9 @@ class EvalSet(EvalBase):
 
 
 class IdentifierMissingException(KeyError):
-    pass
+    def __init__(self, name):
+        super().__init__("Identifier '%s' is missing" % name)
+        self.name = name
 
 
 class EvalIdentifier(EvalBase):

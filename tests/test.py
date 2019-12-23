@@ -1237,6 +1237,12 @@ class TestExpressionParser(CompatibleTestCase):
         # make sure this really is a key error and no subclass of it
         self.assertNotIsInstance(keyerr.exception, IdentifierMissingException)
 
+        with self.assertRaisesRegex(
+                IdentifierMissingException,
+                "Identifier 'foo' is missing") as iderr:
+            parsed.eval({"variables": {}})
+        self.assertEqual(iderr.exception.name, "foo")
+
         # now that really should work
         parsed.eval({"variables": {"foo": "bar"}})
 
