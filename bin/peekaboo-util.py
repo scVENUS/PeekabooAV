@@ -48,7 +48,7 @@ class PeekabooUtil(object):
         logger.debug('Opening socket %s', socket_file)
         self.peekaboo.connect(socket_file)
 
-    def send_receive(self, request, output=False):
+    def send_receive(self, request):
         """ Send request to peekaboo and return its answer """
         logger.debug('Sending request: %s', request)
 
@@ -60,8 +60,6 @@ class PeekabooUtil(object):
             data = self.peekaboo.recv(1024)
             if data:
                 buf += data.decode('utf-8')
-                if output:
-                    print(data, end='')
             else:
                 self.peekaboo.close()
                 break
