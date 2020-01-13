@@ -67,12 +67,12 @@ class PeekabooUtil(object):
         logger.debug('Received from peekaboo: %s', buf)
         return buf
 
-    def scan_file(self, filename):
+    def scan_file(self, filenames):
         """ Scan the supplied filenames with peekaboo and output result """
         result_regex = re.compile(r'has been categorized',
                                   re.MULTILINE + re.DOTALL + re.UNICODE)
         file_snippets = []
-        for filename in filename:
+        for filename in filenames:
             file_snippets.append('{ "full_name": "%s" }' % path.abspath(filename))
         request = '[ %s ]' % ', '.join(file_snippets)
 
