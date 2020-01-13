@@ -66,22 +66,15 @@ class PeekabooUtil(object):
         logger.debug('Received from peekaboo: %s', buf)
         return buf
 
-    def ping(self):
-        """ Send ping request to daemon and optionally print response. """
-        ping = json.dumps([{"request": "ping"}])
-
-        logger.debug("Sending ping...")
-        try:
-            response = self.send_receive(ping)
-        except socket.error as error:
-            logger.error("Error communicating with daemon: %s", error)
-            return 2
-
-        pong = None
+    def send_receive_json(self, data):
+        """ Send and receive data in JSON format. """
+        request = json.dumps(data)
+        response = self.send_receive(request)
+        outdata = None
         for line in response.splitlines():
             try:
                 # try to parse and stop at first thing that parses
-                pong = json.loads(line)
+                outdata = json.loads(line)
                 break
             except ValueError as error:
                 # FIXME: daemon talks a mix of plain text and JSON. So for now
@@ -89,6 +82,17 @@ class PeekabooUtil(object):
                 # errors.  We can't even employ a heuristic since all of those
                 # can be translated.
                 pass
+
+        return outdata
+
+    def ping(self):
+        """ Send ping request to daemon and optionally print response. """
+        logger.debug("Sending ping...")
+        try:
+            pong = self.send_receive_json([{"request": "ping"}])
+        except socket.error as error:
+            logger.error("Error communicating with daemon: %s", error)
+            return 2
 
         if not isinstance(pong, dict):
             logger.error("Invalid response from daemon: %s", pong)
