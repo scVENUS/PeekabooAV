@@ -196,11 +196,13 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
                 ... },
               { "request": "scan-file",
                 "full_name": ... },
+              { "request": "ping" },
               ... ]
 
         The request field is optional with a default of "scan-file".
         Valid requests are:
         * scan-file
+        * ping
 
         scan-file: requires the path of the directory / file to analyse
         in "full_name".
@@ -230,7 +232,7 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
 
             # default request type is scan-file
             reqtype = request.get('request', 'scan-file')
-            if reqtype not in ['scan-file']:
+            if reqtype not in ['scan-file', 'ping']:
                 self.talk_back(_('ERROR: Unsupported request %s') % reqtype)
                 logger.error('Unsupported request %s', reqtype)
                 return None
@@ -264,6 +266,10 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
 
                 submitted.append(sample)
                 logger.debug('Created and submitted sample %s', sample)
+            elif reqtype == 'ping':
+                self.talk_back(json.dumps({'request': 'ping',
+                                           'response': 'pong'}))
+                logger.debug('ping request received and answered')
             else:
                 # paranoia
                 logger.error('Unknown request "%s" got through input '

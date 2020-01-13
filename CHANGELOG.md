@@ -19,7 +19,7 @@ See documentation for details.
   handling with backoff and defined endless retry or failure report to client.
   (#43)
 - Introduce peekaboo-util.py with subcommands scan-file (as a super charged
-  replacement for scan\_file.py (#107)) and raw (for diagnosis, scripting
+  replacement for scan\_file.py (#107)), ping and raw (for diagnosis, scripting
   and debugging).
 - Add database indices to speed up processing and lower database CPU load.
   Rename analyses\_time column to analysis\_time in analysis\_jobs table.

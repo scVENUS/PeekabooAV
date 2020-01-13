@@ -66,6 +66,47 @@ class PeekabooUtil(object):
         logger.debug('Received from peekaboo: %s', buf)
         return buf
 
+    def ping(self):
+        """ Send ping request to daemon and optionally print response. """
+        ping = json.dumps([{"request": "ping"}])
+
+        logger.debug("Sending ping...")
+        try:
+            response = self.send_receive(ping)
+        except socket.error as error:
+            logger.error("Error communicating with daemon: %s", error)
+            return 2
+
+        pong = None
+        for line in response.splitlines():
+            try:
+                # try to parse and stop at first thing that parses
+                pong = json.loads(line)
+                break
+            except ValueError as error:
+                # FIXME: daemon talks a mix of plain text and JSON. So for now
+                # we must ignore everything that doesn't parse. This includes
+                # errors.  We can't even employ a heuristic since all of those
+                # can be translated.
+                pass
+
+        if not isinstance(pong, dict):
+            logger.error("Invalid response from daemon: %s", pong)
+            return 2
+
+        reqtype = pong.get('request')
+        response = pong.get('response')
+        if reqtype is None or response is None:
+            logger.error("Incomplete response from daemon: %s", pong)
+            return 2
+
+        if reqtype != 'ping' and response != 'pong':
+            logger.error("Response is not a pong")
+            return 2
+
+        logger.info('Pong received.')
+        return 0
+
     def raw(self, raw):
         """ Send raw data to the daemon and display response. """
         logger.debug("Sending raw...")
@@ -120,6 +161,9 @@ def main():
                                        'than once to scan multiple files.')
     scan_file_parser.set_defaults(func=command_scan_file)
 
+    ping_parser = subparsers.add_parser('ping', help='Ping the daemon')
+    ping_parser.set_defaults(func=command_ping)
+
     raw_parser = subparsers.add_parser('raw',
                                        help='Send raw input to the daemon')
     raw_parser.add_argument('-j', '--json', action='store', required=True,
@@ -146,6 +190,11 @@ def main():
 def command_scan_file(util, args):
     """ Handler for command scan_file """
     return util.scan_file(args.filename)
+
+
+def command_ping(util, _):
+    """ Handler for command ping """
+    return util.ping()
 
 
 def command_raw(util, args):
