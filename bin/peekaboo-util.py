@@ -155,6 +155,8 @@ def main():
                         help='List detailed analysis results of every rule')
     parser.add_argument('-d', '--debug', action='store_true', required=False,
                         help='Output additional diagnostics')
+    parser.add_argument('-t', '--timeout', type=float, required=False,
+                        default=None, help='Communications timeout')
     parser.add_argument('-s', '--socket-file', action='store', required=True,
                         help='Path to Peekaboo\'s socket file')
 
@@ -181,6 +183,9 @@ def main():
         logger.setLevel(logging.INFO)
     if args.verbose2 or args.debug:
         logger.setLevel(logging.DEBUG)
+
+    if args.timeout:
+        socket.setdefaulttimeout(args.timeout)
 
     try:
         util = PeekabooUtil(args.socket_file)
