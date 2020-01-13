@@ -29,6 +29,7 @@
 from __future__ import print_function
 from os import path
 from argparse import ArgumentParser
+import json
 import socket
 import re
 import logging
@@ -71,12 +72,11 @@ class PeekabooUtil(object):
         """ Scan the supplied filenames with peekaboo and output result """
         result_regex = re.compile(r'has been categorized',
                                   re.MULTILINE + re.DOTALL + re.UNICODE)
-        file_snippets = []
+        requests = []
         for filename in filenames:
-            file_snippets.append('{ "full_name": "%s" }' % path.abspath(filename))
-        request = '[ %s ]' % ', '.join(file_snippets)
+            requests.append({"full_name": path.abspath(filename)})
 
-        buf = self.send_receive(request)
+        buf = self.send_receive(json.dumps(requests))
 
         exit_code = 0
         for result in buf.splitlines():
