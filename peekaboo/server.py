@@ -208,12 +208,16 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
         for part in parts:
             if 'full_name' in part:
                 sample = self.submit_sample(part)
+                if sample is None:
+                    return None
+
                 submitted.append(sample)
                 logger.debug('Created and submitted sample %s', sample)
             else:
                 self.talk_back(_('ERROR: Incomplete data structure.'))
                 logger.error('Incomplete data structure.')
                 return None
+
         return submitted
 
     def wait(self, to_be_analysed):
