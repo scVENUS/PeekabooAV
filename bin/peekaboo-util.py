@@ -66,6 +66,18 @@ class PeekabooUtil(object):
         logger.debug('Received from peekaboo: %s', buf)
         return buf
 
+    def raw(self, raw):
+        """ Send raw data to the daemon and display response. """
+        logger.debug("Sending raw...")
+        try:
+            response = self.send_receive(raw)
+        except socket.error as error:
+            logger.error("Error communicating with daemon: %s", error)
+            return 2
+
+        print(response)
+        return 0
+
     def scan_file(self, filenames):
         """ Scan the supplied filenames with peekaboo and output result """
         result_regex = re.compile(r'has been categorized',
@@ -108,6 +120,12 @@ def main():
                                        'than once to scan multiple files.')
     scan_file_parser.set_defaults(func=command_scan_file)
 
+    raw_parser = subparsers.add_parser('raw',
+                                       help='Send raw input to the daemon')
+    raw_parser.add_argument('-j', '--json', action='store', required=True,
+                            help='Raw JSON to send to daemon')
+    raw_parser.set_defaults(func=command_raw)
+
     args = parser.parse_args()
 
     logger.setLevel(logging.ERROR)
@@ -128,6 +146,12 @@ def main():
 def command_scan_file(util, args):
     """ Handler for command scan_file """
     return util.scan_file(args.filename)
+
+
+def command_raw(util, args):
+    """ Handler for command raw """
+    return util.raw(args.json)
+
 
 if __name__ == "__main__":
     sys.exit(main())
