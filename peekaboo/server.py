@@ -209,7 +209,11 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
 
         The maximum buffer size is 16 KiB, because JSON incurs some bloat.
         """
-        client_input = self.request.recv(1024 * 16).rstrip()
+        try:
+            client_input = self.request.recv(1024 * 16).rstrip()
+        except IOError as ioerror:
+            logger.error('Request receive failed: %s', ioerror)
+            return None
 
         try:
             requests = json.loads(client_input)
