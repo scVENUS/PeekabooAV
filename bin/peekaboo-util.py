@@ -53,7 +53,7 @@ class PeekabooUtil(object):
         logger.debug('Sending request: %s', request)
 
         self.peekaboo.send(request.encode('utf-8'))
-        print ('Waiting for response...')
+        logger.info('Waiting for response...')
 
         buf = ''
         while True:
