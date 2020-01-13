@@ -74,7 +74,8 @@ class PeekabooUtil(object):
                                   re.MULTILINE + re.DOTALL + re.UNICODE)
         requests = []
         for filename in filenames:
-            requests.append({"full_name": path.abspath(filename)})
+            requests.append({"request": "scan-file",
+                             "full_name": path.abspath(filename)})
 
         buf = self.send_receive(json.dumps(requests))
 
