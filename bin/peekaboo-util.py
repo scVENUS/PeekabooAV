@@ -32,6 +32,7 @@ from argparse import ArgumentParser
 import socket
 import re
 import logging
+import sys
 
 
 logging.basicConfig()
@@ -77,13 +78,16 @@ class PeekabooUtil(object):
 
         buf = self.send_receive(request)
 
+        exit_code = 0
         for result in buf.splitlines():
             output = result_regex.search(result)
             if output:
                 if 'bad' in result:
                     print(result)
+                    exit_code = 1
                 logger.info(result)
 
+        return exit_code
 
 def main():
     parser = ArgumentParser()
@@ -113,12 +117,12 @@ def main():
     if args.verbose2 or args.debug:
         logger.setLevel(logging.DEBUG)
 
-    args.func(args)
+    return args.func(args)
 
 def command_scan_file(args):
     """ Handler for command scan_file """
     util = PeekabooUtil(args.socket_file)
-    util.scan_file(args.filename)
+    return util.scan_file(args.filename)
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
