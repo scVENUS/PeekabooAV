@@ -117,11 +117,17 @@ def main():
     if args.verbose2 or args.debug:
         logger.setLevel(logging.DEBUG)
 
-    return args.func(args)
+    try:
+        util = PeekabooUtil(args.socket_file)
+    except socket.error as error:
+        logger.error("Error connecting to peekaboo socket: %s", error)
+        return 2
 
-def command_scan_file(args):
+    return args.func(util, args)
+
+
+def command_scan_file(util, args):
     """ Handler for command scan_file """
-    util = PeekabooUtil(args.socket_file)
     return util.scan_file(args.filename)
 
 if __name__ == "__main__":
