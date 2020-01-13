@@ -34,6 +34,7 @@ from peekaboo.ruleset.expressions import ExpressionParser, \
 from peekaboo.exceptions import PeekabooAnalysisDeferred, \
         CuckooSubmitFailedException, PeekabooRulesetConfigError
 from peekaboo.toolbox.ole import Oletools
+from peekaboo.toolbox.files import Filetools
 
 
 logger = logging.getLogger(__name__)
@@ -138,6 +139,19 @@ class Rule(object):
             return report
 
         return Oletools().get_report(sample)
+
+    def get_filetools_report(self, sample):
+        """ Get the samples filetools_report or generate it.
+
+            @returns: FiletoolsReport
+        """
+        report = sample.filetools_report
+        if report is not None:
+            return report
+
+        filetools = Filetools()
+        report = filetools.get_report(sample)
+        return report
 
 
 class KnownRule(Rule):
@@ -546,6 +560,9 @@ class ExpressionRule(Rule):
                 elif identifier == "olereport":
                     logger.debug("Expression requests oletools report")
                     value = self.get_oletools_report(sample)
+                elif identifier == "filereport":
+                    logger.debug("Expression requests filetools report")
+                    value = self.get_filetools_report(sample)
                 # elif here for other identifiers
                 else:
                     return self.result(

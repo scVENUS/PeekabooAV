@@ -63,6 +63,13 @@ Rules can then be constructed like:
     expression.4  : /suspicious/ in olereport.vba_code -> bad
     expression.5  : olereport.has_office_macros == True
                         and cuckooreport.score > 4 -> bad
+    expression.6  : sample.file_extension in {"doc", "docx"}
+                        and /.*\/rtf/ in {sample.declared_mimetype}|filereport.mime_types -> bad
+    expression.7  : sample.file_extension in {"doc", "docx"}
+                        and not filereport.type_by_content in { /application\/.*word/ } -> bad
+    expression.8  : filereport.type_as_text == "AppleDouble encoded Macintosh file" -> ignore
+    expression.9  : {sample.declared_mimetype}|filereport.mime_types <= {
+                        and /.*\/(rtf|richtext)/ in ({sample.declared_mimetype} | filereport.mime_types) -> bad
 
 Attributes of sample
 --------------------
@@ -97,3 +104,12 @@ Attributes of olereport
 
     has_office_macro
     vba_code
+
+Attribuges of filereport
+------------------------
+
+.. code-block:: shell
+
+    type_by_content
+    type_by_name
+    type_as_text

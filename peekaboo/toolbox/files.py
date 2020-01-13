@@ -25,9 +25,8 @@
 
 
 import logging
-import subprocess
-import magic
 import mimetypes
+import magic
 
 
 logger = logging.getLogger(__name__)
@@ -41,7 +40,6 @@ def guess_mime_type_from_file_contents(file_path):
 
     return mt
 
-
 def guess_mime_type_from_filename(file_path):
     """ Guess the type of a file based on its filename or URL. """
     if not mimetypes.inited:
@@ -53,3 +51,49 @@ def guess_mime_type_from_filename(file_path):
         return None
 
     return mt
+
+
+class Filetools(object):
+    """ Parent class, defines interface to various file tools. """
+    def get_report(self, sample):
+        """ Return filetools report or create if not already cached. """
+        if sample.filetools_report != None:
+            return sample.filetools_report
+
+        report = {}
+
+        report["type_by_content"] = guess_mime_type_from_file_contents(sample.file_path)
+        report["type_by_name"] = guess_mime_type_from_filename(sample.filename)
+
+        sample.register_filetools_report(FiletoolsReport(report))
+        return FiletoolsReport(report)
+
+
+class FiletoolsReport(object):
+    """ Represents a custom Filetools report. """
+    def __init__(self, report):
+        self.report = report
+
+    def __str__(self):
+        return "<FiletoolsReport('%s'>" % self.report
+
+    @property
+    def type_by_content(self):
+        """
+        Guesses the type of a file based on the files contents.
+        """
+
+        try:
+            return self.report['type_by_content']
+        except KeyError:
+            return False
+
+    @property
+    def type_by_name(self):
+        """
+        Guesses the type of a file based on its filename.
+        """
+        try:
+            return self.report['type_by_name']
+        except KeyError:
+            return ""

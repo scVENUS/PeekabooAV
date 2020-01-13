@@ -7,7 +7,7 @@ See documentation for details.
 - Embedded Cuckoo mode is deprecated now and scheduled for removal in a future
   release. A warning is printed at startup if embed mode is in use.
 - Generic rules allow to evaluate expressions with sample, cuckooreport and
-  olereport
+  olereport and filereport
 - Distribute and install sample configuration files in/from PyPI source
   distribution
 - Make list of rules to run configurable in members and order. See
