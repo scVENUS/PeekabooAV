@@ -68,7 +68,7 @@ class PeekabooUtil(object):
 
     def scan_file(self, filename):
         """ Scan the supplied filenames with peekaboo and output result """
-        result_regex = re.compile(r'.*wurde als',
+        result_regex = re.compile(r'has been categorized',
                                   re.MULTILINE + re.DOTALL + re.UNICODE)
         file_snippets = []
         for filename in filename:
