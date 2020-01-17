@@ -361,7 +361,8 @@ class CuckooEvilSigRule(CuckooRule):
         # look through matched signatures
         sigs = []
         for descr in report.signatures:
-            logger.debug(descr['description'])
+            logger.debug("Signature from cuckoo report: %s",
+                         descr['description'])
             sigs.append(descr['description'])
 
         # check if there is a "bad" signatures and return bad
@@ -508,8 +509,8 @@ class ExpressionRule(Rule):
         for expr in self.expressions:
             try:
                 rule = parser.parse(expr)
-                logger.debug("EXPR: %s", expr)
-                logger.debug("RULE: %s", rule)
+                logger.debug("Expression from config file: %s", expr)
+                logger.debug("Expression parsed: %s", rule)
                 self.rules.append(rule)
             except SyntaxError as error:
                 raise PeekabooRulesetConfigError(error)
@@ -529,6 +530,7 @@ class ExpressionRule(Rule):
                     identifier = missing.name
 
                 if identifier == "cuckooreport":
+                    logger.debug("Expression requests cuckoo report")
                     value = self.get_cuckoo_report(sample)
                     if value is None:
                         return self.result(
@@ -537,6 +539,7 @@ class ExpressionRule(Rule):
                               "report."),
                             False)
                 elif identifier == "olereport":
+                    logger.debug("Expression requests oletools report")
                     value = self.get_oletools_report(sample)
                 # elif here for other identifiers
                 else:
@@ -550,14 +553,16 @@ class ExpressionRule(Rule):
                 # beware: here we intentionally loop on through for retry
 
             if result:
-                return self.result(result,
-                                   _("The rule (%d) classified the sample as %s")
-                                   % (i, result),
-                                   False)
+                return self.result(
+                    result,
+                    _("The expression (%d) classified the sample as %s")
+                    % (i, result),
+                    False)
 
-        return self.result(Result.unknown,
-                           _("No rule classified the sample in any way."),
-                           True)
+        return self.result(
+            Result.unknown,
+            _("No expression classified the sample in any way."),
+            True)
 
 
 class FinalRule(Rule):
