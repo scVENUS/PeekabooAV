@@ -20,6 +20,8 @@ See documentation for details.
   (#43)
 - Introduce peekaboo-util.py as a super charged replacement for scan_file.py
   (#107)
+- Add database indices to speed up processing and lower database CPU load.
+  Raises schema version to 7. (#124)
 
 ## 1.7
 

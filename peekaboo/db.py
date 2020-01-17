@@ -28,7 +28,8 @@ SQLAlchemy. """
 import threading
 import logging
 from datetime import datetime, timedelta
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, \
+        Enum, Index
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.engine import create_engine
 from sqlalchemy.orm import sessionmaker, scoped_session, relationship
@@ -37,7 +38,7 @@ from peekaboo import __version__
 from peekaboo.ruleset import Result
 from peekaboo.exceptions import PeekabooDatabaseError
 
-DB_SCHEMA_VERSION = 6
+DB_SCHEMA_VERSION = 7
 
 logger = logging.getLogger(__name__)
 Base = declarative_base()
@@ -78,9 +79,25 @@ class InFlightSample(Base):
     """
     __tablename__ = 'in_flight_samples_v%d' % DB_SCHEMA_VERSION
 
+    # Indices:
+    # - general considerations: The table will likely never have more than a
+    #   couple of hundret entries. But we add and delete quite frequently.
+    # - uniqueness of the primary key ensures atomic insertion when adding a
+    #   lock
+    # - column: we delete our own stale locks by instance_id.
+    # - column: we delete other's stale locks by start_time.
+    # - compound: we delete our own locks by sha256sum and instance_id.
+    #   (admittedly a bit of overkill since the individual columns are already
+    #   indexed.)
+
     sha256sum = Column(String(64), primary_key=True)
-    instance_id = Column(Integer, nullable=False)
-    start_time = Column(DateTime, nullable=False)
+    instance_id = Column(Integer, nullable=False, index=True)
+    start_time = Column(DateTime, nullable=False, index=True)
+
+    __table_args__ = (
+        # Index names need to be unique per schema in postgresql.
+        Index('ix_%s_sha_iid' % __tablename__, sha256sum, instance_id),
+        )
 
     def __str__(self):
         return (
@@ -98,11 +115,21 @@ class SampleInfo(Base):
     """ Definition of the sample_info table. """
     __tablename__ = 'sample_info_v%d' % DB_SCHEMA_VERSION
 
+    # Indices:
+    # - general considerations: The table grows very large over time. Every
+    #   sample is checked against it to find a cached analysis result.
+    #   Otherwise it's quite unused currently.
+    # - compound: we frequently search by sha256sum and file extension
+
     id = Column(Integer, primary_key=True)
     sha256sum = Column(String(64), nullable=False)
     file_extension = Column(String(16), nullable=True)
     result = Column(Enum(Result), nullable=False)
     reason = Column(Text, nullable=True)
+
+    __table_args__ = (
+        Index('ix_%s_sha_fe' % __tablename__, sha256sum, file_extension),
+        )
 
     def __str__(self):
         return ('<SampleInfo(sample_sha256_hash="%s", file_extension="%s", '
@@ -118,13 +145,21 @@ class AnalysisJournal(Base):
     """ Definition of the analysis_jobs table. """
     __tablename__ = 'analysis_jobs_v%d' % DB_SCHEMA_VERSION
 
+    # Indices:
+    # - general considerations: We're not using this table at all currently.
+    #   All indexes are therefore currenly only futureproofing and admin or
+    #   scripting aids.
+    # - column: Speed up removal of old entries by analysis_time.
+    # - column: Index foreign key to speed up search and removal by sample id.
+
     id = Column(Integer, primary_key=True)
     job_hash = Column(String(255), nullable=False)
     cuckoo_job_id = Column(Integer, nullable=False)
     filename = Column(String(255), nullable=False)
-    analyses_time = Column(DateTime, nullable=False)
+    analyses_time = Column(DateTime, nullable=False,
+                           index=True)
     sample_id = Column(Integer, ForeignKey(SampleInfo.id),
-                       nullable=False)
+                       nullable=False, index=True)
     sample = relationship('SampleInfo')
 
     def __str__(self):
