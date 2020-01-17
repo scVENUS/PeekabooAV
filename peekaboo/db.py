@@ -156,7 +156,7 @@ class AnalysisJournal(Base):
     job_hash = Column(String(255), nullable=False)
     cuckoo_job_id = Column(Integer, nullable=False)
     filename = Column(String(255), nullable=False)
-    analyses_time = Column(DateTime, nullable=False,
+    analysis_time = Column(DateTime, nullable=False,
                            index=True)
     sample_id = Column(Integer, ForeignKey(SampleInfo.id),
                        nullable=False, index=True)
@@ -169,7 +169,7 @@ class AnalysisJournal(Base):
             % (self.job_hash,
                self.cuckoo_job_id,
                self.filename,
-               self.analyses_time.strftime("%Y%m%dT%H%M%S"))
+               self.analysis_time.strftime("%Y%m%dT%H%M%S"))
         )
 
     __repr__ = __str__
@@ -219,7 +219,7 @@ class PeekabooDatabase(object):
         analysis.job_hash = sample.job_hash
         analysis.cuckoo_job_id = sample.job_id
         analysis.filename = sample.filename
-        analysis.analyses_time = datetime.now()
+        analysis.analysis_time = datetime.now()
         sample_info = self.sample_info_fetch(sample)
         if sample_info is None:
             sample_info = SampleInfo(
