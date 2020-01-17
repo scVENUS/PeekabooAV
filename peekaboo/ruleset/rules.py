@@ -489,6 +489,14 @@ class ExpressionRule(Rule):
     rule_name = 'expressions'
 
     def get_config(self):
+        # allow to raise debug level of expressions module explicitly. Beware:
+        # This affects not just individual objects but the whole module which
+        # is why we do it by poking the logger and not via a setter method.
+        log_level = self.get_config_value(
+            'log_level', logging.WARNING, option_type=self.config.LOG_LEVEL)
+        expression_logger = logging.getLogger('peekaboo.ruleset.expressions')
+        expression_logger.setLevel(log_level)
+
         self.expressions = self.get_config_value('expression', [])
         if not self.expressions:
             raise PeekabooRulesetConfigError(
