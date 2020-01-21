@@ -552,12 +552,22 @@ class ExpressionRule(Rule):
                 context['variables'][identifier] = value
                 # beware: here we intentionally loop on through for retry
 
-            if result:
-                return self.result(
-                    result,
-                    _("The expression (%d) classified the sample as %s")
-                    % (i, result),
-                    False)
+            # our implication returns None if expression did not match
+            if result is None:
+                continue
+
+            # eval will return something completely different if implication is
+            # missing
+            if not isinstance(result, Result):
+                logger.warning("Expression %d is returning an invalid result, "
+                               "failing evaluation: %s", i, rule)
+                result = Result.failed
+
+            return self.result(
+                result,
+                _("The expression (%d) classified the sample as %s")
+                % (i, result),
+                False)
 
         return self.result(
             Result.unknown,
