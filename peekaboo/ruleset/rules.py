@@ -33,7 +33,7 @@ from peekaboo.ruleset.expressions import ExpressionParser, \
         IdentifierMissingException
 from peekaboo.exceptions import PeekabooAnalysisDeferred, \
         CuckooSubmitFailedException, PeekabooRulesetConfigError
-from peekaboo.toolbox.ole import Oletools, OletoolsReport
+from peekaboo.toolbox.ole import Oletools
 
 
 logger = logging.getLogger(__name__)
@@ -45,7 +45,7 @@ class Rule(object):
     connection) or helper functions. """
     rule_name = 'unimplemented'
 
-    def __init__(self, config=None, db_con=None):
+    def __init__(self, config, db_con):
         """ Initialize common configuration and resources """
         self.db_con = db_con
         self.config = config
@@ -65,7 +65,10 @@ class Rule(object):
                           further_analysis=further_analysis)
 
     def evaluate(self, sample):
-        """ Evaluate a rule against a sample.
+        """ Evaluate a rule agaimst a sample. Findings are recorded in the
+        sample or returned in the rule result. *Must not* change the rule
+        object's internal state because it will be called by multiple workers
+        in parallel.
 
         @param sample: The sample to evaluate.
         @returns: RuleResult containing verdict, reason, source of this
@@ -119,9 +122,6 @@ class Rule(object):
             job_id = sample.submit_to_cuckoo()
         except CuckooSubmitFailedException as failed:
             logger.error("Submit to Cuckoo failed: %s", failed)
-            # exception message intentionally not present in message
-            # delivered back to client as to not disclose internal
-            # information, should request user to contact admin instead
             return None
 
         logger.info('Sample submitted to Cuckoo. Job ID: %s. '
@@ -137,9 +137,7 @@ class Rule(object):
         if report is not None:
             return report
 
-        oletool = Oletools()
-        report = OletoolsReport(oletool.get_report(sample))
-        return report
+        return Oletools().get_report(sample)
 
 
 class KnownRule(Rule):
@@ -250,20 +248,8 @@ class OleRule(Rule):
     """ A common base class for rules that evaluate the Ole report. """
     def evaluate(self, sample):
         """ Report the sample as bad if it contains a macro. """
-        if sample.oletools_report is None:
-            try:
-                ole = Oletools()
-                report = ole.get_report(sample)
-                sample.register_oletools_report(OletoolsReport(report))
-
-                if not report:
-                    return self.result(Result.unknown,
-                                       _("File is not an office document"),
-                                       True)
-            except Exception:
-                raise
-
-        return self.evaluate_report(sample.oletools_report)
+        # we always get a report, albeit a maybe empty one
+        return self.evaluate_report(self.get_oletools_report(sample))
 
     def evaluate_report(self, report):
         """ Evaluate an Ole report.
@@ -332,6 +318,15 @@ class CuckooRule(Rule):
         @returns: RuleResult containing verdict.
         """
         report = self.get_cuckoo_report(sample)
+        if report is None:
+            # exception message intentionally not present in message
+            # delivered back to client as to not disclose internal
+            # information, should request user to contact admin instead
+            return self.result(
+                Result.failed,
+                _("Behavioral analysis by Cuckoo has produced an error "
+                  "and did not finish successfully"),
+                False)
 
         # call report evaluation function if we get here
         return self.evaluate_report(report)
@@ -366,7 +361,8 @@ class CuckooEvilSigRule(CuckooRule):
         # look through matched signatures
         sigs = []
         for descr in report.signatures:
-            logger.debug(descr['description'])
+            logger.debug("Signature from cuckoo report: %s",
+                         descr['description'])
             sigs.append(descr['description'])
 
         # check if there is a "bad" signatures and return bad
@@ -494,6 +490,14 @@ class ExpressionRule(Rule):
     rule_name = 'expressions'
 
     def get_config(self):
+        # allow to raise debug level of expressions module explicitly. Beware:
+        # This affects not just individual objects but the whole module which
+        # is why we do it by poking the logger and not via a setter method.
+        log_level = self.get_config_value(
+            'log_level', logging.WARNING, option_type=self.config.LOG_LEVEL)
+        expression_logger = logging.getLogger('peekaboo.ruleset.expressions')
+        expression_logger.setLevel(log_level)
+
         self.expressions = self.get_config_value('expression', [])
         if not self.expressions:
             raise PeekabooRulesetConfigError(
@@ -505,11 +509,16 @@ class ExpressionRule(Rule):
         for expr in self.expressions:
             try:
                 rule = parser.parse(expr)
-                logger.debug("EXPR: %s", expr)
-                logger.debug("RULE: %s", rule)
-                self.rules.append(rule)
+                logger.debug("Expression from config file: %s", expr)
+                logger.debug("Expression parsed: %s", rule)
             except SyntaxError as error:
                 raise PeekabooRulesetConfigError(error)
+
+            if not rule.is_implication():
+                raise PeekabooRulesetConfigError(
+                    "Malformed expression, missing implication: %s" % expr)
+
+            self.rules.append(rule)
 
     def evaluate(self, sample):
         """ Match what rules report against our known result status names. """
@@ -517,38 +526,58 @@ class ExpressionRule(Rule):
             result = None
             context = {'variables': {'sample': sample}}
 
-            while result is None:
+            # retry until rule evaluation doesn't throw exceptions any more
+            while True:
                 try:
                     result = rule.eval(context=context)
-                    # otherwise this is an endless loop
-                    if result is None:
-                        break
-                except IdentifierMissingException as error:
-                    if error.args[0] == "cuckooreport":
-                        context['variables']['cuckooreport'] = self.get_cuckoo_report(sample)
-                        if not context['variables']['cuckooreport']:
-                            return self.result(
-                                Result.failed,
-                                _("Evaluation of expression couldn't get cuckoo report."),
-                                False)
-                    elif error.args[0] == "olereport":
-                        context['variables']['olereport'] = self.get_oletools_report(sample)
-                    # here elif for other reports
-                    else:
+                    break
+                except IdentifierMissingException as missing:
+                    identifier = missing.name
+
+                if identifier == "cuckooreport":
+                    logger.debug("Expression requests cuckoo report")
+                    value = self.get_cuckoo_report(sample)
+                    if value is None:
                         return self.result(
                             Result.failed,
-                            _("Evaluation of expression uses undefined identifier."),
+                            _("Evaluation of expression couldn't get cuckoo "
+                              "report."),
                             False)
+                elif identifier == "olereport":
+                    logger.debug("Expression requests oletools report")
+                    value = self.get_oletools_report(sample)
+                # elif here for other identifiers
+                else:
+                    return self.result(
+                        Result.failed,
+                        _("Evaluation of expression uses undefined "
+                          "identifier."),
+                        False)
 
-            if result:
-                return self.result(result,
-                                   _("The rule (%d) classified the sample as %s")
-                                   % (i, result),
-                                   False)
+                context['variables'][identifier] = value
+                # beware: here we intentionally loop on through for retry
 
-        return self.result(Result.unknown,
-                           _("No rule classified the sample in any way."),
-                           True)
+            # our implication returns None if expression did not match
+            if result is None:
+                continue
+
+            # eval will return something completely different if implication is
+            # missing
+            if not isinstance(result, Result):
+                logger.warning("Expression %d is returning an invalid result, "
+                               "failing evaluation: %s", i, rule)
+                result = Result.failed
+
+            return self.result(
+                result,
+                _("The expression (%d) classified the sample as %s")
+                % (i, result),
+                False)
+
+        return self.result(
+            Result.unknown,
+            _("No expression classified the sample in any way."),
+            True)
 
 
 class FinalRule(Rule):

@@ -54,6 +54,8 @@ from peekaboo.ruleset.rules import FileTypeOnWhitelistRule, \
         CuckooScoreRule, RequestsEvilDomainRule, FinalRule, \
         OfficeMacroRule, OfficeMacroWithSuspiciousKeyword, \
         ExpressionRule
+from peekaboo.ruleset.expressions import ExpressionParser, \
+        IdentifierMissingException
 
 from peekaboo.toolbox.cuckoo import CuckooReport
 from peekaboo.db import PeekabooDatabase, PeekabooDatabaseError
@@ -634,7 +636,7 @@ class TestRulesetEngine(CompatibleTestCase):
         with self.assertRaisesRegex(
                 PeekabooRulesetConfigError,
                 r'No enabled rules found, check ruleset config.'):
-            RulesetEngine(ruleset_config=config, db_con=None)
+            RulesetEngine(config, None)
 
     def test_unknown_rule_enabled(self):
         """ Test that correct error is shown if an unknown rule is enabled. """
@@ -643,7 +645,7 @@ rule.1: foo''')
         with self.assertRaisesRegex(
                 PeekabooRulesetConfigError,
                 r'Unknown rule\(s\) enabled: foo'):
-            RulesetEngine(ruleset_config=config, db_con=None)
+            RulesetEngine(config, None)
 
     def test_invalid_type(self):
         """ Test that correct error is shown if rule config option has wrong
@@ -657,7 +659,7 @@ higher_than: foo''')
         with self.assertRaisesRegex(
                 ValueError,
                 r"could not convert string to float: '?foo'?"):
-            RulesetEngine(ruleset_config=config, db_con=None)
+            RulesetEngine(config, None)
 
     def test_disabled_config(self):
         """ Test that no error is shown if disabled rule has config. """
@@ -668,7 +670,7 @@ rule.1: known
 
 [cuckoo_score]
 higher_than: 4.0''')
-        RulesetEngine(ruleset_config=config, db_con=None)
+        RulesetEngine(config, None)
 
 
 class MimetypeSample(object):  # pylint: disable=too-few-public-methods
@@ -707,11 +709,11 @@ success.1: analysis completed successfully''')
         config = '''[known]
 unknown : baz'''
         # there is no exception here since empty config is acceptable
-        KnownRule(CreatingConfigParser())
+        KnownRule(CreatingConfigParser(), None)
         # there is no exception here since the known rule simply does
         # not look at the configuration at all - maybe we should have a
         # 'unknown section' error here
-        KnownRule(CreatingConfigParser(config))
+        KnownRule(CreatingConfigParser(config), None)
 
     def test_config_file_larger_than(self):
         """ Test the file larger than rule configuration. """
@@ -719,13 +721,13 @@ unknown : baz'''
 bytes : 10
 unknown : baz'''
         # there is no exception here since empty config is acceptable
-        FileLargerThanRule(CreatingConfigParser())
+        FileLargerThanRule(CreatingConfigParser(), None)
 
         with self.assertRaisesRegex(
                 PeekabooConfigException,
                 r'Unknown config option\(s\) found in section '
                 r'file_larger_than: unknown'):
-            FileLargerThanRule(CreatingConfigParser(config))
+            FileLargerThanRule(CreatingConfigParser(config), None)
 
     def test_rule_file_type_on_whitelist(self):
         """ Test whitelist rule. """
@@ -737,7 +739,7 @@ unknown : baz'''
             [True, ['', 'asdfjkl', '93219843298']],
             [True, []],
         ]
-        rule = FileTypeOnWhitelistRule(self.config)
+        rule = FileTypeOnWhitelistRule(self.config, None)
         for expected, types in combinations:
             result = rule.evaluate(MimetypeSample(types))
             self.assertEqual(result.further_analysis, expected)
@@ -756,7 +758,8 @@ unknown : baz'''
         tests_data_dir = os.path.dirname(os.path.abspath(__file__))+"/test-data"
 
         # test if macro with suspicious keyword
-        rule = OfficeMacroWithSuspiciousKeyword(CreatingConfigParser(config))
+        rule = OfficeMacroWithSuspiciousKeyword(
+            CreatingConfigParser(config), None)
         combinations = [
             # no office document file extension
             [Result.unknown, factory.create_sample('test.nodoc', 'test')],
@@ -774,7 +777,7 @@ unknown : baz'''
             self.assertEqual(result.result, expected)
 
         # test if macro present
-        rule = OfficeMacroRule(CreatingConfigParser(config))
+        rule = OfficeMacroRule(CreatingConfigParser(config), None)
         combinations = [
             # no office document file extension
             [Result.unknown, factory.create_sample('test.nodoc', 'test')],
@@ -802,18 +805,18 @@ unknown : baz'''
             processing_info_dir=None)
 
         sample = factory.create_sample('file.txt', 'abc')
-        rule = ExpressionRule(CreatingConfigParser(config))
+        rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.ignored)
 
         sample = factory.create_sample('file.html', '<html')
-        rule = ExpressionRule(CreatingConfigParser(config))
+        rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
         # bzip2 compressed data
         sample = factory.create_sample('file.txt', 'BZh91AY=')
-        rule = ExpressionRule(CreatingConfigParser(config))
+        rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
@@ -834,13 +837,13 @@ unknown : baz'''
                }
 
         sample = factory.create_sample('file1.gif', 'GIF87...', metainfo=part)
-        rule = ExpressionRule(CreatingConfigParser(config))
+        rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
         sample = factory.create_sample('file2.gif', 'GIF87...')
         sample.meta_info_name_declared = None
-        rule = ExpressionRule(CreatingConfigParser(config))
+        rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.ignored)
 
@@ -850,7 +853,7 @@ unknown : baz'''
 
         sample = factory.create_sample('file2.gif', 'GIF87...')
         sample.meta_info_name_declared = None
-        rule = ExpressionRule(CreatingConfigParser(config))
+        rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.ignored)
 
@@ -869,7 +872,7 @@ unknown : baz'''
                     'application/pgp-signature'
                 } -> ignore
             '''
-        rule = ExpressionRule(CreatingConfigParser(config))
+        rule = ExpressionRule(CreatingConfigParser(config), None)
 
         part = {"full_name": "p001",
                 "name_declared": "smime.p7s",
@@ -911,12 +914,12 @@ unknown : baz'''
 
         # test gpg signatures
         sample.meta_info_name_declared = "signature.asc"
-        rule = ExpressionRule(CreatingConfigParser(config))
+        rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
         sample.meta_info_type_declared = "application/pgp-signature"
-        rule = ExpressionRule(CreatingConfigParser(config))
+        rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.ignored)
 
@@ -939,7 +942,7 @@ unknown : baz'''
 
         sample = factory.make_sample('')
         sample.register_cuckoo_report(cuckooreport)
-        rule = ExpressionRule(CreatingConfigParser(config))
+        rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
@@ -965,7 +968,7 @@ unknown : baz'''
 
         sample = factory.make_sample(tests_data_dir+'/office/blank.doc')
         sample.register_cuckoo_report(cuckooreport)
-        rule = ExpressionRule(CreatingConfigParser(config))
+        rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
@@ -981,39 +984,39 @@ unknown : baz'''
         tests_data_dir = os.path.dirname(os.path.abspath(__file__))+"/test-data"
 
         sample = factory.make_sample(tests_data_dir+'/office/empty.doc')
-        rule = ExpressionRule(CreatingConfigParser(config))
+        rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
         sample = factory.make_sample(tests_data_dir+'/office/file.txt')
-        rule = ExpressionRule(CreatingConfigParser(config))
+        rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
         sample = factory.make_sample(tests_data_dir+'/office/blank.doc')
-        rule = ExpressionRule(CreatingConfigParser(config))
+        rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
         sample = factory.make_sample(tests_data_dir+'/office/example.rtf')
-        rule = ExpressionRule(CreatingConfigParser(config))
+        rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
         sample = factory.make_sample(tests_data_dir+'/office/suspiciousMacro.rtf')
-        rule = ExpressionRule(CreatingConfigParser(config))
+        rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
         sample = factory.make_sample(tests_data_dir+'/office/suspiciousMacro.doc')
-        rule = ExpressionRule(CreatingConfigParser(config))
+        rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
         config = '''[expressions]
             expression.3  : /suspicious/ in olereport.vba_code -> bad
         '''
-        rule = ExpressionRule(CreatingConfigParser(config))
+        rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
@@ -1025,13 +1028,13 @@ unknown : baz'''
         with self.assertRaisesRegex(
                 PeekabooRulesetConfigError,
                 r'Empty whitelist, check file_type_on_whitelist rule config.'):
-            FileTypeOnWhitelistRule(CreatingConfigParser())
+            FileTypeOnWhitelistRule(CreatingConfigParser(), None)
 
         with self.assertRaisesRegex(
                 PeekabooConfigException,
                 r'Unknown config option\(s\) found in section '
                 r'file_type_on_whitelist: unknown'):
-            FileTypeOnWhitelistRule(CreatingConfigParser(config))
+            FileTypeOnWhitelistRule(CreatingConfigParser(config), None)
 
     def test_rule_file_type_on_greylist(self):
         """ Test greylist rule. """
@@ -1044,7 +1047,7 @@ unknown : baz'''
             [False, ['', 'asdfjkl', '93219843298']],
             [True, []],
         ]
-        rule = FileTypeOnGreylistRule(self.config)
+        rule = FileTypeOnGreylistRule(self.config, None)
         for expected, types in combinations:
             result = rule.evaluate(MimetypeSample(types))
             self.assertEqual(result.further_analysis, expected)
@@ -1057,13 +1060,13 @@ unknown : baz'''
         with self.assertRaisesRegex(
                 PeekabooRulesetConfigError,
                 r'Empty greylist, check file_type_on_greylist rule config.'):
-            FileTypeOnGreylistRule(CreatingConfigParser())
+            FileTypeOnGreylistRule(CreatingConfigParser(), None)
 
         with self.assertRaisesRegex(
                 PeekabooConfigException,
                 r'Unknown config option\(s\) found in section '
                 r'file_type_on_greylist: unknown'):
-            FileTypeOnGreylistRule(CreatingConfigParser(config))
+            FileTypeOnGreylistRule(CreatingConfigParser(config), None)
 
     def test_rule_analysis_failed(self):
         """ Test the Cuckoo analysis failed rule """
@@ -1081,7 +1084,7 @@ unknown : baz'''
                 'analysis completed successfully']}})
 
         # test defaults
-        rule = CuckooAnalysisFailedRule(CreatingConfigParser(''))
+        rule = CuckooAnalysisFailedRule(CreatingConfigParser(''), None)
         result = rule.evaluate(successful_sample)
         self.assertEqual(result.result, Result.unknown)
         self.assertEqual(result.further_analysis, True)
@@ -1096,7 +1099,7 @@ unknown : baz'''
         self.assertEqual(result.further_analysis, True)
 
         # test with config
-        rule = CuckooAnalysisFailedRule(self.config)
+        rule = CuckooAnalysisFailedRule(self.config, None)
         result = rule.evaluate(successful_sample)
         self.assertEqual(result.result, Result.unknown)
         self.assertEqual(result.further_analysis, True)
@@ -1119,26 +1122,26 @@ unknown : baz'''
                 PeekabooRulesetConfigError,
                 r'Empty bad signature list, check cuckoo_evil_sig rule '
                 r'config.'):
-            CuckooEvilSigRule(CreatingConfigParser())
+            CuckooEvilSigRule(CreatingConfigParser(), None)
 
         with self.assertRaisesRegex(
                 PeekabooConfigException,
                 r'Unknown config option\(s\) found in section '
                 r'cuckoo_evil_sig: unknown'):
-            CuckooEvilSigRule(CreatingConfigParser(config))
+            CuckooEvilSigRule(CreatingConfigParser(config), None)
 
     def test_config_score(self):
         """ Test the Cuckoo score rule configuration. """
         config = '''[cuckoo_score]
 higher_than : 10
 unknown : baz'''
-        CuckooScoreRule(CreatingConfigParser())
+        CuckooScoreRule(CreatingConfigParser(), None)
 
         with self.assertRaisesRegex(
                 PeekabooConfigException,
                 r'Unknown config option\(s\) found in section '
                 r'cuckoo_score: unknown'):
-            CuckooScoreRule(CreatingConfigParser(config))
+            CuckooScoreRule(CreatingConfigParser(config), None)
 
     def test_config_evil_domain(self):
         """ Test the Cuckoo requests evil domain rule configuration. """
@@ -1149,13 +1152,13 @@ unknown : baz'''
                 PeekabooRulesetConfigError,
                 r'Empty evil domain list, check requests_evil_domain rule '
                 r'config.'):
-            RequestsEvilDomainRule(CreatingConfigParser())
+            RequestsEvilDomainRule(CreatingConfigParser(), None)
 
         with self.assertRaisesRegex(
                 PeekabooConfigException,
                 r'Unknown config option\(s\) found in section '
                 r'requests_evil_domain: unknown'):
-            RequestsEvilDomainRule(CreatingConfigParser(config))
+            RequestsEvilDomainRule(CreatingConfigParser(config), None)
 
     def test_config_analysis_failed(self):
         """ Test the Cuckoo analysis failed rule configuration. """
@@ -1164,24 +1167,81 @@ failure.1: end of analysis reached!
 success.1: analysis completed successfully
 unknown : baz'''
         # there should be no exception here since empty config is acceptable
-        CuckooAnalysisFailedRule(CreatingConfigParser())
+        CuckooAnalysisFailedRule(CreatingConfigParser(), None)
 
         with self.assertRaisesRegex(
                 PeekabooConfigException,
                 r'Unknown config option\(s\) found in section '
                 r'cuckoo_analysis_failed: unknown'):
-            CuckooAnalysisFailedRule(CreatingConfigParser(config))
+            CuckooAnalysisFailedRule(CreatingConfigParser(config), None)
 
     def test_config_final(self):  # pylint: disable=no-self-use
         """ Test the final rule configuration. """
         config = '''[final]
 unknown : baz'''
         # there is no exception here since empty config is acceptable
-        FinalRule(CreatingConfigParser())
+        FinalRule(CreatingConfigParser(), None)
         # there is no exception here since the final rule simply does
         # not look at the configuration at all - maybe we should have a
         # 'unknown section' error here
-        FinalRule(CreatingConfigParser(config))
+        FinalRule(CreatingConfigParser(config), None)
+
+
+class TestExpressionParser(CompatibleTestCase):
+    """ Unittests for the expression parser. """
+    @classmethod
+    def setUpClass(cls):
+        """ Set up common test case resources. """
+        cls.parser = ExpressionParser()
+
+    def test_basic_expressions(self):
+        """ Test basic expressions. """
+        combinations = [
+            ["True", True],
+            ["False", False],
+            ["5", 5],
+            ["5 == 5", True],
+            ["5 == 7", False],
+            ["5+2 == 7", True],
+            ["(5+2)*2==14", True],
+            ["'foo' == 'bar'", False],
+            ["'foo' == 'foo'", True],
+            ["'foo' in 'bar'", False],
+            # re.search()
+            ["'foo' in 'foobar'", True],
+            ["/foo/ in 'afoobar'", True],
+            # re.match() is implicit /^<pattern>/
+            ["/foo/ == 'afoobar'", False],
+            ["/foo/ == 'foobar'", True],
+            ["/[fb][oa][or]/ in 'foo'", True],
+            ["/[fb][oa][or]/ in 'bar'", True],
+            ["/[fb][oa][or]/ in 'snafu'", False],
+            ["/[fb][oa][or]/ in ['afoob', 'snafu']", True],
+            ["/[fb][oa][or]/ == ['afoob', 'snafu']", False],
+            ["[/foo/, /bar/] in ['snafu', 'fuba']", False],
+            ["[/foo/, /bar/, /ub/] in ['snafu', 'fuba']", True],
+            ["[/foo/, /bar/, /naf/] in ['snafu', 'fuba']", True],
+        ]
+        for rule, expected in combinations:
+            parsed = self.parser.parse(rule)
+            self.assertEqual(parsed.eval({}), expected, "Rule: %s" % rule)
+
+    def test_identifier_missing(self):
+        """ Missing identifier exceptions. """
+        parsed = self.parser.parse("foo == 'bar'")
+        with self.assertRaisesRegex(KeyError, "variables") as keyerr:
+            parsed.eval({})
+        # make sure this really is a key error and no subclass of it
+        self.assertNotIsInstance(keyerr.exception, IdentifierMissingException)
+
+        with self.assertRaisesRegex(
+                IdentifierMissingException,
+                "Identifier 'foo' is missing") as iderr:
+            parsed.eval({"variables": {}})
+        self.assertEqual(iderr.exception.name, "foo")
+
+        # now that really should work
+        parsed.eval({"variables": {"foo": "bar"}})
 
 
 class PeekabooTestResult(unittest.TextTestResult):
@@ -1194,6 +1254,16 @@ class PeekabooTestResult(unittest.TextTestResult):
             return doc_first_line
 
         return str(test)
+
+
+def enable_debug():
+    """ Allow to enable debug messages by calling this function anywhere. """
+    logging.disable(logging.NOTSET)
+    _logger = logging.getLogger()
+    to_console_log_handler = logging.StreamHandler(sys.stdout)
+    _logger.addHandler(to_console_log_handler)
+    _logger.setLevel(logging.DEBUG)
+
 
 def main():
     """ Run the testsuite. """
@@ -1208,6 +1278,7 @@ def main():
     suite.addTest(unittest.makeSuite(TestDatabase))
     suite.addTest(unittest.makeSuite(TestRulesetEngine))
     suite.addTest(unittest.makeSuite(TestRules))
+    suite.addTest(unittest.makeSuite(TestExpressionParser))
     # TODO: We need more tests!!!
 
     # Disable all logging to avoid spurious messages.

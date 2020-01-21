@@ -78,6 +78,10 @@ keyword.1 : AutoOpen
 keyword.2 : AutoClose
 
 [expressions]
+# Optionally additional debug logging from the expression parser can be
+# enabled:
+#log_level : INFO
+
 expression.1  : sample.mimetypes <= {'text/plain', 'inode/x-empty'} -> ignore
 expression.2  : sample.meta_info_name_declared == /smime.p7[mcs]/
                     and sample.meta_info_type_declared in {

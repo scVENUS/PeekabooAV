@@ -57,43 +57,33 @@ class RulesetEngine(object):
         FinalRule
     ]
 
-    def __init__(self, ruleset_config, db_con):
+    def __init__(self, config, db_con):
         """ Initialise the engine, validate its and the individual rules'
         configuration.
 
+        @param config: ruleset configuration parser
+        @param db_con: database connection handed to rules (not used by engine
+                       itself)
         @raises PeekabooRulesetConfigError: if configuration errors are found
         """
-        self.config = ruleset_config
-        self.db_con = db_con
-
         # create a lookup table from rule name to class
-        self.rule_classes = {}
+        rule_classes = {}
         for known_rule in self.known_rules:
-            self.rule_classes[known_rule.rule_name] = known_rule
+            rule_classes[known_rule.rule_name] = known_rule
 
         try:
-            self.enabled_rules = self.config.getlist('rules', 'rule')
+            enabled_rules = config.getlist('rules', 'rule')
         except PeekabooConfigException as error:
             raise PeekabooRulesetConfigError(
                 'Ruleset configuration error: %s' % error)
 
-        self.validate_rule_config()
-
-    def validate_rule_config(self):
-        """ Validate the rule configuration in various ways.
-
-        @returns: None
-        @raises PeekabooRulesetConfigError: if configuration errors are found
-        @raises KeyError, ValueError, PeekabooConfigException: by failed config
-            object accesses
-        """
-        if not self.enabled_rules:
+        if not enabled_rules:
             raise PeekabooRulesetConfigError(
                 'No enabled rules found, check ruleset config.')
 
         # check if unknown rules are enabled
-        known_rule_names = self.rule_classes.keys()
-        unknown_rules = set(self.enabled_rules) - set(known_rule_names)
+        known_rule_names = rule_classes.keys()
+        unknown_rules = set(enabled_rules) - set(known_rule_names)
         if unknown_rules:
             raise PeekabooRulesetConfigError(
                 'Unknown rule(s) enabled: %s' % ', '.join(unknown_rules))
@@ -106,48 +96,44 @@ class RulesetEngine(object):
         # python3.
         known_sections = ['rules']
         known_sections += known_rule_names
-        self.config.check_sections(known_sections)
+        config.check_sections(known_sections)
 
-        # have enabled rules check their configuration
-        for rule in self.enabled_rules:
-            # not passing database connection. Needs revisiting if a rule
-            # ever wants to retrieve configuration from the database. For
-            # now at least rule constructor and get_config() need to be
-            # able to cope without it.
-            rule = self.rule_classes[rule](self.config)
+        # instantiate enabled rules and have them check their configuration,
+        # user-defined rule order is preserved in enabled_rules and through
+        # ordered append() in self.rules
+        self.rules = []
+        for rule in enabled_rules:
+            rule = rule_classes[rule](config, db_con)
+            self.rules.append(rule)
 
     def run(self, sample):
-        for rule in self.enabled_rules:
-            result = self.__exec_rule(sample, self.rule_classes[rule])
+        """ Run all the rules in the ruleset against a given sample
+
+        @param sample: sample to evaluate ruleset against
+        @returns: Nothing, all state is recorded in the sample """
+        for rule in self.rules:
+            rule_name = rule.rule_name
+            logger.debug("Processing rule '%s' for %s", rule_name, sample)
+
+            try:
+                result = rule.evaluate(sample)
+                sample.add_rule_result(result)
+            except PeekabooAnalysisDeferred:
+                # in case the Sample is requesting the Cuckoo report
+                raise
+            # catch all other exceptions for this rule
+            except Exception as error:
+                logger.warning("Unexpected error in '%s' for %s", rule_name,
+                               sample)
+                logger.exception(error)
+                # create "fake" RuleResult
+                result = RuleResult("RulesetEngine", result=Result.failed,
+                                    reason=_("Rule aborted with error"),
+                                    further_analysis=False)
+                sample.add_rule_result(result)
+
+            logger.info("Rule '%s' processed for %s", rule_name, sample)
             if not result.further_analysis:
                 return
 
         logger.info("Rules evaluated")
-
-    def __exec_rule(self, sample, rule_class):
-        """
-        rule wrapper for in/out logging and reporting
-        """
-        rule_name = rule_class.rule_name
-        logger.debug("Processing rule '%s' for %s", rule_name, sample)
-
-        try:
-            rule = rule_class(config=self.config, db_con=self.db_con)
-            result = rule.evaluate(sample)
-            sample.add_rule_result(result)
-        except PeekabooAnalysisDeferred:
-            # in case the Sample is requesting the Cuckoo report
-            raise
-        # catch all other exceptions for this rule
-        except Exception as e:
-            logger.warning("Unexpected error in '%s' for %s", rule_name,
-                           sample)
-            logger.exception(e)
-            # create "fake" RuleResult
-            result = RuleResult("RulesetEngine", result=Result.failed,
-                                reason=_("Rule aborted with error"),
-                                further_analysis=False)
-            sample.add_rule_result(result)
-
-        logger.info("Rule '%s' processed for %s", rule_name, sample)
-        return result
