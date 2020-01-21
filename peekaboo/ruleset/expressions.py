@@ -64,6 +64,11 @@ class EvalBase(object):
         stored (and optionally converted) value by default. """
         return self.value
 
+    def is_implication(self):
+        """ To be implemented by subclasses to determine if they ultimately are
+        implications. """
+        return False
+
     def __str__(self):
         return "%s" % self.token
 
@@ -356,6 +361,13 @@ class EvalArith(EvalBase):
                 raise ValueError('Invalid operator %s' % op)
 
         return ret
+
+    def is_implication(self):
+        """ Determines if this object is ultimately an implication. """
+        try:
+            return self.value[-2] == '->'
+        except KeyError:
+            return False
 
     def __str__(self):
         return "(%s)" % (" ".join(["%s" % x for x in self.token]))

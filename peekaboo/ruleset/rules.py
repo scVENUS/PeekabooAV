@@ -511,9 +511,14 @@ class ExpressionRule(Rule):
                 rule = parser.parse(expr)
                 logger.debug("Expression from config file: %s", expr)
                 logger.debug("Expression parsed: %s", rule)
-                self.rules.append(rule)
             except SyntaxError as error:
                 raise PeekabooRulesetConfigError(error)
+
+            if not rule.is_implication():
+                raise PeekabooRulesetConfigError(
+                    "Malformed expression, missing implication: %s" % expr)
+
+            self.rules.append(rule)
 
     def evaluate(self, sample):
         """ Match what rules report against our known result status names. """
