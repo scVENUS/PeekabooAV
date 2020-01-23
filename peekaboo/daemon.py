@@ -338,6 +338,10 @@ def run():
         cluster_duplicate_check_interval=cldup_check_interval)
 
     if config.cuckoo_mode == "embed":
+        logger.warning(
+            "Embedded mode for Cuckoo is deprecated and will be removed in "
+            "a future release. Please switch to REST API mode.")
+
         cuckoo = CuckooEmbed(job_queue, config.cuckoo_exec,
                              config.cuckoo_submit, config.cuckoo_storage,
                              config.interpreter)
