@@ -20,6 +20,9 @@ See documentation for details.
   (#43)
 - Introduce peekaboo-util.py as a super charged replacement for scan_file.py
   (#107)
+- Add database indices to speed up processing and lower database CPU load.
+  Rename analyses\_time column to analysis\_time in analysis\_jobs table.
+  Raises schema version to 7. (#124)
 
 ## 1.7
 
