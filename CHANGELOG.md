@@ -20,8 +20,9 @@ See documentation for details.
 - Improve REST API access robustness by introducing configurable urllib3 retry
   handling with backoff and defined endless retry or failure report to client.
   (#43)
-- Introduce peekaboo-util.py as a super charged replacement for scan_file.py
-  (#107)
+- Introduce peekaboo-util.py with subcommands scan-file (as a super charged
+  replacement for scan\_file.py (#107)), ping and raw (for diagnosis, scripting
+  and debugging).
 - Add database indices to speed up processing and lower database CPU load.
   Rename analyses\_time column to analysis\_time in analysis\_jobs table.
   Raises schema version to 7. (#124)

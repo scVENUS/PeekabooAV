@@ -141,10 +141,20 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
         if not self.talk_back([_('Hello, this is Peekaboo.'), '']):
             return
 
-        submitted = self.parse()
+        # parse client input and see if it's valid and whether there are any
+        # requests to us in there
+        requests = self.parse()
+        if not requests:
+            return
+
+        # handle client requests. Sample submissions are special in that they
+        # submit into our work queue and we need to wait for them to finish. So
+        # see if handling the requests did submit something.
+        submitted = self.handle_requests(requests)
         if not submitted:
             return
 
+        # wait for jobs submitted by request handling
         if not self.wait(submitted):
             # something went wrong while waiting, i.e. client closed connection
             # or we're shutting down
@@ -179,41 +189,98 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
 
     def parse(self):
         """ Reads and parses an analysis request. This is expected to be a JSON
-        structure containing the path of the directory / file to analyse.
-        Structure::
+        structure::
 
             [ { "full_name": "<path>",
                 "name_declared": ...,
                 ... },
-              { ... },
+              { "request": "scan-file",
+                "full_name": ... },
+              { "request": "ping" },
               ... ]
+
+        The request field is optional with a default of "scan-file".
+        Valid requests are:
+        * scan-file
+        * ping
+
+        scan-file: requires the path of the directory / file to analyse
+        in "full_name".
 
         The maximum buffer size is 16 KiB, because JSON incurs some bloat.
         """
-        request = self.request.recv(1024 * 16).rstrip()
+        try:
+            client_input = self.request.recv(1024 * 16).rstrip()
+        except IOError as ioerror:
+            logger.error('Request receive failed: %s', ioerror)
+            return None
 
         try:
-            parts = json.loads(request)
+            requests = json.loads(client_input)
         except ValueError as error:
             self.talk_back(_('Error: Invalid JSON in request.'))
             logger.error('Invalid JSON in request: %s', error)
             return None
 
-        if not isinstance(parts, (list, tuple)):
+        # do some generic input validation
+        if not isinstance(requests, (list, tuple)):
             self.talk_back(_('ERROR: Invalid data structure.'))
             logger.error('Invalid data structure.')
             return None
 
-        submitted = []
-        for part in parts:
-            if 'full_name' in part:
-                sample = self.submit_sample(part)
-                submitted.append(sample)
-                logger.debug('Created and submitted sample %s', sample)
-            else:
+        for request in requests:
+            if not isinstance(request, dict):
+                self.talk_back(_('ERROR: Invalid request structure.'))
+                logger.error('Invalid request structure.')
+                return None
+
+            # default request type is scan-file
+            reqtype = request.get('request', 'scan-file')
+            if reqtype not in ['scan-file', 'ping']:
+                self.talk_back(_('ERROR: Unsupported request %s') % reqtype)
+                logger.error('Unsupported request %s', reqtype)
+                return None
+
+            if reqtype == 'scan-file' and 'full_name' not in request:
                 self.talk_back(_('ERROR: Incomplete data structure.'))
                 logger.error('Incomplete data structure.')
                 return None
+
+        return requests
+
+    def handle_requests(self, requests):
+        """ Handle requests.
+
+        @param requests: list/tuple of dicts describing requests
+        @returns: list of submitted samples or None on error
+        """
+        submitted = []
+        for request in requests:
+            reqtype = request.get('request', 'scan-file')
+            if reqtype == 'scan-file':
+                sample = self.submit_sample(request)
+                if sample is None:
+                    # here we abort the whole batch of requests which is
+                    # somewhat excessive since the others might just be pings
+                    # or complete successfully. But since we can't fulfill all
+                    # the requested analyses and have no way of communicating
+                    # that fact individually to the client it's the only option
+                    # for now.
+                    return None
+
+                submitted.append(sample)
+                logger.debug('Created and submitted sample %s', sample)
+            elif reqtype == 'ping':
+                self.talk_back(json.dumps({'request': 'ping',
+                                           'response': 'pong'}))
+                logger.debug('ping request received and answered')
+            else:
+                # paranoia
+                logger.error('Unknown request "%s" got through input '
+                             'validation', reqtype)
+                self.talk_back(_('ERROR: Unsupported request %s') % reqtype)
+                return None
+
         return submitted
 
     def wait(self, to_be_analysed):
