@@ -8,7 +8,7 @@
 
 [Unit]
 Description=Peekaboo Extended Email Attachment Behavior Observation Owl
-After=network.target cuckoo-api.service
+After=network.target cuckoo-api.service mysql.service postgresql.service
 
 [Service]
 User=peekaboo
