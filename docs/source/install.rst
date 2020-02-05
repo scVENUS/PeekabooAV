@@ -11,6 +11,7 @@ We are going to use python virtual environments to install cuckoo and Peekaboo
 together with their respective dependencies, because they might conflict with
 each other when trying to install all of them in the same environment
 (virtual or host).
+Most notably cuckoo only supports python 2 while Peekaboo prefers python 3.
 
 
 Packages
@@ -19,8 +20,7 @@ Install the required packages:
 
 .. code-block:: shell
 
-    sudo apt-get install python-virtualenv \
-                         python-pip \
+    sudo apt-get install python3-virtualenv \
                          postfix \
                          amavisd-new \
                          libjpeg-dev \
@@ -29,6 +29,7 @@ Install the required packages:
                          libssl-dev \
                          build-essential \
                          python-dev \
+                         python3-dev \
                          tcpdump
 
 **Note for AMaViSd**:
@@ -43,27 +44,31 @@ This step is important for AMaViSd.
 
 
 Depending on which DBMS you choose, there are additional packages to install.
+We install the software itself and library development packages using the
+system package manager.
+Python modules are installed into the virtual environments individually using
+pip and use the installed library development packages to build.
 
 SQLite
 ------
 
 .. code-block:: shell
 
-    $ sudo apt-get install python-sqlite sqlite3
+    $ sudo apt-get install sqlite3 libsqlite3-dev
 
 MySQL
 -----
 
 .. code-block:: shell
 
-    $ sudo apt-get install mysql-server mysql-client python-mysqldb
+    $ sudo apt-get install mysql-server mysql-client libmysqlclient-dev
 
 PostgreSQL
 ----------
 
 .. code-block:: shell
 
-    $ sudo apt-get install postgresql python-psycopg2
+    $ sudo apt-get install postgresql libpq-dev
 
 
 Cuckoo
@@ -72,8 +77,35 @@ Create a new python virtual environment and install cuckoo into it using pip:
 
 .. code-block:: shell
 
-    $ sudo virtualenv /opt/cuckoo
+    $ sudo virtualenv --python=/usr/bin/python2 /opt/cuckoo
     $ sudo /opt/cuckoo/bin/pip install cuckoo
+
+Again depending on your choice of DBMS you now need to install the necessary
+python packages into the virtual environment:
+
+SQLite
+------
+
+.. code-block:: shell
+
+    $ sudo /opt/cuckoo/bin/pip install pysqlite
+
+MySQL
+-----
+
+.. code-block:: shell
+
+    $ sudo /opt/cuckoo/bin/pip install mysqlclient
+
+PostgreSQL
+----------
+
+.. code-block:: shell
+
+    $ sudo /opt/cuckoo/bin/pip install psycopg2
+
+Finalization
+------------
 
 In order to test your new Cuckoo installation you should run it once:
 
@@ -84,7 +116,7 @@ In order to test your new Cuckoo installation you should run it once:
 **Note**: We're assuming these actions to be executed by the user the tools
 will be running as.
 If doing more than testing and development, a separate run user should be
-created for Peekaboo.
+created for Cuckoo.
 
 
 Peekaboo
@@ -97,8 +129,18 @@ A released version of Peekaboo can be installed directly via pip as follows:
 
 .. code-block:: shell
 
-    $ sudo virtualenv /opt/peekaboo
+    $ sudo virtualenv --python=/usr/bin/python3 /opt/peekaboo
     $ sudo /opt/peekaboo/bin/pip install peekabooav
+
+The same steps for installing a DBMS-specific module as for Cuckoo above apply,
+e.g.:
+
+MySQL
+-----
+
+.. code-block:: shell
+
+    $ sudo /opt/peekaboo/bin/pip install mysqlclient
 
 Peekaboo can also be installed from the source directory which is useful in
 development or when trying out unreleased versions.
@@ -126,7 +168,7 @@ together with all its dependencies into it:
 
 .. code-block:: shell
 
-    $ sudo virtualenv /opt/peekaboo
+    $ sudo virtualenv --python=/usr/bin/python3 /opt/peekaboo
     $ sudo /opt/peekaboo/bin/pip install .
 
 **Note**: Do not use ``./setup.py install`` for installation since there are
