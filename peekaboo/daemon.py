@@ -253,6 +253,11 @@ def run():
         logging.critical(error)
         sys.exit(1)
 
+    if sys.version_info[0] < 3:
+        logger.warning(
+            "Python 2 support is deprecated and will be removed in a future "
+            "release. Please switch to python 3.")
+
     # find localisation in our package directory
     locale_domain = 'peekaboo'
     locale_dir = os.path.join(os.path.dirname(__file__), 'locale')
