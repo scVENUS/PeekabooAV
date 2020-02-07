@@ -1043,7 +1043,7 @@ unknown : baz'''
     def test_rule_expressions_olereport_context(self):
         """ Test generic rule olereport context """
         config = '''[expressions]
-            expression.3  : sample.file_extension in {'doc', 'rtf'} and olereport.has_office_macros == True -> bad
+            expression.3  : sample.file_extension in {'doc', 'rtf', 'rtx'} and olereport.has_office_macros == True -> bad
         '''
 
         factory = CreatingSampleFactory(
