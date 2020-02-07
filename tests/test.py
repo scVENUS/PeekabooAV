@@ -1281,6 +1281,17 @@ class TestExpressionParser(CompatibleTestCase):
             ["[/foo/, /bar/] in ['snafu', 'fuba']", False],
             ["[/foo/, /bar/, /ub/] in ['snafu', 'fuba']", True],
             ["[/foo/, /bar/, /naf/] in ['snafu', 'fuba']", True],
+            ["{'text/plain'}|{'test/mime','inode/empty'}",
+             {'text/plain', 'test/mime', 'inode/empty'}],
+            ["{1} <= {1}", True],
+            ["{1} <= {2}", False],
+            ["{1} <= {2,3}", False],
+            ["{1,2} <= {1,2,3}", True],
+            ["{1}|{2}", {1, 2}],
+            ["{1}|{2} <= {1,2}", True],
+            ["{'1'}|{'2','3'} <= {'1','2'}", False],
+            ["{'text/plain'}|{'test/mime','inode/empty'} <="
+             "{'text/plain', 'test/mime', 'inode/empty'}", True],
         ]
         for rule, expected in combinations:
             parsed = self.parser.parse(rule)

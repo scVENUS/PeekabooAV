@@ -42,7 +42,7 @@ ruleset.
 It is a lot like Python itself.
 
 They can contain operators:
-``+ - * ** / // % << >> . < <= > >= == != in not in is is not isdisjoint and or``
+``+ - * ** / // % << >> . < <= > >= == != | ^ & in not in is is not isdisjoint and or``
 
 Datatypes are:
 ``boolean, integer, real, string, regex, identifier, result``
