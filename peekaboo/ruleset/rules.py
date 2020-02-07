@@ -34,7 +34,7 @@ from peekaboo.ruleset.expressions import ExpressionParser, \
 from peekaboo.exceptions import PeekabooAnalysisDeferred, \
         CuckooSubmitFailedException, PeekabooRulesetConfigError
 from peekaboo.toolbox.ole import Oletools
-from peekaboo.toolbox.files import Filetools
+from peekaboo.toolbox.file import Filetools
 
 
 logger = logging.getLogger(__name__)

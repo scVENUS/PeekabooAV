@@ -36,7 +36,7 @@ import tempfile
 # locale-specified encoding
 from builtins import open
 from datetime import datetime
-from peekaboo.toolbox.files import guess_mime_type_from_file_contents, \
+from peekaboo.toolbox.file import guess_mime_type_from_file_contents, \
                                    guess_mime_type_from_filename
 from peekaboo.ruleset import Result
 
