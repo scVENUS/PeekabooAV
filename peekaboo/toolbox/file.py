@@ -66,9 +66,6 @@ class Filetools(object):
     """ Parent class, defines interface to various file tools. """
     def get_report(self, sample):
         """ Return filetools report or create if not already cached. """
-        if sample.filetools_report != None:
-            return sample.filetools_report
-
         report = {}
 
         report["type_by_content"] = guess_mime_type_from_file_contents(sample.file_path)
