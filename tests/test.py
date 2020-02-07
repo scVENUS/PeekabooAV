@@ -964,12 +964,12 @@ unknown : baz'''
                }
 
         sample = factory.make_sample(tests_data_dir+'/office/blank.doc', metainfo=part)
-        rule = ExpressionRule(CreatingConfigParser(config))
+        rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
         sample = factory.make_sample(tests_data_dir+'/office/example.rtf', metainfo=part)
-        rule = ExpressionRule(CreatingConfigParser(config))
+        rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
@@ -991,12 +991,12 @@ unknown : baz'''
                }
 
         sample = factory.make_sample(tests_data_dir+'/office/blank.doc', metainfo=part)
-        rule = ExpressionRule(CreatingConfigParser(config))
+        rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
         sample = factory.make_sample(tests_data_dir+'/office/example.rtf', metainfo=part)
-        rule = ExpressionRule(CreatingConfigParser(config))
+        rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
