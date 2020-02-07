@@ -232,6 +232,10 @@ class EvalSet(EvalBase):
             element = val.eval(context)
             if isinstance(element, OperatorRegex):
                 regexes = True
+            # For our use case None being an element of a set() is of no use
+            # and highly confusing. Supress it
+            if element is None:
+                continue
             ret.add(element)
         if regexes:
             return RegexSet(ret)
