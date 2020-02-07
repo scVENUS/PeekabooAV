@@ -89,21 +89,14 @@ class FiletoolsReport(object):
         """
         Guesses the type of a file based on the files contents.
         """
-
-        try:
-            return self.report['type_by_content']
-        except KeyError:
-            return False
+        return self.report.get('type_by_content', None)
 
     @property
     def type_by_name(self):
         """
         Guesses the type of a file based on its filename.
         """
-        try:
-            return self.report['type_by_name']
-        except KeyError:
-            return ""
+        return self.report.get('type_by_name', None)
 
     @property
     def type_as_text(self):
@@ -111,7 +104,4 @@ class FiletoolsReport(object):
         Guess the type of a file in text representation rather than mime type.
         Equal to using the `file` command.
         """
-        try:
-           return self.report['type_as_text']
-        except KeyError:
-            return ""
+        return self.report.get('type_as_text', None)
