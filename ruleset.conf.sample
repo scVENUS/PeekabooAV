@@ -82,7 +82,7 @@ keyword.2 : AutoClose
 # enabled:
 #log_level : INFO
 
-expression.1  : sample.mimetypes <= {'text/plain', 'inode/x-empty'} -> ignore
+expression.1  : {sample.declared_mimetype}|filereport.mime_types <= {'text/plain', 'inode/x-empty'} -> ignore
 expression.2  : sample.meta_info_name_declared == /smime.p7[mcs]/
                     and sample.meta_info_type_declared in {
                         'application/pkcs7-signature',

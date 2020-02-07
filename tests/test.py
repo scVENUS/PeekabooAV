@@ -58,6 +58,7 @@ from peekaboo.ruleset.expressions import ExpressionParser, \
         IdentifierMissingException
 
 from peekaboo.toolbox.cuckoo import CuckooReport
+from peekaboo.toolbox.file import FiletoolsReport
 from peekaboo.db import PeekabooDatabase, PeekabooDatabaseError
 # pylint: enable=wrong-import-position
 
@@ -509,7 +510,10 @@ class TestSample(CompatibleTestCase):
             cuckoo=None, base_dir=cls.conf.sample_base_dir,
             job_hash_regex=cls.conf.job_hash_regex, keep_mail_data=False,
             processing_info_dir=None)
-        cls.sample = cls.factory.create_sample('test.py', 'test')
+        part = {"name_declared": "text.py",
+                "type_declared": "text/x-python"
+               }
+        cls.sample = cls.factory.create_sample('test.py', 'test', metainfo=part)
 
     def test_job_hash_regex(self):
         """ Test extraction of the job hash from the working directory path.
@@ -539,7 +543,7 @@ class TestSample(CompatibleTestCase):
                          os.path.join(self.factory.directory, 'test.py'))
         self.assertEqual(self.sample.filename, 'test.py')
         self.assertEqual(self.sample.file_extension, 'py')
-        self.assertTrue(set(['text/x-python']).issubset(self.sample.mimetypes))
+        self.assertEqual('text/x-python', self.sample.declared_mimetype)
         self.assertEqual(
             self.sample.sha256sum,
             '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08')
@@ -562,7 +566,7 @@ class TestSample(CompatibleTestCase):
                          os.path.join(self.factory.directory, 'test.py'))
         self.assertEqual(self.sample.filename, 'test.py')
         self.assertEqual(self.sample.file_extension, 'py')
-        self.assertTrue(set(['text/x-python']).issubset(self.sample.mimetypes))
+        self.assertEqual('text/x-python', self.sample.declared_mimetype)
         self.assertEqual(
             self.sample.sha256sum,
             '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08')
@@ -678,7 +682,8 @@ class MimetypeSample(object):  # pylint: disable=too-few-public-methods
     whitelist and greylist rules with it. """
     def __init__(self, types):
         # don't even need to make it a property
-        self.mimetypes = set(types)
+        self.declared_mimetype = None
+        self.filetools_report = FiletoolsReport(types)
 
 
 class CuckooReportSample(object):  # pylint: disable=too-few-public-methods
@@ -732,17 +737,17 @@ unknown : baz'''
     def test_rule_file_type_on_whitelist(self):
         """ Test whitelist rule. """
         combinations = [
-            [False, ['text/plain']],
-            [True, ['application/vnd.ms-excel']],
-            [True, ['text/plain', 'application/vnd.ms-excel']],
-            [True, ['image/png', 'application/zip', 'application/vnd.ms-excel']],
-            [True, ['', 'asdfjkl', '93219843298']],
-            [True, []],
+            [False, {'type_by_content':'text/plain'}],
+            [True, {'type_by_content':'application/vnd.ms-excel'}],
+            [True, {'type_by_content':'text/plain', 'type_by_name':'application/vnd.ms-excel'}],
+            [True, {'type_by_content':'image/png', 'type_by_name':'application/zip'}],
+            [True, {'type_by_content':'', 'type_by_name':'asdfjkl'}],
+            [True, {'type_by_content': None}]
         ]
         rule = FileTypeOnWhitelistRule(self.config, None)
         for expected, types in combinations:
             result = rule.evaluate(MimetypeSample(types))
-            self.assertEqual(result.further_analysis, expected)
+            self.assertEqual(result.further_analysis, expected, "FiletoolsReport: %s" % types)
 
     def test_rule_office_ole(self):
         """ Test rule office_ole. """
@@ -797,7 +802,8 @@ unknown : baz'''
     def test_rule_ignore_generic_whitelist(self):
         """ Test rule to ignore file types on whitelist. """
         config = '''[expressions]
-            expression.4  : sample.mimetypes <= {'text/plain', 'inode/x-empty', 'image/jpeg'} -> ignore
+            expression.4  :  {sample.declared_mimetype}|filereport.mime_types <= {
+                            'text/plain', 'inode/x-empty', 'image/jpeg'} -> ignore
         '''
         factory = CreatingSampleFactory(
             cuckoo=None, base_dir="",
@@ -950,7 +956,7 @@ unknown : baz'''
         """ Test generic rule on rtf docs and types. """
         config = '''[expressions]
             expression.0  : sample.file_extension in {"doc", "docx"}
-                and /.*\/(rtf|richtext)/ in sample.mimetypes -> bad
+                and /.*\/(rtf|richtext)/ in ({sample.declared_mimetype} | filereport.mime_types) -> bad
         '''
 
         factory = SampleFactory(
@@ -1001,7 +1007,9 @@ unknown : baz'''
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
-        sample = factory.make_sample(tests_data_dir+'/office/AppleDoubleencodedMacintoshfileCheckVM.xls', metainfo=part)
+        sample = factory.make_sample(tests_data_dir+
+                                     '/office/AppleDoubleencodedMacintoshfileCheckVM.xls',
+                                     metainfo=part)
         rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.ignored)
@@ -1099,18 +1107,19 @@ unknown : baz'''
     def test_rule_file_type_on_greylist(self):
         """ Test greylist rule. """
         combinations = [
-            [False, ['text/plain']],
-            [True, ['application/msword']],
-            [True, ['text/plain', 'application/x-dosexec']],
-            [True, ['image/png', 'application/zip', 'application/vnd.ms-excel',
-                    'application/vnd.ms-powerpoint']],
-            [False, ['', 'asdfjkl', '93219843298']],
-            [True, []],
+            [False, {'type_by_content':'text/plain'}],
+            [True, {'type_by_content':'application/msword'}],
+            [True, {'type_by_content':'text/plain', 'type_by_name':'application/x-dosexec'}],
+            [True, {'type_by_content':'image/png', 'type_by_name':'application/zip'}],
+            [False, {'type_by_content':'', 'type_by_name':'asdfjkl'}],
+            # Files without any mime type are inherently suspicious and therefore analysed
+            [True, dict()],
+            [True, {'type_by_content': None}],
         ]
         rule = FileTypeOnGreylistRule(self.config, None)
         for expected, types in combinations:
             result = rule.evaluate(MimetypeSample(types))
-            self.assertEqual(result.further_analysis, expected)
+            self.assertEqual(result.further_analysis, expected, "FiletoolsReport: %s" % types)
 
     def test_config_file_type_on_greylist(self):
         """ Test greylist rule configuration. """
