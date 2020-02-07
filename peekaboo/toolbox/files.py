@@ -52,6 +52,15 @@ def guess_mime_type_from_filename(file_path):
 
     return mt
 
+def guess_mime_type_text_representation(file_path):
+    """ Guess the type by content and hand back text representation rather than
+    mime type. """
+    typeAsText = magic.from_file(file_path)
+    if not typeAsText:
+        return None
+
+    return typeAsText
+
 
 class Filetools(object):
     """ Parent class, defines interface to various file tools. """
@@ -64,6 +73,7 @@ class Filetools(object):
 
         report["type_by_content"] = guess_mime_type_from_file_contents(sample.file_path)
         report["type_by_name"] = guess_mime_type_from_filename(sample.filename)
+        report["type_as_text"] = guess_mime_type_text_representation(sample.file_path)
 
         sample.register_filetools_report(FiletoolsReport(report))
         return FiletoolsReport(report)
@@ -95,5 +105,16 @@ class FiletoolsReport(object):
         """
         try:
             return self.report['type_by_name']
+        except KeyError:
+            return ""
+
+    @property
+    def type_as_text(self):
+        """
+        Guess the type of a file in text representation rather than mime type.
+        Equal to using the `file` command.
+        """
+        try:
+           return self.report['type_as_text']
         except KeyError:
             return ""
