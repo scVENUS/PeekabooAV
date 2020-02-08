@@ -131,6 +131,14 @@ class OletoolsReport(object):
         return False
 
     @property
+    def detect_autoexec(self):
+        """
+        Method to access olevba detect_autoexec report.
+        @return: String from List of Touple(marker, explanation)
+        """
+        return str(self.report['autoexec'])
+
+    @property
     def is_suspicious(self):
         """
         Uses olevba detect_suspicious and reports if something was found.
@@ -139,6 +147,14 @@ class OletoolsReport(object):
         if len(self.report['suspicious']) > 0:
             return True
         return False
+
+    @property
+    def detect_suspicious(self):
+        """
+        Method to access olevba detect_suspicious report.
+        @return: String from List of Touple(marker, explanation)
+        """
+        return str(self.report['suspicious'])
 
     def has_office_macros_with_suspicious_keyword(self, suspicious_keywords):
         """

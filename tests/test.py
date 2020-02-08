@@ -1068,6 +1068,14 @@ unknown : baz'''
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
+        config = '''[expressions]
+            expression.5  : "VBOX" in olereport.detect_suspicious -> bad
+        '''
+        sample = factory.make_sample(tests_data_dir+'/office/CheckVM.xls')
+        rule = ExpressionRule(CreatingConfigParser(config), None)
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.bad)
+
     def test_config_file_type_on_whitelist(self):
         """ Test whitelist rule configuration. """
         config = '''[file_type_on_whitelist]

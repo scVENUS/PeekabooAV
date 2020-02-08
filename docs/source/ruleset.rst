@@ -97,3 +97,7 @@ Attributes of olereport
 
     has_office_macro
     vba_code
+    has_autoexec
+    is_suspicious
+    detect_autoexec
+    detect_suspicious
