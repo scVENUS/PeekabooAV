@@ -27,6 +27,7 @@
 import logging
 import re
 from oletools.olevba import VBA_Parser, FileOpenError
+from oletools.olevba import detect_autoexec, detect_suspicious
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,10 @@ class Oletools(object):
     """ Parent class, defines interface to Oletools. """
     def get_report(self, sample):
         """ Return oletools report or create if not already cached. """
-        report = {}
+        report = {
+            'autoexec': [],
+            'suspicious' : [],
+        }
 
         try:
             vbaparser = VBA_Parser(sample.file_path)
@@ -57,6 +61,17 @@ class Oletools(object):
                     "overridden. May lead to false negatives, please update to "
                     "fixed version")
                 report['has_macros'] = False
+
+            if vbaparser.detect_vba_macros():
+                vb_code = vbaparser.extract_all_macros()
+                for (_, _, _, c) in vb_code:
+                    autoexec = detect_autoexec(c)
+                    if len(autoexec) >= 1:
+                        report['autoexec'].append(autoexec[0])
+
+                    suspicious = detect_suspicious(c)
+                    if len(suspicious) >= 1:
+                        report['suspicious'].append(suspicious[0])
 
             vbaparser.close()
         except IOError:
@@ -104,6 +119,26 @@ class OletoolsReport(object):
             return self.report['vba']
         except KeyError:
             return ""
+
+    @property
+    def has_autoexec(self):
+        """
+        Uses olevba detect_autoexec and reports if something was found.
+        @return: True or False
+        """
+        if len(self.report['autoexec']) > 0:
+            return True
+        return False
+
+    @property
+    def is_suspicious(self):
+        """
+        Uses olevba detect_suspicious and reports if something was found.
+        @return: True or False
+        """
+        if len(self.report['suspicious']) > 0:
+            return True
+        return False
 
     def has_office_macros_with_suspicious_keyword(self, suspicious_keywords):
         """
