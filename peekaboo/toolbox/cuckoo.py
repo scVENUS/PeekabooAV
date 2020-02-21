@@ -269,12 +269,14 @@ class WhitelistRetry(urllib3.util.retry.Retry):
 
 class CuckooApi(Cuckoo):
     """ Interfaces with a Cuckoo installation via its REST API. """
-    def __init__(self, job_queue, url="http://localhost:8090", api_token="", poll_interval=5,
-                 retries=5, backoff=0.5):
+    def __init__(self, job_queue, url="http://localhost:8090", api_token="",
+                 poll_interval=5, submit_original_filename=True, retries=5,
+                 backoff=0.5):
         super().__init__(job_queue)
         self.url = url
         self.api_token = api_token
         self.poll_interval = poll_interval
+        self.submit_original_filename = submit_original_filename
 
         # urrlib3 backoff formula:
         # <backoff factor> * (2 ^ (<retry count so far> - 1))
@@ -333,7 +335,7 @@ class CuckooApi(Cuckoo):
         path = sample.submit_path
         filename = os.path.basename(path)
         # override with the original file name if available
-        if sample.name_declared:
+        if self.submit_original_filename and sample.name_declared:
             filename = sample.name_declared
 
         files = {"file": (filename, open(path, 'rb'))}

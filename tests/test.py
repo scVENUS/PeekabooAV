@@ -193,6 +193,7 @@ class TestDefaultConfig(CompatibleTestCase):
         self.assertEqual(self.config.cuckoo_storage, '/var/lib/peekaboo/.cuckoo/storage')
         self.assertEqual(self.config.cuckoo_url, 'http://127.0.0.1:8090')
         self.assertEqual(self.config.cuckoo_poll_interval, 5)
+        self.assertEqual(self.config.cuckoo_submit_original_filename, True)
         self.assertEqual(self.config.cluster_instance_id, 0)
         self.assertEqual(self.config.cluster_stale_in_flight_threshold, 15*60)
         self.assertEqual(self.config.cluster_duplicate_check_interval, 60)
@@ -232,6 +233,7 @@ submit           :    /submit/1
 storage_path     :    /storage/1
 url              :    http://api:1111
 poll_interval    :    51
+submit_original_filename : no
 
 [cluster]
 instance_id: 12
@@ -263,6 +265,7 @@ duplicate_check_interval: 61
         self.assertEqual(self.config.cuckoo_storage, '/storage/1')
         self.assertEqual(self.config.cuckoo_url, 'http://api:1111')
         self.assertEqual(self.config.cuckoo_poll_interval, 51)
+        self.assertEqual(self.config.cuckoo_submit_original_filename, False)
         self.assertEqual(self.config.cluster_instance_id, 12)
         self.assertEqual(self.config.cluster_stale_in_flight_threshold, 31)
         self.assertEqual(self.config.cluster_duplicate_check_interval, 61)

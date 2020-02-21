@@ -76,6 +76,12 @@
 # api mode
 #url              :    http://127.0.0.1:8090
 #poll_interval    :    5
+
+# Submit samples with their original filenames if available. Enhances
+# authenticity of analysis environment but also leaks original filenames into
+# Cuckoo's database.
+#submit_original_filename : yes
+
 # From version 2.0.7 cuckoo API has authentication support.
 # New installations create a bearer token by default and require it but upgraded
 # installations don't automatically get one.

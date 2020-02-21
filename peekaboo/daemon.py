@@ -354,7 +354,8 @@ def run():
     else:
         cuckoo = CuckooApi(job_queue, config.cuckoo_url,
                            config.cuckoo_api_token,
-                           config.cuckoo_poll_interval)
+                           config.cuckoo_poll_interval,
+                           config.cuckoo_submit_original_filename)
 
     sig_handler = SignalHandler()
     sig_handler.register_listener(cuckoo)
