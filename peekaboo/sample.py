@@ -89,6 +89,7 @@ class Sample(object):
         # sha256sum.suffix
         self.__submit_path = None
         self.__cuckoo_job_id = -1
+        self.__cuckoo_failed = False
         self.__cuckoo_report = None
         self.__oletools_report = None
         self.__done = False
@@ -452,6 +453,11 @@ class Sample(object):
         return self.__file_stat.st_size
 
     @property
+    def cuckoo_failed(self):
+        """ Returns whether the Cuckoo analysis failed. """
+        return self.__cuckoo_failed
+
+    @property
     def cuckoo_report(self):
         """ Returns the cuckoo report """
         return self.__cuckoo_report
@@ -478,6 +484,10 @@ class Sample(object):
             _('Sample %s successfully submitted to Cuckoo as job %d')
             % (self, self.__cuckoo_job_id))
         return self.__cuckoo_job_id
+
+    def mark_cuckoo_failure(self):
+        """ Records whether Cuckoo analysis failed. """
+        self.__cuckoo_failed = True
 
     def register_cuckoo_report(self, report):
         """ Records a Cuckoo report for later evaluation. """

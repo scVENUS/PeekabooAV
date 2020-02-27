@@ -686,8 +686,9 @@ class MimetypeSample(object):  # pylint: disable=too-few-public-methods
 
 class CuckooReportSample(object):  # pylint: disable=too-few-public-methods
     """ A dummy sample that only contains a configurable cuckoo report. """
-    def __init__(self, report):
+    def __init__(self, report, failed=False):
         self.cuckoo_report = CuckooReport(report)
+        self.cuckoo_failed = failed
 
 
 class TestRules(CompatibleTestCase):

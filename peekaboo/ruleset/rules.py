@@ -114,6 +114,9 @@ class Rule(object):
 
             @returns: CuckooReport
         """
+        if sample.cuckoo_failed:
+            return None
+
         report = sample.cuckoo_report
         if report is not None:
             return report
