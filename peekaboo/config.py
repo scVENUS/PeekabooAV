@@ -309,6 +309,7 @@ class PeekabooConfig(PeekabooConfigParser):
         self.cuckoo_api_token = ''
         self.cuckoo_poll_interval = 5
         self.cuckoo_submit_original_filename = True
+        self.cuckoo_maximum_job_age = 15*60
         self.cuckoo_storage = '/var/lib/peekaboo/.cuckoo/storage'
         self.cuckoo_exec = '/opt/cuckoo/bin/cuckoo'
         self.cuckoo_submit = '/opt/cuckoo/bin/cuckoo submit'
@@ -343,6 +344,7 @@ class PeekabooConfig(PeekabooConfigParser):
             'cuckoo_poll_interval': ['cuckoo', 'poll_interval'],
             'cuckoo_submit_original_filename': [
                 'cuckoo', 'submit_original_filename'],
+            'cuckoo_maximum_job_age': ['cuckoo', 'maximum_job_age'],
             'cuckoo_storage': ['cuckoo', 'storage_path'],
             'cuckoo_exec': ['cuckoo', 'exec'],
             'cuckoo_submit': ['cuckoo', 'submit'],

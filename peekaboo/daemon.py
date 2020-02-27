@@ -355,7 +355,8 @@ def run():
         cuckoo = CuckooApi(job_queue, config.cuckoo_url,
                            config.cuckoo_api_token,
                            config.cuckoo_poll_interval,
-                           config.cuckoo_submit_original_filename)
+                           config.cuckoo_submit_original_filename,
+                           config.cuckoo_maximum_job_age)
 
     sig_handler = SignalHandler()
     sig_handler.register_listener(cuckoo)
