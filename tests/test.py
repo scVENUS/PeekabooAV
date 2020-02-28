@@ -1069,7 +1069,7 @@ unknown : baz'''
         self.assertEqual(result.result, Result.bad)
 
         config = '''[expressions]
-            expression.5  : "VBOX" in olereport.detect_suspicious -> bad
+            expression.5  : "VBOX" in olereport.detected_suspicious -> bad
         '''
         sample = factory.make_sample(tests_data_dir+'/office/CheckVM.xls')
         rule = ExpressionRule(CreatingConfigParser(config), None)

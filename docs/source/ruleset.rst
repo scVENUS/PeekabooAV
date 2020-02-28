@@ -99,5 +99,5 @@ Attributes of olereport
     vba_code
     has_autoexec
     is_suspicious
-    detect_autoexec
-    detect_suspicious
+    detected_autoexec
+    detected_suspicious

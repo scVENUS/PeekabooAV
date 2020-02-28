@@ -131,10 +131,10 @@ class OletoolsReport(object):
         return False
 
     @property
-    def detect_autoexec(self):
+    def detected_autoexec(self):
         """
         Method to access olevba detect_autoexec report.
-        @return: String from List of Touple(marker, explanation)
+        @return: String from List of Tuple(marker, explanation)
         """
         return str(self.report['autoexec'])
 
@@ -149,10 +149,10 @@ class OletoolsReport(object):
         return False
 
     @property
-    def detect_suspicious(self):
+    def detected_suspicious(self):
         """
         Method to access olevba detect_suspicious report.
-        @return: String from List of Touple(marker, explanation)
+        @return: String from List of Tuple(marker, explanation)
         """
         return str(self.report['suspicious'])
 
