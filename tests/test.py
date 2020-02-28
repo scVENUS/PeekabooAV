@@ -1020,6 +1020,62 @@ unknown : baz'''
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
+    def test_rule_expressions_olereport_autoexec_suspicious(self):
+        """ Test generic rule olereport with autoexec and suspicious """
+        config = '''[expressions]
+            expression.3  : olereport.has_autoexec == True -> bad
+            expression.4  : olereport.is_suspicious == True -> bad
+            expression.5  : "suspicious" in olereport.vba_code -> bad
+        '''
+
+        factory = CreatingSampleFactory(
+            cuckoo=None, base_dir=None, job_hash_regex=None,
+            keep_mail_data=False, processing_info_dir=None)
+        tests_data_dir = os.path.dirname(os.path.abspath(__file__))+"/test-data"
+
+        sample = factory.make_sample(tests_data_dir+'/office/empty.doc')
+        rule = ExpressionRule(CreatingConfigParser(config), None)
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.unknown)
+
+        sample = factory.make_sample(tests_data_dir+'/office/file.txt')
+        rule = ExpressionRule(CreatingConfigParser(config), None)
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.unknown)
+
+        sample = factory.make_sample(tests_data_dir+'/office/blank.doc')
+        rule = ExpressionRule(CreatingConfigParser(config), None)
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.unknown)
+
+        sample = factory.make_sample(tests_data_dir+'/office/example.rtf')
+        rule = ExpressionRule(CreatingConfigParser(config), None)
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.unknown)
+
+        sample = factory.make_sample(tests_data_dir+'/office/suspiciousMacro.rtf')
+        rule = ExpressionRule(CreatingConfigParser(config), None)
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.bad)
+
+        sample = factory.make_sample(tests_data_dir+'/office/suspiciousMacro.doc')
+        rule = ExpressionRule(CreatingConfigParser(config), None)
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.bad)
+
+        sample = factory.make_sample(tests_data_dir+'/office/CheckVM.xls')
+        rule = ExpressionRule(CreatingConfigParser(config), None)
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.bad)
+
+        config = '''[expressions]
+            expression.5  : "VBOX" in olereport.detected_suspicious -> bad
+        '''
+        sample = factory.make_sample(tests_data_dir+'/office/CheckVM.xls')
+        rule = ExpressionRule(CreatingConfigParser(config), None)
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.bad)
+
     def test_config_file_type_on_whitelist(self):
         """ Test whitelist rule configuration. """
         config = '''[file_type_on_whitelist]
