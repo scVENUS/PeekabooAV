@@ -710,6 +710,10 @@ greylist.3 : application/msword
 failure.1: end of analysis reached!
 success.1: analysis completed successfully''')
 
+        cls.tests_data_dir = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "test-data")
+        cls.office_data_dir = os.path.join(cls.tests_data_dir, 'office')
+
     def test_config_known(self):  # pylint: disable=no-self-use
         """ Test the known rule configuration. """
         config = '''[known]
@@ -761,7 +765,6 @@ unknown : baz'''
         factory = CreatingSampleFactory(
             cuckoo=None, base_dir=None, job_hash_regex=None,
             keep_mail_data=False, processing_info_dir=None)
-        tests_data_dir = os.path.dirname(os.path.abspath(__file__))+"/test-data"
 
         # test if macro with suspicious keyword
         rule = OfficeMacroWithSuspiciousKeyword(
@@ -770,13 +773,17 @@ unknown : baz'''
             # no office document file extension
             [Result.unknown, factory.create_sample('test.nodoc', 'test')],
             # test with empty file
-            [Result.unknown, factory.make_sample(tests_data_dir+'/office/empty.doc')],
+            [Result.unknown, factory.make_sample(os.path.join(
+                self.office_data_dir, 'empty.doc'))],
             # office document with 'suspicious' in macro code
-            [Result.bad, factory.make_sample(tests_data_dir+'/office/suspiciousMacro.doc')],
+            [Result.bad, factory.make_sample(os.path.join(
+                self.office_data_dir, 'suspiciousMacro.doc'))],
             # test with blank word doc
-            [Result.unknown, factory.make_sample(tests_data_dir+'/office/blank.doc')],
+            [Result.unknown, factory.make_sample(os.path.join(
+                self.office_data_dir, 'blank.doc'))],
             # test with legitimate macro
-            [Result.unknown, factory.make_sample(tests_data_dir+'/office/legitmacro.xls')]
+            [Result.unknown, factory.make_sample(os.path.join(
+                self.office_data_dir, 'legitmacro.xls'))]
         ]
         for expected, sample in combinations:
             result = rule.evaluate(sample)
@@ -788,13 +795,17 @@ unknown : baz'''
             # no office document file extension
             [Result.unknown, factory.create_sample('test.nodoc', 'test')],
             # test with empty file
-            [Result.unknown, factory.make_sample(tests_data_dir+'/office/empty.doc')],
+            [Result.unknown, factory.make_sample(os.path.join(
+                self.office_data_dir, 'empty.doc'))],
             # office document with 'suspicious' in macro code
-            [Result.bad, factory.make_sample(tests_data_dir+'/office/suspiciousMacro.doc')],
+            [Result.bad, factory.make_sample(os.path.join(
+                self.office_data_dir, 'suspiciousMacro.doc'))],
             # test with blank word doc
-            [Result.unknown, factory.make_sample(tests_data_dir+'/office/blank.doc')],
+            [Result.unknown, factory.make_sample(os.path.join(
+                self.office_data_dir, 'blank.doc'))],
             # test with legitimate macro
-            [Result.bad, factory.make_sample(tests_data_dir+'/office/legitmacro.xls')]
+            [Result.bad, factory.make_sample(os.path.join(
+                self.office_data_dir, 'legitmacro.xls'))]
         ]
         for expected, sample in combinations:
             result = rule.evaluate(sample)
@@ -968,7 +979,6 @@ unknown : baz'''
         factory = CreatingSampleFactory(
             cuckoo=None, base_dir=None, job_hash_regex=None,
             keep_mail_data=False, processing_info_dir=None)
-        tests_data_dir = os.path.dirname(os.path.abspath(__file__))+"/test-data"
 
         report = {
             "signatures": [
@@ -978,7 +988,8 @@ unknown : baz'''
         }
         cuckooreport = CuckooReport(report)
 
-        sample = factory.make_sample(tests_data_dir+'/office/blank.doc')
+        sample = factory.make_sample(os.path.join(
+            self.office_data_dir, 'blank.doc'))
         sample.register_cuckoo_report(cuckooreport)
         rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
@@ -993,34 +1004,39 @@ unknown : baz'''
         factory = CreatingSampleFactory(
             cuckoo=None, base_dir=None, job_hash_regex=None,
             keep_mail_data=False, processing_info_dir=None)
-        tests_data_dir = os.path.dirname(os.path.abspath(__file__))+"/test-data"
 
-        sample = factory.make_sample(tests_data_dir+'/office/empty.doc')
+        path = os.path.join(self.office_data_dir, 'empty.doc')
+        sample = factory.make_sample(path)
         rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
-        sample = factory.make_sample(tests_data_dir+'/office/file.txt')
+        path = os.path.join(self.office_data_dir, 'file.txt')
+        sample = factory.make_sample(path)
         rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
-        sample = factory.make_sample(tests_data_dir+'/office/blank.doc')
+        path = os.path.join(self.office_data_dir, 'blank.doc')
+        sample = factory.make_sample(path)
         rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
-        sample = factory.make_sample(tests_data_dir+'/office/example.rtf')
+        path = os.path.join(self.office_data_dir, 'example.rtf')
+        sample = factory.make_sample(path)
         rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
-        sample = factory.make_sample(tests_data_dir+'/office/suspiciousMacro.rtf')
+        path = os.path.join(self.office_data_dir, 'suspiciousMacro.rtf')
+        sample = factory.make_sample(path)
         rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
-        sample = factory.make_sample(tests_data_dir+'/office/suspiciousMacro.doc')
+        path = os.path.join(self.office_data_dir, 'suspiciousMacro.doc')
+        sample = factory.make_sample(path)
         rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
