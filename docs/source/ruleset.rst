@@ -116,3 +116,4 @@ Attributes of filereport
 
     type_by_content
     type_by_name
+    type_as_text

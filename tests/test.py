@@ -1001,7 +1001,9 @@ unknown : baz'''
     def test_rule_expression_filetools(self):
         """ Test generic rule on filetoolsreport. """
         config = r'''[expressions]
-            expression.0  : sample.file_extension in {"doc", "docx"}
+            expression.0  : filereport.type_as_text
+                == "AppleDouble encoded Macintosh file" -> ignore
+            expression.1  : sample.file_extension in {"doc", "docx"}
                 and filereport.type_by_content != /application\/.*word/ -> bad
         '''
 
@@ -1026,6 +1028,14 @@ unknown : baz'''
         rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
+
+        path = os.path.join(
+            self.office_data_dir,
+            'AppleDoubleencodedMacintoshfileCheckVM.xls')
+        sample = factory.make_sample(path, metainfo=part)
+        rule = ExpressionRule(CreatingConfigParser(config), None)
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.ignored)
 
     def test_rule_expressions_cuckooreport_context(self):
         """ Test generic rule cuckooreport context """
