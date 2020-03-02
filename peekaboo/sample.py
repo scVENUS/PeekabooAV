@@ -112,6 +112,8 @@ class Sample(object):
         # - this way they still somewhat resemble the previous arbitrary
         #   attribute dictionary idea
         # - we'd have to implement the name mangling for setting below
+        # Even though, it is not recommended to access them directly they're an
+        # implementation detail. We add respective properties for that.
         #
         # Security: Add more below to allow them to be accepted from the
         # client. We don't want anyone to be able to pollute our sample
@@ -409,6 +411,12 @@ class Sample(object):
         # extension or the empty string if none found
         self.__file_extension = os.path.splitext(filename)[1][1:]
         return self.__file_extension
+
+    @property
+    def type_declared(self):
+        """ Returns the MIME type declared by the original MIME part, None if
+        not available. """
+        return self.meta_info_type_declared
 
     @property
     def mimetypes(self):
