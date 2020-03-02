@@ -604,10 +604,12 @@ class TestSample(CompatibleTestCase):
                 'full_name': '/tmp/test.pyc',
                 'name_declared': 'test.pyc',
                 'type_declared': 'application/x-bytecode.python',
+                'content_disposition': 'angry',
                 'type_long': 'application/x-python-bytecode',
                 'type_short': 'pyc',
                 'size': '200'})
         self.assertEqual(sample.file_extension, 'pyc')
+        self.assertEqual(sample.content_disposition, 'angry')
 
     def test_sample_without_suffix(self):
         """ Test extraction of file extension from declared name. """

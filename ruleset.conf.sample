@@ -100,6 +100,13 @@ expression.4  : sample.file_extension in {
                         'xls', 'xlsm', 'xlsx' }
                     and olereport.has_office_macros == True
                     and cuckooreport.score > 4 -> bad
+# inline content will normally be rendered by the mail client and not presented
+# as an attachment for the user to open -> no need to scan (if exploiting the
+# mail client is not a concern)
+expression.5  : sample.content_disposition == 'inline'
+                    and sample.mime_types <= {
+                        'image/png', 'image/jpeg', 'image/gif', 'image/bmp'
+                    } -> ignore
 
 [cuckoo_evil_sig]
 signature.1  : A potential heapspray has been detected. .*

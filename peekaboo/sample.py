@@ -111,7 +111,7 @@ class Sample(object):
         # We do not make these private for the following reasons:
         # - this way they still somewhat resemble the previous arbitrary
         #   attribute dictionary idea
-        # - we'd have to implement the name mangling for setting blow
+        # - we'd have to implement the name mangling for setting below
         #
         # Security: Add more below to allow them to be accepted from the
         # client. We don't want anyone to be able to pollute our sample
@@ -119,6 +119,7 @@ class Sample(object):
         # actually use and know how to deal with.
         self.meta_info_name_declared = None
         self.meta_info_type_declared = None
+        self.meta_info_content_disposition = None
 
         self.initialized = False
 
@@ -378,6 +379,12 @@ class Sample(object):
                 self.__sha256sum = checksum
 
         return self.__sha256sum
+
+    @property
+    def content_disposition(self):
+        """ Returns the content disposition in the original email, e.g. inline
+        or attachment, None if not available. """
+        return self.meta_info_content_disposition
 
     @property
     def name_declared(self):
