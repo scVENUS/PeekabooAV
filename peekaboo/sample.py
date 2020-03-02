@@ -92,6 +92,7 @@ class Sample(object):
         self.__cuckoo_failed = False
         self.__cuckoo_report = None
         self.__oletools_report = None
+        self.__filetools_report = None
         self.__done = False
         self.__status_change = status_change
         self.__result = Result.unchecked
@@ -483,6 +484,11 @@ class Sample(object):
         return self.__oletools_report
 
     @property
+    def filetools_report(self):
+        """ Returns the filetools report """
+        return self.__filetools_report
+
+    @property
     def submit_path(self):
         """ Returns the path to use for submission to Cuckoo """
         return self.__submit_path
@@ -511,6 +517,10 @@ class Sample(object):
     def register_oletools_report(self, report):
         """ Records a Oletools report for alter evaluation. """
         self.__oletools_report = report
+
+    def register_filetools_report(self, report):
+        """ Records a Filetools report for alter evaluation. """
+        self.__filetools_report = report
 
     def cleanup(self):
         """ Clean up after the sample has been analysed, removing a potentially

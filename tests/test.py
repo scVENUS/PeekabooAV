@@ -969,6 +969,64 @@ unknown : baz'''
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
+    def test_rule_expressions_rtf(self):
+        """ Test generic rule on rtf docs and types. """
+        config = r'''[expressions]
+            expression.0  : sample.file_extension in {"doc", "docx"}
+                and /.*\/(rtf|richtext)/ in sample.mimetypes -> bad
+        '''
+
+        factory = SampleFactory(
+            cuckoo=None, base_dir=None, job_hash_regex=None,
+            keep_mail_data=False, processing_info_dir=None)
+
+        part = {
+            "full_name": "p001",
+            "name_declared": "file1.doc",
+            "type_declared": "application/word"
+        }
+
+        path = os.path.join(self.office_data_dir, 'blank.doc')
+        sample = factory.make_sample(path, metainfo=part)
+        rule = ExpressionRule(CreatingConfigParser(config), None)
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.unknown)
+
+        path = os.path.join(self.office_data_dir, 'example.rtf')
+        sample = factory.make_sample(path, metainfo=part)
+        rule = ExpressionRule(CreatingConfigParser(config), None)
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.bad)
+
+    def test_rule_expression_filetools(self):
+        """ Test generic rule on filetoolsreport. """
+        config = r'''[expressions]
+            expression.0  : sample.file_extension in {"doc", "docx"}
+                and filereport.type_by_content != /application\/.*word/ -> bad
+        '''
+
+        factory = SampleFactory(
+            cuckoo=None, base_dir=None, job_hash_regex=None,
+            keep_mail_data=False, processing_info_dir=None)
+
+        part = {
+            "full_name": "p001",
+            "name_declared": "file1.doc",
+            "type_declared": "application/word"
+        }
+
+        path = os.path.join(self.office_data_dir, 'blank.doc')
+        sample = factory.make_sample(path, metainfo=part)
+        rule = ExpressionRule(CreatingConfigParser(config), None)
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.unknown)
+
+        path = os.path.join(self.office_data_dir, 'example.rtf')
+        sample = factory.make_sample(path, metainfo=part)
+        rule = ExpressionRule(CreatingConfigParser(config), None)
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.bad)
+
     def test_rule_expressions_cuckooreport_context(self):
         """ Test generic rule cuckooreport context """
         config = '''[expressions]
