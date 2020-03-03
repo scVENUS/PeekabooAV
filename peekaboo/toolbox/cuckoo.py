@@ -194,11 +194,11 @@ class CuckooEmbed(Cuckoo):
             "added as task with ID ([0-9]*)",
         )
         self.job_id_patterns = [re.compile(pattern) for pattern in patterns]
-    
+
     def submit(self, sample):
         """
         Submit a file or directory to Cuckoo for behavioural analysis.
-            
+
         @param sample: Sample object to analyse.
         @return: The job ID used by Cuckoo to identify this analysis task.
         """
@@ -217,7 +217,7 @@ class CuckooEmbed(Cuckoo):
             p.wait()
         except Exception as error:
             raise CuckooSubmitFailedException(error)
-        
+
         if not p.returncode == 0:
             raise CuckooSubmitFailedException(
                 'cuckoo submit returned a non-zero return code.')
@@ -386,7 +386,7 @@ class CuckooApi(Cuckoo):
             return None
 
         return json_resp
-    
+
     def submit(self, sample):
         path = sample.submit_path
         filename = os.path.basename(path)
@@ -408,7 +408,7 @@ class CuckooApi(Cuckoo):
         except requests.exceptions.RequestException as error:
             raise CuckooSubmitFailedException(
                 'Error creating Cuckoo task: %s' % error)
-        
+
         try:
             json_resp = response.json()
         except ValueError as error:
@@ -428,7 +428,7 @@ class CuckooApi(Cuckoo):
     def get_report(self, job_id):
         logger.debug("Report from Cuckoo API requested, job_id = %d" % job_id)
         return self.__get("tasks/report/%d" % job_id)
-    
+
     def do(self):
         """ Do the polling for finished jobs. """
         # do a simple initial test of connectivity. With this we require the
