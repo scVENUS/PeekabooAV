@@ -83,15 +83,15 @@ keyword.2 : AutoClose
 #log_level : INFO
 
 expression.1  : sample.mimetypes <= {'text/plain', 'inode/x-empty'} -> ignore
-expression.2  : sample.meta_info_name_declared == /smime.p7[mcs]/
-                    and sample.meta_info_type_declared in {
+expression.2  : sample.name_declared == /smime.p7[mcs]/
+                    and sample.type_declared in {
                         'application/pkcs7-signature',
                         'application/x-pkcs7-signature',
                         'application/pkcs7-mime',
                         'application/x-pkcs7-mime'
                     } -> ignore
-expression.3  : sample.meta_info_name_declared == 'signature.asc'
-                    and sample.meta_info_type_declared in {
+expression.3  : sample.name_declared == 'signature.asc'
+                    and sample.type_declared in {
                         'application/pgp-signature'
                     } -> ignore
 expression.4  : sample.file_extension in {
@@ -100,6 +100,13 @@ expression.4  : sample.file_extension in {
                         'xls', 'xlsm', 'xlsx' }
                     and olereport.has_office_macros == True
                     and cuckooreport.score > 4 -> bad
+# inline content will normally be rendered by the mail client and not presented
+# as an attachment for the user to open -> no need to scan (if exploiting the
+# mail client is not a concern)
+expression.5  : sample.content_disposition == 'inline'
+                    and sample.type_declared in {
+                        'image/png', 'image/jpeg', 'image/gif', 'image/bmp'
+                    } -> ignore
 
 [cuckoo_evil_sig]
 signature.1  : A potential heapspray has been detected. .*

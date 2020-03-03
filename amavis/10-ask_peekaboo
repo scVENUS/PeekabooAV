@@ -49,6 +49,25 @@ use JSON::PP;
 # Yes, Amavis has its own minimalist JSON implementation Amavis::JSON. But it
 # doesn't seem to do UTF-8 encoding correctly - everything ends up as latin1.
 
+# monkey patch a content_disposition setter/getter into the Parts package
+*{Amavis::Unpackers::Part::content_disposition} = sub {
+  @_<2 ? shift->{co_disp} : ($_[0]->{co_disp} = $_[1]);
+};
+
+# monkey patch a wrapper for mime_traverse into the MIME package
+my $amavis_mime_traverse = \&Amavis::Unpackers::MIME::mime_traverse;
+*{Amavis::Unpackers::MIME::mime_traverse} = sub ($$$$$) {
+  my($entity, $tempdir, $parent_obj, $depth, $placement) = @_;
+
+  &$amavis_mime_traverse($entity, $tempdir, $parent_obj, $depth, $placement);
+
+  # go through list of children detected by call above and assign additional
+  # properties
+  foreach my $child (@{$parent_obj->children}) {
+    $child->content_disposition($entity->head->mime_attr('content-disposition'));
+  }
+};
+
 sub ask_peekaboo_internal {
   my ($dummy, $dummy, $names_to_parts, $dummy) = @_;
 
@@ -62,7 +81,7 @@ sub ask_peekaboo_internal {
     my $pmi = {};
 
     my $part = $names_to_parts->{$partname};
-    for my $field (qw( full_name name_declared type_declared )) {
+    for my $field (qw( full_name name_declared type_declared content_disposition )) {
       my $val = $part->$field();
 
       # name_declared can be an array of names, if so use the last

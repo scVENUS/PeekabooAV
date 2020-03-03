@@ -607,10 +607,12 @@ class TestSample(CompatibleTestCase):
                 'full_name': '/tmp/test.pyc',
                 'name_declared': 'test.pyc',
                 'type_declared': 'application/x-bytecode.python',
+                'content_disposition': 'angry',
                 'type_long': 'application/x-python-bytecode',
                 'type_short': 'pyc',
                 'size': '200'})
         self.assertEqual(sample.file_extension, 'pyc')
+        self.assertEqual(sample.content_disposition, 'angry')
 
     def test_sample_without_suffix(self):
         """ Test extraction of file extension from declared name. """
@@ -846,7 +848,6 @@ unknown : baz'''
         self.assertEqual(result.result, Result.unknown)
 
         sample = factory.create_sample('file2.gif', 'GIF87...')
-        sample.meta_info_name_declared = None
         rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.ignored)
@@ -856,7 +857,6 @@ unknown : baz'''
         '''
 
         sample = factory.create_sample('file2.gif', 'GIF87...')
-        sample.meta_info_name_declared = None
         rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.ignored)
@@ -864,24 +864,19 @@ unknown : baz'''
     def test_rule_ignore_mail_signatures(self):
         """ Test rule to ignore cryptographic mail signatures. """
         config = '''[expressions]
-            expression.1  : sample.meta_info_name_declared == /smime.p7[mcs]/
-                and sample.meta_info_type_declared in {
+            expression.1  : sample.name_declared == /smime.p7[mcs]/
+                and sample.type_declared in {
                     'application/pkcs7-signature',
                     'application/x-pkcs7-signature',
                     'application/pkcs7-mime',
                     'application/x-pkcs7-mime'
                 } -> ignore
-            expression.2  : sample.meta_info_name_declared == 'signature.asc'
-                and sample.meta_info_type_declared in {
+            expression.2  : sample.name_declared == 'signature.asc'
+                and sample.type_declared in {
                     'application/pgp-signature'
                 } -> ignore
             '''
         rule = ExpressionRule(CreatingConfigParser(config), None)
-
-        part = {"full_name": "p001",
-                "name_declared": "smime.p7s",
-                "type_declared": "application/pkcs7-signature"
-               }
 
         factory = SampleFactory(
             cuckoo=None, base_dir=None, job_hash_regex=None,
@@ -892,37 +887,50 @@ unknown : baz'''
         self.assertEqual(result.result, Result.unknown)
 
         # test smime signatures
+        part = {
+            "full_name": "p001",
+            "name_declared": "smime.p7s",
+            "type_declared": "application/pkcs7-signature"
+        }
+
         sample = factory.make_sample('', metainfo=part)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.ignored)
 
-        sample.meta_info_name_declared = "asmime.p7m"
+        part["name_declared"] = "asmime.p7m"
+        sample = factory.make_sample('', metainfo=part)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
-        sample.meta_info_name_declared = "smime.p7m"
+        part["name_declared"] = "smime.p7m"
+        sample = factory.make_sample('', metainfo=part)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.ignored)
 
-        sample.meta_info_name_declared = "smime.p7o"
+        part["name_declared"] = "smime.p7o"
+        sample = factory.make_sample('', metainfo=part)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
-        sample.meta_info_name_declared = "smime.p7"
+        part["name_declared"] = "smime.p7"
+        sample = factory.make_sample('', metainfo=part)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
-        sample.meta_info_name_declared = "file"
+        part["name_declared"] = "file"
+        sample = factory.make_sample('', metainfo=part)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
         # test gpg signatures
-        sample.meta_info_name_declared = "signature.asc"
+        part["name_declared"] = "signature.asc"
+        sample = factory.make_sample('', metainfo=part)
         rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
-        sample.meta_info_type_declared = "application/pgp-signature"
+        part["type_declared"] = "application/pgp-signature"
+        sample = factory.make_sample('', metainfo=part)
         rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.ignored)
