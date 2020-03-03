@@ -39,9 +39,10 @@ from datetime import datetime, timedelta
 
 
 # Add Peekaboo to PYTHONPATH
-# pylint: disable=wrong-import-position
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+TESTSDIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.dirname(TESTSDIR))
 
+# pylint: disable=wrong-import-position
 from peekaboo.exceptions import PeekabooConfigException, \
         PeekabooRulesetConfigError
 from peekaboo.config import PeekabooConfig, PeekabooConfigParser
@@ -657,8 +658,7 @@ class TestOletools(CompatibleTestCase):
     @classmethod
     def setUpClass(cls):
         """ Set up common test case resources. """
-        cls.office_data_dir = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), "test-data", "office")
+        cls.office_data_dir = os.path.join(TESTSDIR, "test-data", "office")
 
     def test_analysis(self):
         """ Test Oletools analysis. """
@@ -720,8 +720,7 @@ class TestFiletools(CompatibleTestCase):
     @classmethod
     def setUpClass(cls):
         """ Set up common test case resources. """
-        cls.tests_data_dir = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), "test-data")
+        cls.tests_data_dir = os.path.join(TESTSDIR, "test-data")
 
     def test_analysis(self):
         """ Test Filetools analysis. """
@@ -852,8 +851,7 @@ greylist.3 : application/msword
 failure.1: end of analysis reached!
 success.1: analysis completed successfully''')
 
-        cls.tests_data_dir = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), "test-data")
+        cls.tests_data_dir = os.path.join(TESTSDIR, "test-data")
         cls.office_data_dir = os.path.join(cls.tests_data_dir, 'office')
 
     def test_config_known(self):  # pylint: disable=no-self-use
@@ -1287,39 +1285,44 @@ unknown : baz'''
         factory = CreatingSampleFactory(
             cuckoo=None, base_dir=None, job_hash_regex=None,
             keep_mail_data=False, processing_info_dir=None)
-        tests_data_dir = os.path.dirname(os.path.abspath(__file__))+"/test-data"
-
-        sample = factory.make_sample(tests_data_dir+'/office/empty.doc')
+        sample = factory.make_sample(os.path.join(
+            self.office_data_dir, 'empty.doc'))
         rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
-        sample = factory.make_sample(tests_data_dir+'/office/file.txt')
+        sample = factory.make_sample(os.path.join(
+            self.office_data_dir, 'file.txt'))
         rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
-        sample = factory.make_sample(tests_data_dir+'/office/blank.doc')
+        sample = factory.make_sample(os.path.join(
+            self.office_data_dir, 'blank.doc'))
         rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
-        sample = factory.make_sample(tests_data_dir+'/office/example.rtf')
+        sample = factory.make_sample(os.path.join(
+            self.office_data_dir, 'example.rtf'))
         rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
-        sample = factory.make_sample(tests_data_dir+'/office/suspiciousMacro.rtf')
+        sample = factory.make_sample(os.path.join(
+            self.office_data_dir, 'suspiciousMacro.rtf'))
         rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
-        sample = factory.make_sample(tests_data_dir+'/office/suspiciousMacro.doc')
+        sample = factory.make_sample(os.path.join(
+            self.office_data_dir, 'suspiciousMacro.doc'))
         rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
-        sample = factory.make_sample(tests_data_dir+'/office/CheckVM.xls')
+        sample = factory.make_sample(os.path.join(
+            self.office_data_dir, 'CheckVM.xls'))
         rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
@@ -1327,7 +1330,8 @@ unknown : baz'''
         config = '''[expressions]
             expression.5  : "VBOX" in olereport.detected_suspicious -> bad
         '''
-        sample = factory.make_sample(tests_data_dir+'/office/CheckVM.xls')
+        sample = factory.make_sample(os.path.join(
+            self.office_data_dir, 'CheckVM.xls'))
         rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
