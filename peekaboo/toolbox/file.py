@@ -105,3 +105,11 @@ class FiletoolsReport(object):
         """ Returns the guessed type of a file in text representation rather
         than mime type. Equal to using the `file` command. """
         return self.report.get('type_as_text', None)
+
+    @property
+    def mime_types(self):
+        """ Return set of determined mime types. """
+        mime_types = {self.type_by_name, self.type_by_content}
+        mime_types.discard(None)
+
+        return mime_types

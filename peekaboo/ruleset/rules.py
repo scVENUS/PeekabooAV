@@ -223,7 +223,11 @@ class FileTypeOnWhitelistRule(Rule):
     def evaluate(self, sample):
         """ Ignore the file only if *all* of its mime types are on the
         whitelist and we could determine at least one. """
-        if sample.mimetypes and sample.mimetypes.issubset(self.whitelist):
+        filereport = self.get_filetools_report(sample)
+        mimetypes = filereport.mime_types
+        if sample.type_declared is not None:
+            mimetypes.add(sample.type_declared)
+        if mimetypes and mimetypes.issubset(self.whitelist):
             return self.result(Result.ignored,
                                _("File type is on whitelist"),
                                False)
@@ -249,7 +253,11 @@ class FileTypeOnGreylistRule(Rule):
     def evaluate(self, sample):
         """ Continue analysis if any of the sample's MIME types are on the
         greylist or in case we don't have one. """
-        if not sample.mimetypes or sample.mimetypes.intersection(self.greylist):
+        filereport = self.get_filetools_report(sample)
+        mimetypes = filereport.mime_types
+        if sample.type_declared is not None:
+            mimetypes.add(sample.type_declared)
+        if not mimetypes or mimetypes.intersection(self.greylist):
             return self.result(Result.unknown,
                                _("File type is on the list of types to "
                                  "analyze"),
@@ -257,7 +265,7 @@ class FileTypeOnGreylistRule(Rule):
 
         return self.result(Result.unknown,
                            _("File type is not on the list of types to "
-                             "analyse (%s)") % sample.mimetypes,
+                             "analyse (%s)") % mimetypes,
                            False)
 
 

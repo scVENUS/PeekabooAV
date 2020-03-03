@@ -36,8 +36,6 @@ import tempfile
 # locale-specified encoding
 from builtins import open
 from datetime import datetime
-from peekaboo.toolbox.file import guess_mime_type_from_file_contents, \
-                                   guess_mime_type_from_filename
 from peekaboo.ruleset import Result
 
 
@@ -101,7 +99,6 @@ class Sample(object):
         self.__internal_report = []
         self.__file_stat = None
         self.__sha256sum = None
-        self.__mimetypes = None
         self.__file_extension = None
         self.__base_dir = base_dir
         self.__job_hash = None
@@ -419,40 +416,6 @@ class Sample(object):
         """ Returns the MIME type declared by the original MIME part, None if
         not available. """
         return self.meta_info_type_declared
-
-    @property
-    def mimetypes(self):
-        """ Determines the mimetypes of this sample. """
-        if self.__mimetypes:
-            return self.__mimetypes
-
-        mime_types = set()
-
-        # get MIME type from meta info
-        declared_mt = None
-        if self.meta_info_type_declared:
-            declared_mt = self.meta_info_type_declared
-            if declared_mt is not None:
-                logger.debug('Sample declared as "%s"' % declared_mt)
-                mime_types.add(declared_mt)
-
-        declared_filename = self.__filename
-        if self.name_declared:
-            declared_filename = self.name_declared
-
-        # determine mime on original p[0-9]* file
-        # result of __submit_path would be "inode/symlink"
-        content_based_mime_type = guess_mime_type_from_file_contents(self.__path)
-        if content_based_mime_type is not None:
-            mime_types.add(content_based_mime_type)
-
-        name_based_mime_type = guess_mime_type_from_filename(declared_filename)
-        if name_based_mime_type is not None:
-            mime_types.add(name_based_mime_type)
-
-        logger.debug('Determined MIME Types: %s' % mime_types)
-        self.__mimetypes = mime_types
-        return mime_types
 
     @property
     def job_id(self):

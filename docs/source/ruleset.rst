@@ -51,9 +51,9 @@ Rules can then be constructed like:
 
 .. code-block:: shell
 
-    expression.1  : sample.mimetypes <= {'text/plain', 'inode/x-empty', 'image/jpeg'} -> ignore
-    expression.2  : sample.meta_info_name_declared == 'smime.p7s'
-                        and sample.meta_info_type_declared in {
+    expression.1  : sample.type_declared in {'text/plain', 'inode/x-empty', 'image/jpeg'} -> ignore
+    expression.2  : sample.name_declared == 'smime.p7s'
+                        and sample.type_declared in {
                             'application/pkcs7-signature',
                             'application/x-pkcs7-signature',
                             'application/pkcs7-mime',
@@ -64,12 +64,12 @@ Rules can then be constructed like:
     expression.5  : olereport.has_office_macros == True
                         and cuckooreport.score > 4 -> bad
     expression.6  : sample.file_extension in {"doc", "docx"}
-                        and /.*\/rtf/ in {sample.declared_mimetype}|filereport.mime_types -> bad
+                        and /.*\/rtf/ in {sample.type_declared}|filereport.mime_types -> bad
     expression.7  : sample.file_extension in {"doc", "docx"}
                         and not filereport.type_by_content in { /application\/.*word/ } -> bad
     expression.8  : filereport.type_as_text == "AppleDouble encoded Macintosh file" -> ignore
-    expression.9  : {sample.declared_mimetype}|filereport.mime_types <= {
-                        and /.*\/(rtf|richtext)/ in ({sample.declared_mimetype} | filereport.mime_types) -> bad
+    expression.9  : {sample.type_declared}|filereport.mime_types <= {
+                        and /.*\/(rtf|richtext)/ in ({sample.type_declared} | filereport.mime_types) -> bad
 
 Attributes of sample
 --------------------
@@ -79,11 +79,9 @@ Attributes of sample
     filename
     sha256sum
     name_declared
+    type_declared
     file_extension
-    mimetypes
     file_size
-    meta_info_name_declared
-    meta_info_type_declared
 
 Attributes of cuckooreport
 --------------------------
