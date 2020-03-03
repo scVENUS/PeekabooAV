@@ -356,6 +356,12 @@ class EvalArith(EvalBase):
                 ret <<= val.eval(context)
             elif op == '>>':
                 ret >>= val.eval(context)
+            elif op == '&':
+                ret &= val.eval(context)
+            elif op == '^':
+                ret ^= val.eval(context)
+            elif op == '|':
+                ret |= val.eval(context)
             elif op == '.':
                 # expect op to be an identifier, have it return its name by
                 # setting deref to False and then resolve that property in
