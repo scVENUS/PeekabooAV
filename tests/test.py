@@ -58,7 +58,8 @@ from peekaboo.ruleset.expressions import ExpressionParser, \
         IdentifierMissingException
 
 from peekaboo.toolbox.cuckoo import CuckooReport
-from peekaboo.toolbox.file import FiletoolsReport
+from peekaboo.toolbox.ole import Oletools
+from peekaboo.toolbox.file import Filetools, FiletoolsReport
 from peekaboo.db import PeekabooDatabase, PeekabooDatabaseError
 # pylint: enable=wrong-import-position
 
@@ -636,6 +637,141 @@ class TestSample(CompatibleTestCase):
         """ Clean up after the tests. """
         os.unlink(cls.test_db)
         del cls.factory
+
+
+class OletoolsSample(object):  # pylint: disable=too-few-public-methods
+    """ A dummy sample class that only contains a file_path and a dummy report
+    registration callback for testing the Oletools analyser. """
+    def __init__(self, file_path, report=None):
+        # don't even need to make it a property
+        self.file_path = file_path
+        self.oletools_report = report
+
+    def register_oletools_report(self, report):
+        """ Dummy report registration. """
+        self.oletools_report = report
+
+
+class TestOletools(CompatibleTestCase):
+    """ Unittests for Oletools. """
+    @classmethod
+    def setUpClass(cls):
+        """ Set up common test case resources. """
+        cls.office_data_dir = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "test-data", "office")
+
+    def test_analysis(self):
+        """ Test Oletools analysis. """
+        cases = [
+            # file name, , vba code, , detected autoexec, , detected suspicious
+            #     , has macros, , has autoexec, , is suspicious,
+            ['blank.doc', False, '', False, '[]', False, '[]'],
+        ]
+        for file_name, expected_has_office_macros, expected_vba_code, \
+                expected_has_autoexec, expected_detected_autoexec, \
+                expected_is_suspicious, expected_detected_suspicious in cases:
+            file_path = os.path.join(self.office_data_dir, file_name)
+            report = Oletools(OletoolsSample(file_path)).get_report()
+            self.assertEqual(
+                report.has_office_macros, expected_has_office_macros,
+                "Oletools has_office_macros: %s" % file_name)
+            self.assertEqual(
+                report.vba_code, expected_vba_code,
+                "Oletools expected_vba_code: %s" % file_name)
+            self.assertEqual(
+                report.has_autoexec, expected_has_autoexec,
+                "Oletools has_autoexec: %s" % file_name)
+            self.assertEqual(
+                report.detected_autoexec, expected_detected_autoexec,
+                "Oletools detected_autoexec: %s" % file_name)
+            self.assertEqual(
+                report.is_suspicious, expected_is_suspicious,
+                "Oletools is_suspicious: %s" % file_name)
+            self.assertEqual(
+                report.detected_suspicious, expected_detected_suspicious,
+                "Oletools detected_autoexec: %s" % file_name)
+
+    def test_caching(self):
+        """ Test Oletools report caching in the sample. """
+        report = object()
+        sample = OletoolsSample("dummy", report)
+        new_report = Oletools(sample).get_report()
+        self.assertIs(report, new_report)
+
+
+class FiletoolsSample(object):  # pylint: disable=too-few-public-methods
+    """ A dummy sample class that only contains a file_path and a dummy report
+    registration callback for testing the Filetools analyser. """
+    def __init__(self, filename, file_path=None, name_declared=None,
+                 report=None):
+        # don't even need to make it a property
+        self.filename = filename
+        self.file_path = file_path
+        self.name_declared = name_declared
+        self.filetools_report = report
+
+    def register_filetools_report(self, report):
+        """ Dummy report registration. """
+        self.filetools_report = report
+
+
+class TestFiletools(CompatibleTestCase):
+    """ Unittests for Oletools. """
+    @classmethod
+    def setUpClass(cls):
+        """ Set up common test case resources. """
+        cls.tests_data_dir = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "test-data")
+
+    def test_analysis(self):
+        """ Test Filetools analysis. """
+        cases = [
+            # subdir, , declared name, , type by name
+            # , file name, , type by content, , type as text
+            # a file without declared name
+            ['', 'textfile', None, 'text/plain', None, 'ASCII text'],
+            # a file with declared name but without file extension
+            ['', 'textfile', 'textfile', 'text/plain', None, 'ASCII text'],
+            # a file with declared name and file extension
+            ['', 'textfile', 'textfile.txt',
+             'text/plain', 'text/plain', 'ASCII text'],
+            # a file with declared name and a file extension that belies its
+            # actual content
+            ['', 'textfile', 'textfile.py',
+             'text/plain', 'text/x-python', 'ASCII text'],
+            # a word document - just because we can
+            # interesting conundrum here: magic output depends on local timezone
+            ['office', 'blank.doc', None, 'application/msword',
+             'application/msword', '^Composite Document File V2 Document, '
+             'Little Endian, Os: MacOS, Version 14.10, Code page: 10000, '
+             'Author: Microsoft Office User, Template: Normal.dotm, Last '
+             'Saved By: Microsoft Office User, Revision Number: 2, Name of '
+             'Creating Application: Microsoft Office Word, Create '
+             'Time/Date: Fri Jun  7 [0-2][0-9]:55:00 2019, Last Saved '
+             'Time/Date: Tue Jun 25 [0-2][0-9]:07:00 2019, Number of Pages: '
+             '1, Number of Words: 0, Number of Characters: 0, Security: 0$'],
+        ]
+        for subdir, file_name, name_declared, expected_type_by_content, \
+                expected_type_by_name, expected_type_as_text in cases:
+            file_path = os.path.join(self.tests_data_dir, subdir, file_name)
+            sample = FiletoolsSample(file_name, file_path, name_declared)
+            report = Filetools(sample).get_report()
+            self.assertEqual(
+                report.type_by_content, expected_type_by_content,
+                "Filetools type_by_content: %s:%s" % (file_name, name_declared))
+            self.assertEqual(
+                report.type_by_name, expected_type_by_name,
+                "Filetools type_by_name: %s:%s" % (file_name, name_declared))
+            self.assertRegex(
+                report.type_as_text, expected_type_as_text,
+                "Filetools type_as_text: %s:%s" % (file_name, name_declared))
+
+    def test_caching(self):
+        """ Test Filetools report caching in the sample. """
+        report = object()
+        sample = FiletoolsSample("dummy", report=report)
+        new_report = Filetools(sample).get_report()
+        self.assertIs(report, new_report)
 
 
 class TestRulesetEngine(CompatibleTestCase):
@@ -1476,6 +1612,8 @@ def main():
     suite.addTest(unittest.makeSuite(TestInvalidConfig))
     suite.addTest(unittest.makeSuite(TestSample))
     suite.addTest(unittest.makeSuite(TestDatabase))
+    suite.addTest(unittest.makeSuite(TestOletools))
+    suite.addTest(unittest.makeSuite(TestFiletools))
     suite.addTest(unittest.makeSuite(TestRulesetEngine))
     suite.addTest(unittest.makeSuite(TestRules))
     suite.addTest(unittest.makeSuite(TestExpressionParser))
