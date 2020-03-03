@@ -133,15 +133,11 @@ class Rule(object):
         raise PeekabooAnalysisDeferred()
 
     def get_oletools_report(self, sample):
-        """ Get the samples oletools_report or generate it.
+        """ Get an Oletools report on the sample.
 
-            @returns: OleReport
+        @returns: OletoolsReport
         """
-        report = sample.oletools_report
-        if report is not None:
-            return report
-
-        return Oletools().get_report(sample)
+        return Oletools(sample).get_report()
 
     def get_filetools_report(self, sample):
         """ Get a Filetools report on the sample.

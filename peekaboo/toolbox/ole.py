@@ -34,15 +34,22 @@ logger = logging.getLogger(__name__)
 
 class Oletools(object):
     """ Parent class, defines interface to Oletools. """
-    def get_report(self, sample):
+    def __init__(self, sample):
+        self.sample = sample
+
+    def get_report(self):
         """ Return oletools report or create if not already cached. """
+        if self.sample.oletools_report is not None:
+            return self.sample.oletools_report
+
         report = {
             'autoexec': [],
             'suspicious' : [],
         }
 
+        file_path = self.sample.file_path
         try:
-            vbaparser = VBA_Parser(sample.file_path)
+            vbaparser = VBA_Parser(file_path)
 
             # VBA_Parser reports macros for office documents
             report['has_macros'] = vbaparser.detect_vba_macros() or vbaparser.detect_xlm_macros()
@@ -54,12 +61,12 @@ class Oletools(object):
 
             all_macros = vbaparser.extract_all_macros()
             if (report['has_macros'] and len(all_macros) == 1
-                and type(all_macros[0]) is tuple
-                and len(all_macros[0]) >= 3
-                and all_macros[0][2] == sample.file_path):
-                logger.warning("Buggy oletools version detected, result "
-                    "overridden. May lead to false negatives, please update to "
-                    "fixed version")
+                    and isinstance(all_macros[0], tuple)
+                    and len(all_macros[0]) >= 3
+                    and all_macros[0][2] == file_path):
+                logger.warning(
+                    "Buggy oletools version detected, result overridden. May "
+                    "lead to false negatives, please update to fixed version")
                 report['has_macros'] = False
 
             if vbaparser.detect_vba_macros():
@@ -83,7 +90,7 @@ class Oletools(object):
             logger.exception(error)
 
         report = OletoolsReport(report)
-        sample.register_oletools_report(report)
+        self.sample.register_oletools_report(report)
         return report
 
 
