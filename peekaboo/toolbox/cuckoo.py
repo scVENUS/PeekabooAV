@@ -26,6 +26,7 @@
 
 from future.builtins import super  # pylint: disable=wrong-import-order
 
+import datetime
 import re
 import os
 import locale
@@ -46,6 +47,24 @@ from peekaboo.exceptions import CuckooSubmitFailedException
 logger = logging.getLogger(__name__)
 
 
+class CuckooJob(object):
+    """ Remember sample and submission time of a Cuckoo job. """
+    def __init__(self, sample):
+        self.__sample = sample
+        self.__submission_time = datetime.datetime.utcnow()
+
+    def is_older_than(self, seconds):
+        """ Returns True if the difference between submission time and now,
+        i.e. the age of the job, is larger than given number of seconds. """
+        max_age = datetime.timedelta(seconds=seconds)
+        return datetime.datetime.utcnow() - self.__submission_time > max_age
+
+    @property
+    def sample(self):
+        """ Returns the sample the job is analyzing. """
+        return self.__sample
+
+
 class Cuckoo(object):
     """ Parent class, defines interface to Cuckoo. """
     def __init__(self, job_queue):
@@ -53,6 +72,7 @@ class Cuckoo(object):
         self.shutdown_requested = Event()
         self.shutdown_requested.clear()
         self.running_jobs = {}
+        # reentrant because we're doing nested calls within critical sections
         self.running_jobs_lock = RLock()
 
     def register_running_job(self, job_id, sample):
@@ -76,7 +96,29 @@ class Cuckoo(object):
                     'A job with ID %d is already registered as running '
                     'for sample %s' % (job_id, self.running_jobs[job_id]))
 
-            self.running_jobs[job_id] = sample
+            self.running_jobs[job_id] = CuckooJob(sample)
+
+    def deregister_running_job(self, job_id):
+        """ Deregister a running job by job id.
+
+        @returns: Sample object of the job or None if job not found. """
+        with self.running_jobs_lock:
+            job = self.running_jobs.pop(job_id, None)
+            if job is not None:
+                return job.sample
+
+        return None
+
+    def deregister_running_job_if_too_old(self, job_id, max_age):
+        """ Check if a job has gotten too old and remove it from the list of
+        running jobs if so.
+
+        @returns: Sample object of the job or None if job not found. """
+        with self.running_jobs_lock:
+            if self.running_jobs[job_id].is_older_than(max_age):
+                return self.deregister_running_job(job_id)
+
+        return None
 
     def resubmit_with_report(self, job_id):
         """ Resubmit a sample to the job queue after the report became
@@ -88,26 +130,39 @@ class Cuckoo(object):
         @returns: None """
         logger.debug("Analysis done for task #%d" % job_id)
 
-        with self.running_jobs_lock:
-            sample = self.running_jobs.pop(job_id, None)
-
+        sample = self.deregister_running_job(job_id)
         if sample is None:
             logger.debug('No sample found for job ID %d', job_id)
             return None
 
         logger.debug('Requesting Cuckoo report for sample %s', sample)
         report = self.get_report(job_id)
-
-        # do not register the report with the sample if we were unable to
-        # get it because e.g. it was corrupted or the API connection
-        # failed. This will cause the sample to be resubmitted to Cuckoo
-        # upon the next try to access the report.
-        # TODO: This can cause an endless loop.
-        if report is not None:
+        if report is None:
+            # mark analysis as failed if we could not get the report e.g.
+            # because it was corrupted or the API connection failed.
+            sample.mark_cuckoo_failure()
+        else:
             reportobj = CuckooReport(report)
             sample.register_cuckoo_report(reportobj)
 
         self.job_queue.submit(sample, self.__class__)
+        return None
+
+    def resubmit_as_failed_if_too_old(self, job_id, max_age):
+        """ Resubmit a sample to the job queue with a failure report if the
+        Cuckoo job has been running for too long.
+
+        @param job_id: ID of job to check.
+        @type job_id: int
+        @param max_age: maximum job age in seconds
+        @type max_age: int
+        """
+        sample = self.deregister_running_job_if_too_old(job_id, max_age)
+        if sample is not None:
+            logger.warning("Dropped job %d because it has been running for "
+                           "too long", job_id)
+            sample.mark_cuckoo_failure()
+            self.job_queue.submit(sample, self.__class__)
 
     def shut_down(self):
         """ Request the module to shut down. """
@@ -269,12 +324,15 @@ class WhitelistRetry(urllib3.util.retry.Retry):
 
 class CuckooApi(Cuckoo):
     """ Interfaces with a Cuckoo installation via its REST API. """
-    def __init__(self, job_queue, url="http://localhost:8090", api_token="", poll_interval=5,
-                 retries=5, backoff=0.5):
+    def __init__(self, job_queue, url="http://localhost:8090", api_token="",
+                 poll_interval=5, submit_original_filename=True,
+                 max_job_age=900, retries=5, backoff=0.5):
         super().__init__(job_queue)
         self.url = url
         self.api_token = api_token
         self.poll_interval = poll_interval
+        self.submit_original_filename = submit_original_filename
+        self.max_job_age = max_job_age
 
         # urrlib3 backoff formula:
         # <backoff factor> * (2 ^ (<retry count so far> - 1))
@@ -333,8 +391,11 @@ class CuckooApi(Cuckoo):
         path = sample.submit_path
         filename = os.path.basename(path)
         # override with the original file name if available
-        if sample.name_declared:
-            filename = sample.name_declared
+        if self.submit_original_filename:
+            if sample.name_declared:
+                filename = sample.name_declared
+            elif sample.filename:
+                filename = sample.filename
 
         files = {"file": (filename, open(path, 'rb'))}
         logger.debug("Creating Cuckoo task with content from %s and "
@@ -417,6 +478,15 @@ class CuckooApi(Cuckoo):
 
                 if job["task"]["status"] == "reported":
                     self.resubmit_with_report(job_id)
+                    continue
+
+                # drop jobs which have been running for too long. This is
+                # mainly to prevent accumulation of jobs in our job list which
+                # will never finish. We still want to wait for jobs to finish
+                # even though our client might not be interested any more so
+                # that we have the result cached for the next time we get the
+                # same sample.
+                self.resubmit_as_failed_if_too_old(job_id, self.max_job_age)
 
         logger.debug("Shutting down.")
         return 0

@@ -89,6 +89,7 @@ class Sample(object):
         # sha256sum.suffix
         self.__submit_path = None
         self.__cuckoo_job_id = -1
+        self.__cuckoo_failed = False
         self.__cuckoo_report = None
         self.__oletools_report = None
         self.__done = False
@@ -148,37 +149,37 @@ class Sample(object):
 
         logger.debug("initializing sample")
 
+        # create a temporary directory where mkdtemp makes sure that
+        # creation is atomic, i.e. no other process is using it
+        try:
+            self.__wd = tempfile.mkdtemp(
+                prefix=self.job_hash, dir=self.__base_dir)
+        except OSError as oserr:
+            logger.error('Error creating working directory: %s', oserr)
+            return False
+
+        logger.debug('Working directory %s created', self.__wd)
+
         # create a symlink to submit the file with the correct file extension
-        # to cuckoo via submit.py - but only if we can actually figure out an
-        # extension. Otherwise the point is moot.
-        self.__submit_path = self.__path
-        file_ext = self.file_extension
-        if file_ext:
-            # create a temporary directory where mkdtemp makes sure that
-            # creation is atomic, i.e. no other process is using it
-            try:
-                self.__wd = tempfile.mkdtemp(
-                    prefix=self.job_hash, dir=self.__base_dir)
-            except OSError as oserr:
-                logger.error('Error creating working directory: %s', oserr)
-                return False
+        # to cuckoo via submit.py. This is so we do not leak the original
+        # filename by default.
+        submit_name = self.sha256sum
+        if self.file_extension:
+            submit_name = '%s.%s' % (submit_name, self.file_extension)
 
-            logger.debug('Working directory %s created', self.__wd)
+        self.__submit_path = os.path.join(self.__wd, submit_name)
 
-            self.__submit_path = os.path.join(
-                self.__wd, '%s.%s' % (self.sha256sum, file_ext))
-
-            try:
-                os.symlink(self.__path, self.__submit_path)
-            except OSError as oserr:
-                logger.error('Error linking sample from %s to working '
-                             'directory as %s',
-                             self.__path, self.__submit_path)
-                self.cleanup()
-                return False
-
-            logger.debug('Sample symlinked from %s to %s',
+        try:
+            os.symlink(self.__path, self.__submit_path)
+        except OSError as oserr:
+            logger.error('Error linking sample from %s to working '
+                         'directory as %s',
                          self.__path, self.__submit_path)
+            self.cleanup()
+            return False
+
+        logger.debug('Sample symlinked from %s to %s',
+                     self.__path, self.__submit_path)
 
         self.initialized = True
 
@@ -452,6 +453,11 @@ class Sample(object):
         return self.__file_stat.st_size
 
     @property
+    def cuckoo_failed(self):
+        """ Returns whether the Cuckoo analysis failed. """
+        return self.__cuckoo_failed
+
+    @property
     def cuckoo_report(self):
         """ Returns the cuckoo report """
         return self.__cuckoo_report
@@ -478,6 +484,10 @@ class Sample(object):
             _('Sample %s successfully submitted to Cuckoo as job %d')
             % (self, self.__cuckoo_job_id))
         return self.__cuckoo_job_id
+
+    def mark_cuckoo_failure(self):
+        """ Records whether Cuckoo analysis failed. """
+        self.__cuckoo_failed = True
 
     def register_cuckoo_report(self, report):
         """ Records a Cuckoo report for later evaluation. """
