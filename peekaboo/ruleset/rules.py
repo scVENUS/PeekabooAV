@@ -144,17 +144,11 @@ class Rule(object):
         return Oletools().get_report(sample)
 
     def get_filetools_report(self, sample):
-        """ Get the samples filetools_report or generate it.
+        """ Get a Filetools report on the sample.
 
-            @returns: FiletoolsReport
+        @returns: FiletoolsReport
         """
-        report = sample.filetools_report
-        if report is not None:
-            return report
-
-        filetools = Filetools()
-        report = filetools.get_report(sample)
-        return report
+        return Filetools(sample).get_report()
 
 
 class KnownRule(Rule):
