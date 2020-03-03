@@ -602,10 +602,7 @@ class CuckooReport(object):
         @returns: The triggered signatures from the Cuckoo report or None of
                   there was an error parsing the Cuckoo report.
         """
-        try:
-            return self.report['signatures']
-        except KeyError:
-            return []
+        return self.report.get('signatures', [])
 
     @property
     def signature_descriptions(self):

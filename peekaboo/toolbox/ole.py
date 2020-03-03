@@ -112,11 +112,7 @@ class OletoolsReport(object):
         @return: True if macros where found, otherwise False.
                 If VBA_Parser crashes it returns False too.
         """
-
-        try:
-            return self.report['has_macros']
-        except KeyError:
-            return False
+        return self.report.get('has_macros', False)
 
     @property
     def vba_code(self):
@@ -124,10 +120,7 @@ class OletoolsReport(object):
         Extracts vba code from Microsoft Office documents.
         @return: vba code if found, otherwise empty string.
         """
-        try:
-            return self.report['vba']
-        except KeyError:
-            return ""
+        return self.report.get('vba', '')
 
     @property
     def has_autoexec(self):
@@ -173,14 +166,14 @@ class OletoolsReport(object):
         @return: True if macros with keywords where found, otherwise False.
                 If VBA_Parser crashes it returns False too.
         """
-        suspicious = False
-        try:
-            vba = self.report['vba']
-            for w in suspicious_keywords:
-                if re.search(w, vba):
-                    suspicious = True
-                    break
-        except KeyError:
+        vba = self.report.get('vba')
+        if vba is None:
             return False
+
+        suspicious = False
+        for word in suspicious_keywords:
+            if re.search(word, vba):
+                suspicious = True
+                break
 
         return suspicious
