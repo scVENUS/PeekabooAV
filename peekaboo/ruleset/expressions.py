@@ -137,6 +137,11 @@ class OperatorRegex(object):
         logger.debug("Regular expression match: %s == %s", self.regex, other)
         return self.compare_op_impl(self.regex.match, other)
 
+    def __ne__(self, other):
+        """ Implement inequality using re.match """
+        logger.debug("Regular expression match: %s != %s", self.regex, other)
+        return not self.compare_op_impl(self.regex.match, other)
+
     def __contains__(self, other):
         """ Implement membership using re.search """
         logger.debug("Regular expression search: %s in %s", self.regex, other)
@@ -171,6 +176,9 @@ class RegexIterableMixIn(object):
                 return True
 
         return False
+
+    def __ne__(self, other):
+        return not self == other
 
     def __contains__(self, item):
         for regex in self:
