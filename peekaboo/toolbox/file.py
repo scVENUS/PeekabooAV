@@ -33,53 +33,52 @@ import magic
 logger = logging.getLogger(__name__)
 
 
-def guess_mime_type_from_file_contents(file_path):
-    """  Get type from file magic bytes. """
-    mt = magic.from_file(file_path, mime=True)
-    if not mt:
-        return None
-
-    return mt
-
-
-def guess_mime_type_from_filename(file_path):
-    """ Guess the type of a file based on its filename or URL. """
-    if not mimetypes.inited:
-        mimetypes.init()
-        mimetypes.add_type('application/javascript', '.jse')
-
-    mt = mimetypes.guess_type(file_path)[0]
-    if not mt:
-        return None
-
-    return mt
-
-
-def guess_mime_type_text_representation(file_path):
-    """ Guess the type by content and hand back text representation rather than
-    mime type. """
-    type_as_text = magic.from_file(file_path)
-    if not type_as_text:
-        return None
-
-    return type_as_text
-
-
 class Filetools(object):
     """ Parent class, defines interface to various file tools. """
+
+    def guess_mime_type_from_file_contents(self, file_path):
+        """  Get type from file magic bytes. """
+        mime_types = magic.from_file(file_path, mime=True)
+        if not mime_types:
+            return None
+
+        return mime_types
+
+    def guess_mime_type_from_filename(self, file_path):
+        """ Guess the type of a file based on its filename or URL. """
+        if not mimetypes.inited:
+            mimetypes.init()
+            mimetypes.add_type('application/javascript', '.jse')
+
+        mime_types = mimetypes.guess_type(file_path)[0]
+        if not mime_types:
+            return None
+
+        return mime_types
+
+    def guess_mime_type_text_representation(self, file_path):
+        """ Guess the type by content and hand back text representation rather
+        than mime type. """
+        type_as_text = magic.from_file(file_path)
+        if not type_as_text:
+            return None
+
+        return type_as_text
+
     def get_report(self, sample):
         """ Return filetools report or create if not already cached. """
         report = {
             "type_by_content":
-                guess_mime_type_from_file_contents(sample.file_path),
+                self.guess_mime_type_from_file_contents(sample.file_path),
             "type_by_name":
-                guess_mime_type_from_filename(sample.filename),
+                self.guess_mime_type_from_filename(sample.filename),
             "type_as_text":
-                guess_mime_type_text_representation(sample.file_path),
+                self.guess_mime_type_text_representation(sample.file_path),
         }
 
-        sample.register_filetools_report(FiletoolsReport(report))
-        return FiletoolsReport(report)
+        ftreport = FiletoolsReport(report)
+        sample.register_filetools_report(ftreport)
+        return ftreport
 
 
 class FiletoolsReport(object):
