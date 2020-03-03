@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 class Filetools(object):
     """ Parent class, defines interface to various file tools. """
 
-    def guess_mime_type_from_file_contents(self, file_path):
+    def guess_mime_type_from_contents(self, file_path):
         """  Get type from file magic bytes. """
         mime_types = magic.from_file(file_path, mime=True)
         if not mime_types:
@@ -44,7 +44,7 @@ class Filetools(object):
 
         return mime_types
 
-    def guess_mime_type_from_filename(self, file_path):
+    def guess_mime_type_from_name(self, file_path):
         """ Guess the type of a file based on its filename or URL. """
         if not mimetypes.inited:
             mimetypes.init()
@@ -69,9 +69,9 @@ class Filetools(object):
         """ Return filetools report or create if not already cached. """
         report = {
             "type_by_content":
-                self.guess_mime_type_from_file_contents(sample.file_path),
+                self.guess_mime_type_from_contents(sample.file_path),
             "type_by_name":
-                self.guess_mime_type_from_filename(sample.filename),
+                self.guess_mime_type_from_name(sample.filename),
             "type_as_text":
                 self.guess_mime_type_text_representation(sample.file_path),
         }
