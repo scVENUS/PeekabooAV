@@ -33,8 +33,10 @@ from peekaboo.ruleset.expressions import ExpressionParser, \
         IdentifierMissingException
 from peekaboo.exceptions import PeekabooAnalysisDeferred, \
         CuckooSubmitFailedException, PeekabooRulesetConfigError
-from peekaboo.toolbox.ole import Oletools
-from peekaboo.toolbox.file import Filetools
+from peekaboo.sample import Sample
+from peekaboo.toolbox.cuckoo import CuckooReport
+from peekaboo.toolbox.ole import Oletools, OletoolsReport
+from peekaboo.toolbox.file import Filetools, FiletoolsReport
 
 
 logger = logging.getLogger(__name__)
@@ -521,6 +523,17 @@ class ExpressionRule(Rule):
 
         self.rules = []
         parser = ExpressionParser()
+
+        # context of dummy objects to test rules against
+        context = {
+            'variables': {
+                'sample': Sample("dummy"),
+                'cuckooreport': CuckooReport(),
+                'olereport': OletoolsReport(),
+                'filereport': FiletoolsReport(),
+            }
+        }
+
         for expr in self.expressions:
             try:
                 rule = parser.parse(expr)
@@ -532,6 +545,22 @@ class ExpressionRule(Rule):
             if not rule.is_implication():
                 raise PeekabooRulesetConfigError(
                     "Malformed expression, missing implication: %s" % expr)
+
+            # run expression against dummy objects to find out if it's
+            # attempting anything illegal
+            try:
+                rule.eval(context=context)
+            except IdentifierMissingException as missing:
+                # our dummy context provides everything we would provide at
+                # runtime as well, so any missing identifier is an error at
+                # this point
+                identifier = missing.name
+                raise PeekabooRulesetConfigError(
+                    "Invalid expression, unknown identifier %s: %s" % (
+                        identifier, expr))
+            except AttributeError as missing:
+                raise PeekabooRulesetConfigError(
+                    "Invalid expression, %s: %s" % (missing, expr))
 
             self.rules.append(rule)
 

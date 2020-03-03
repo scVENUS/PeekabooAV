@@ -87,7 +87,9 @@ class Filetools(object):
 
 class FiletoolsReport(object):
     """ Represents a custom Filetools report. """
-    def __init__(self, report):
+    def __init__(self, report=None):
+        if report is None:
+            report = {}
         self.report = report
 
     def __str__(self):

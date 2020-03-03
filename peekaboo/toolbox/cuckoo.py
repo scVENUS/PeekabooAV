@@ -570,10 +570,12 @@ class CuckooServer(protocol.ProcessProtocol):
 
 class CuckooReport(object):
     """ Represents a Cuckoo analysis JSON report. """
-    def __init__(self, report):
+    def __init__(self, report=None):
         """
         @param report: hash with report data from Cuckoo
         """
+        if report is None:
+            report = {}
         self.report = report
 
     @property

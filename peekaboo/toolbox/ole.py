@@ -96,7 +96,9 @@ class Oletools(object):
 
 class OletoolsReport(object):
     """ Represents a custom Oletools report. """
-    def __init__(self, report):
+    def __init__(self, report=None):
+        if report is None:
+            report = {}
         self.report = report
 
     def __str__(self):
@@ -133,7 +135,7 @@ class OletoolsReport(object):
         Uses olevba detect_autoexec and reports if something was found.
         @return: True or False
         """
-        if len(self.report['autoexec']) > 0:
+        if self.report.get('autoexec', []):
             return True
         return False
 
@@ -143,7 +145,7 @@ class OletoolsReport(object):
         Method to access olevba detect_autoexec report.
         @return: String from List of Tuple(marker, explanation)
         """
-        return "%s" % self.report['autoexec']
+        return "%s" % self.report.get('autoexec', [])
 
     @property
     def is_suspicious(self):
@@ -151,7 +153,7 @@ class OletoolsReport(object):
         Uses olevba detect_suspicious and reports if something was found.
         @return: True or False
         """
-        if len(self.report['suspicious']) > 0:
+        if self.report.get('suspicious', []):
             return True
         return False
 
@@ -161,7 +163,7 @@ class OletoolsReport(object):
         Method to access olevba detect_suspicious report.
         @return: String from List of Tuple(marker, explanation)
         """
-        return "%s" % self.report['suspicious']
+        return "%s" % self.report.get('suspicious', [])
 
     def has_office_macros_with_suspicious_keyword(self, suspicious_keywords):
         """
