@@ -52,7 +52,10 @@ class Filetools(object):
 
     def guess_mime_type_from_name(self):
         """ Guess the type of a file based on its filename or URL. """
-        mime_type = mimetypes.guess_type(self.sample.filename)[0]
+        filename = self.sample.name_declared
+        if not filename:
+            filename = self.sample.filename
+        mime_type = mimetypes.guess_type(filename)[0]
         if not mime_type:
             return None
 
