@@ -143,7 +143,7 @@ class OletoolsReport(object):
         Method to access olevba detect_autoexec report.
         @return: String from List of Tuple(marker, explanation)
         """
-        return str(self.report['autoexec'])
+        return "%s" % self.report['autoexec']
 
     @property
     def is_suspicious(self):
@@ -161,7 +161,7 @@ class OletoolsReport(object):
         Method to access olevba detect_suspicious report.
         @return: String from List of Tuple(marker, explanation)
         """
-        return str(self.report['suspicious'])
+        return "%s" % self.report['suspicious']
 
     def has_office_macros_with_suspicious_keyword(self, suspicious_keywords):
         """
