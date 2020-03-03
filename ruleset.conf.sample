@@ -96,7 +96,7 @@ expression.3  : sample.name_declared == 'signature.asc'
                         'application/pgp-signature'
                     } -> ignore
 expression.4  : sample.file_extension in {
-                        'doc', 'docm', 'dotm', 'docx',
+                        'doc', 'docm', 'dotm', 'docx', 'rtf', 'rtx',
                         'ppt', 'pptm', 'pptx', 'potm', 'ppam', 'ppsm',
                         'xls', 'xlsm', 'xlsx' }
                     and olereport.has_office_macros == True
