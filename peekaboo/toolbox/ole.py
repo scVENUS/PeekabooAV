@@ -34,15 +34,22 @@ logger = logging.getLogger(__name__)
 
 class Oletools(object):
     """ Parent class, defines interface to Oletools. """
-    def get_report(self, sample):
+    def __init__(self, sample):
+        self.sample = sample
+
+    def get_report(self):
         """ Return oletools report or create if not already cached. """
+        if self.sample.oletools_report is not None:
+            return self.sample.oletools_report
+
         report = {
             'autoexec': [],
             'suspicious' : [],
         }
 
+        file_path = self.sample.file_path
         try:
-            vbaparser = VBA_Parser(sample.file_path)
+            vbaparser = VBA_Parser(file_path)
 
             # VBA_Parser reports macros for office documents
             report['has_macros'] = vbaparser.detect_vba_macros() or vbaparser.detect_xlm_macros()
@@ -54,12 +61,12 @@ class Oletools(object):
 
             all_macros = vbaparser.extract_all_macros()
             if (report['has_macros'] and len(all_macros) == 1
-                and type(all_macros[0]) is tuple
-                and len(all_macros[0]) >= 3
-                and all_macros[0][2] == sample.file_path):
-                logger.warning("Buggy oletools version detected, result "
-                    "overridden. May lead to false negatives, please update to "
-                    "fixed version")
+                    and isinstance(all_macros[0], tuple)
+                    and len(all_macros[0]) >= 3
+                    and all_macros[0][2] == file_path):
+                logger.warning(
+                    "Buggy oletools version detected, result overridden. May "
+                    "lead to false negatives, please update to fixed version")
                 report['has_macros'] = False
 
             if vbaparser.detect_vba_macros():
@@ -83,13 +90,15 @@ class Oletools(object):
             logger.exception(error)
 
         report = OletoolsReport(report)
-        sample.register_oletools_report(report)
+        self.sample.register_oletools_report(report)
         return report
 
 
 class OletoolsReport(object):
     """ Represents a custom Oletools report. """
-    def __init__(self, report):
+    def __init__(self, report=None):
+        if report is None:
+            report = {}
         self.report = report
 
     def __str__(self):
@@ -103,11 +112,7 @@ class OletoolsReport(object):
         @return: True if macros where found, otherwise False.
                 If VBA_Parser crashes it returns False too.
         """
-
-        try:
-            return self.report['has_macros']
-        except KeyError:
-            return False
+        return self.report.get('has_macros', False)
 
     @property
     def vba_code(self):
@@ -115,10 +120,7 @@ class OletoolsReport(object):
         Extracts vba code from Microsoft Office documents.
         @return: vba code if found, otherwise empty string.
         """
-        try:
-            return self.report['vba']
-        except KeyError:
-            return ""
+        return self.report.get('vba', '')
 
     @property
     def has_autoexec(self):
@@ -126,7 +128,7 @@ class OletoolsReport(object):
         Uses olevba detect_autoexec and reports if something was found.
         @return: True or False
         """
-        if len(self.report['autoexec']) > 0:
+        if self.report.get('autoexec', []):
             return True
         return False
 
@@ -136,7 +138,7 @@ class OletoolsReport(object):
         Method to access olevba detect_autoexec report.
         @return: String from List of Tuple(marker, explanation)
         """
-        return str(self.report['autoexec'])
+        return "%s" % self.report.get('autoexec', [])
 
     @property
     def is_suspicious(self):
@@ -144,7 +146,7 @@ class OletoolsReport(object):
         Uses olevba detect_suspicious and reports if something was found.
         @return: True or False
         """
-        if len(self.report['suspicious']) > 0:
+        if self.report.get('suspicious', []):
             return True
         return False
 
@@ -154,7 +156,7 @@ class OletoolsReport(object):
         Method to access olevba detect_suspicious report.
         @return: String from List of Tuple(marker, explanation)
         """
-        return str(self.report['suspicious'])
+        return "%s" % self.report.get('suspicious', [])
 
     def has_office_macros_with_suspicious_keyword(self, suspicious_keywords):
         """
@@ -164,14 +166,14 @@ class OletoolsReport(object):
         @return: True if macros with keywords where found, otherwise False.
                 If VBA_Parser crashes it returns False too.
         """
-        suspicious = False
-        try:
-            vba = self.report['vba']
-            for w in suspicious_keywords:
-                if re.search(w, vba):
-                    suspicious = True
-                    break
-        except KeyError:
+        vba = self.report.get('vba')
+        if vba is None:
             return False
+
+        suspicious = False
+        for word in suspicious_keywords:
+            if re.search(word, vba):
+                suspicious = True
+                break
 
         return suspicious

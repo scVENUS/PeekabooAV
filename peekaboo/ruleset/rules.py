@@ -33,7 +33,10 @@ from peekaboo.ruleset.expressions import ExpressionParser, \
         IdentifierMissingException
 from peekaboo.exceptions import PeekabooAnalysisDeferred, \
         CuckooSubmitFailedException, PeekabooRulesetConfigError
-from peekaboo.toolbox.ole import Oletools
+from peekaboo.sample import Sample
+from peekaboo.toolbox.cuckoo import CuckooReport
+from peekaboo.toolbox.ole import Oletools, OletoolsReport
+from peekaboo.toolbox.file import Filetools, FiletoolsReport
 
 
 logger = logging.getLogger(__name__)
@@ -132,15 +135,18 @@ class Rule(object):
         raise PeekabooAnalysisDeferred()
 
     def get_oletools_report(self, sample):
-        """ Get the samples oletools_report or generate it.
+        """ Get an Oletools report on the sample.
 
-            @returns: OleReport
+        @returns: OletoolsReport
         """
-        report = sample.oletools_report
-        if report is not None:
-            return report
+        return Oletools(sample).get_report()
 
-        return Oletools().get_report(sample)
+    def get_filetools_report(self, sample):
+        """ Get a Filetools report on the sample.
+
+        @returns: FiletoolsReport
+        """
+        return Filetools(sample).get_report()
 
 
 class KnownRule(Rule):
@@ -209,7 +215,11 @@ class FileTypeOnWhitelistRule(Rule):
     def evaluate(self, sample):
         """ Ignore the file only if *all* of its mime types are on the
         whitelist and we could determine at least one. """
-        if sample.mimetypes and sample.mimetypes.issubset(self.whitelist):
+        filereport = self.get_filetools_report(sample)
+        mimetypes = filereport.mime_types
+        if sample.type_declared is not None:
+            mimetypes.add(sample.type_declared)
+        if mimetypes and mimetypes.issubset(self.whitelist):
             return self.result(Result.ignored,
                                _("File type is on whitelist"),
                                False)
@@ -235,7 +245,11 @@ class FileTypeOnGreylistRule(Rule):
     def evaluate(self, sample):
         """ Continue analysis if any of the sample's MIME types are on the
         greylist or in case we don't have one. """
-        if not sample.mimetypes or sample.mimetypes.intersection(self.greylist):
+        filereport = self.get_filetools_report(sample)
+        mimetypes = filereport.mime_types
+        if sample.type_declared is not None:
+            mimetypes.add(sample.type_declared)
+        if not mimetypes or mimetypes.intersection(self.greylist):
             return self.result(Result.unknown,
                                _("File type is on the list of types to "
                                  "analyze"),
@@ -243,7 +257,7 @@ class FileTypeOnGreylistRule(Rule):
 
         return self.result(Result.unknown,
                            _("File type is not on the list of types to "
-                             "analyse (%s)") % sample.mimetypes,
+                             "analyse (%s)") % mimetypes,
                            False)
 
 
@@ -509,6 +523,17 @@ class ExpressionRule(Rule):
 
         self.rules = []
         parser = ExpressionParser()
+
+        # context of dummy objects to test rules against
+        context = {
+            'variables': {
+                'sample': Sample("dummy"),
+                'cuckooreport': CuckooReport(),
+                'olereport': OletoolsReport(),
+                'filereport': FiletoolsReport(),
+            }
+        }
+
         for expr in self.expressions:
             try:
                 rule = parser.parse(expr)
@@ -520,6 +545,22 @@ class ExpressionRule(Rule):
             if not rule.is_implication():
                 raise PeekabooRulesetConfigError(
                     "Malformed expression, missing implication: %s" % expr)
+
+            # run expression against dummy objects to find out if it's
+            # attempting anything illegal
+            try:
+                rule.eval(context=context)
+            except IdentifierMissingException as missing:
+                # our dummy context provides everything we would provide at
+                # runtime as well, so any missing identifier is an error at
+                # this point
+                identifier = missing.name
+                raise PeekabooRulesetConfigError(
+                    "Invalid expression, unknown identifier %s: %s" % (
+                        identifier, expr))
+            except AttributeError as missing:
+                raise PeekabooRulesetConfigError(
+                    "Invalid expression, %s: %s" % (missing, expr))
 
             self.rules.append(rule)
 
@@ -549,6 +590,9 @@ class ExpressionRule(Rule):
                 elif identifier == "olereport":
                     logger.debug("Expression requests oletools report")
                     value = self.get_oletools_report(sample)
+                elif identifier == "filereport":
+                    logger.debug("Expression requests filetools report")
+                    value = self.get_filetools_report(sample)
                 # elif here for other identifiers
                 else:
                     return self.result(
