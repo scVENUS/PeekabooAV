@@ -12,7 +12,6 @@ After=network.target cuckoo-api.service mysql.service postgresql.service
 
 [Service]
 User=peekaboo
-Group=amavis
 WorkingDirectory=/opt/peekaboo/
 ExecStart=/opt/peekaboo/bin/peekaboo -c /opt/peekaboo/etc/peekaboo.conf -D
 PIDFile=/var/run/peekaboo/peekaboo.pid
