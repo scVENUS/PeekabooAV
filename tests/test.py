@@ -169,7 +169,7 @@ class TestDefaultConfig(CompatibleTestCase):
         self.assertEqual(
             self.config.config_file, self.config.created_config_file)
         self.assertEqual(self.config.user, 'peekaboo')
-        self.assertEqual(self.config.group, 'peekaboo')
+        self.assertEqual(self.config.group, None)
         self.assertEqual(
             self.config.sock_file, '/var/run/peekaboo/peekaboo.sock')
         self.assertEqual(

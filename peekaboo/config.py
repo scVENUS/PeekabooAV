@@ -287,7 +287,7 @@ class PeekabooConfig(PeekabooConfigParser):
         # the option should still cope with no or an empty value being handed
         # to it.
         self.user = 'peekaboo'
-        self.group = 'peekaboo'
+        self.group = None
         self.pid_file = '/var/run/peekaboo/peekaboo.pid'
         self.sock_file = '/var/run/peekaboo/peekaboo.sock'
         self.log_level = logging.INFO

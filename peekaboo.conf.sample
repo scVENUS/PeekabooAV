@@ -6,7 +6,8 @@
 
 [global]
 #user             :    peekaboo
-#group            :    peekaboo
+# specific group to drop privileges to if not primary group of user
+#group            :    <empty>
 #socket_file      :    /var/run/peekaboo/peekaboo.sock
 #pid_file         :    /var/run/peekaboo/peekaboo.pid
 #interpreter      :    /usr/bin/python2 -u

@@ -104,22 +104,54 @@ class PeekabooDaemonInfrastructure(object):
 
     def drop_privileges(self):
         """ Check and potentially drop privileges. """
-        if os.getuid() == 0:
-            if self.user and self.group:
-                # drop privileges to user
-                os.setgid(grp.getgrnam(self.group)[2])
-                os.setuid(pwd.getpwnam(self.user)[2])
-                logger.info("Dropped privileges to user %s and group %s",
-                            self.user, self.group)
+        if os.getuid() != 0:
+            return
 
-                # set $HOME to the users home directory
-                # (VirtualBox must access the configs)
-                os.environ['HOME'] = pwd.getpwnam(self.user)[5]
-                logger.debug('$HOME is %s', os.environ['HOME'])
-            else:
-                logger.warning('Peekaboo should not run as root. Please '
-                               'configure a user and group to run as.')
-                sys.exit(0)
+        if not self.user:
+            logger.warning('Peekaboo should not run as root. Please '
+                           'configure a user to run as.')
+            sys.exit(1)
+
+        # drop privileges to user
+        try:
+            userdata = pwd.getpwnam(self.user)
+        except KeyError as notfound:
+            logger.critical('Error looking up daemon user: %s', notfound)
+            sys.exit(1)
+
+        uid = userdata[2]
+        gid = userdata[3]
+        userhome = userdata[5]
+
+        gid_log = ''
+        if self.group:
+            try:
+                gid = grp.getgrnam(self.group)[2]
+            except KeyError as notfound:
+                logger.critical('Error looking up daemon group: %s', notfound)
+                sys.exit(1)
+            gid_log = ' and group %s' % self.group
+
+        os.initgroups(self.user, gid)
+        os.setgid(gid)
+        os.setuid(uid)
+
+        grouplist = []
+        for gid in os.getgroups():
+            groupdata = grp.getgrgid(gid)
+            grouplist.append('%s(%d)' % (groupdata[0], groupdata[2]))
+
+        logger.info('After dropping privileges to user %s%s now running as '
+                    'user %s(%d) with primary group %s(%d) and supplementary '
+                    'groups %s', self.user, gid_log,
+                    pwd.getpwuid(os.getuid())[0], os.getuid(),
+                    grp.getgrgid(os.getgid())[0], os.getgid(),
+                    ', '.join(grouplist))
+
+        # set $HOME to the users home directory
+        # (VirtualBox must access the configs)
+        os.environ['HOME'] = userhome
+        logger.debug('$HOME is %s', os.environ['HOME'])
 
     def create_pid_file(self):
         """ Check for stale old and create a new PID file. Look at the socket
