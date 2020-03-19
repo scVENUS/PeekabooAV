@@ -1,5 +1,5 @@
 # Peekaboo translations of client-visible strings
-# Copyright (C) 2019 science + computing ag
+# Copyright (C) 2019-2020 science + computing ag
 # Michael Weiser <michael.weiser@gmx.de>
 #
 msgid ""

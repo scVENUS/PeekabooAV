@@ -5,7 +5,7 @@
 # __init__.py                                                                 #
 ###############################################################################
 #                                                                             #
-# Copyright (C) 2016-2019  science + computing ag                             #
+# Copyright (C) 2016-2020  science + computing ag                             #
 #                                                                             #
 # This program is free software: you can redistribute it and/or modify        #
 # it under the terms of the GNU General Public License as published by        #
@@ -30,7 +30,8 @@ VERSION = (1, 7)
 __version__ = '.'.join(map(str, VERSION))
 __author__ = 'Felix Bauer'
 __description__ = 'Peekaboo Extended Email Attachment Behavior Observation Owl'
-__copyright__ = 'Copyright (C) 2016-2019 science + computing ag. All rights reserved.'
+__copyright__ = (
+    'Copyright (C) 2016-2020 science + computing ag. All rights reserved.')
 __license__ = 'GPLv3'
 
 
