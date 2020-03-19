@@ -5,7 +5,7 @@
 # __init__.py                                                                 #
 ###############################################################################
 #                                                                             #
-# Copyright (C) 2016-2019  science + computing ag                             #
+# Copyright (C) 2016-2020  science + computing ag                             #
 #                                                                             #
 # This program is free software: you can redistribute it and/or modify        #
 # it under the terms of the GNU General Public License as published by        #
@@ -25,12 +25,13 @@
 """ Peekaboo constant module data. """
 
 
-VERSION = (1, 7)
+VERSION = (2, '0rc1')
 
 __version__ = '.'.join(map(str, VERSION))
 __author__ = 'Felix Bauer'
 __description__ = 'Peekaboo Extended Email Attachment Behavior Observation Owl'
-__copyright__ = 'Copyright (C) 2016-2019 science + computing ag. All rights reserved.'
+__copyright__ = (
+    'Copyright (C) 2016-2020 science + computing ag. All rights reserved.')
 __license__ = 'GPLv3'
 
 
@@ -46,11 +47,11 @@ Peekaboo Extended Email Attachment Behavior Observation Owl
                      -*Xa_a_a_WUW##KUL_a_a_aX7'
                     _aXUXUUU4UUX4XX444UUUUUUXLa,
                    _UXXUXUXU47'!'!'!'!*X444U4UXX,
-                   ?XU4U4''   _  _____ -'UUXUUi
-                   ?4U4'     / ||___  |   'UUXi
-                    *Xi      | |   / /     ?X7
-                     *L      | |_ / /       j7
-                      *a     |_(_)_/        jY
+                   ?XU4U4'' ____    ___-'UUXUUi
+                   ?4U4'   |___ \  / _ \  'UUXi
+                    *Xi      __) || | | |  ?X7
+                     *L     / __/ | |_| |   j7
+                      *a   |_____(_)___/    jY
                        -L,                _/'
                          'l,            _/'
                            j7_a_;  aaa/4

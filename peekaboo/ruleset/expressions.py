@@ -6,7 +6,7 @@
 #         expressions.py                                                      #
 ###############################################################################
 #                                                                             #
-# Copyright (C) 2016-2019  science + computing ag                             #
+# Copyright (C) 2016-2020  science + computing ag                             #
 # Based on pyparsing's eval_arith.py.
 # Copyright 2009, 2011 Paul McGuire
 #                                                                             #
