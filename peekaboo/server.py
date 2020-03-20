@@ -26,6 +26,7 @@
 client. """
 
 import errno
+import grp
 import json
 import logging
 import os
@@ -432,8 +433,12 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
 
 class PeekabooServer(object):
     """ A class wrapping the server components of Peekaboo. """
-    def __init__(self, sock_file, job_queue, sample_factory,
-                 request_queue_size):
+    def __init__(self, sock_file, job_queue, sample_factory, request_queue_size,
+                 sock_group = None,
+                 sock_mode = stat.S_IREAD | stat.S_IWRITE |
+                             stat.S_IRGRP | stat.S_IWGRP |
+                             stat.S_IROTH | stat.S_IWOTH):
+
         """ Initialise a new server and start it. All error conditions are
         returned as exceptions.
 
@@ -448,6 +453,11 @@ class PeekabooServer(object):
         @param request_queue_size: Number of requests that may be pending on
                                    the socket.
         @type request_queue_size: int
+        @param sock_group: An optional name of a group that shall own the
+                           socket.
+        @type sock_group: String
+        @param sock_mode: The permission bits of the socket.
+        @type sock_mode: Integer (bitmask)
         """
         self.server = None
         self.runner = None
@@ -462,10 +472,16 @@ class PeekabooServer(object):
         self.runner = Thread(target=self.server.serve_forever, name="Server")
         self.runner.start()
 
-        os.chmod(sock_file,
-                 stat.S_IWOTH | stat.S_IREAD |
-                 stat.S_IWRITE | stat.S_IRGRP |
-                 stat.S_IWGRP | stat.S_IWOTH)
+        try:
+            if sock_mode is not None:
+                os.chmod(sock_file, sock_mode)
+
+            if sock_group is not None:
+                gid = grp.getgrnam(sock_group)[2]
+                os.chown(sock_file, -1, gid)
+        except:
+            self.shutdown()
+            raise
 
         logger.info('Peekaboo server is now listening on %s',
                     self.server.server_address)

@@ -29,6 +29,8 @@ See documentation for details.
 - No longer require configuration of a primary group to drop privileges to.
   Instead use the droppriv user's primary group and supplementary group list by
   default.
+- Add new options socket\_group and socket\_mode to explicitly open up the
+  socket to client connections with a secure default.
 
 ## 1.7
 

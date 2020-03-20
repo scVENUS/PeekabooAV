@@ -40,6 +40,7 @@ class PeekabooConfigParser( # pylint: disable=too-many-ancestors
     """ A config parser that gives error feedback if a required file does not
     exist or cannot be opened. """
     LOG_LEVEL = object()
+    OCTAL = object()
     RELIST = object()
     IRELIST = object()
 
@@ -181,6 +182,22 @@ class PeekabooConfigParser( # pylint: disable=too-many-ancestors
 
         return levels[level]
 
+    def getoctal(self, section, option, raw=False, vars=None, fallback=None):
+        """ Get an integer in octal notation. Raises config
+        exception if the format is wrong. Options identical to get(). """
+        value = self.get(section, option, raw=raw, vars=vars, fallback=None)
+        if value is None:
+            return fallback
+
+        try:
+            octal = int(value, 8)
+        except ValueError:
+            raise PeekabooConfigException(
+                'Invalid value for octal option %s in section %s: %s'
+                % (option, section, value))
+
+        return octal
+
     def get_by_type(self, section, option, fallback=None, option_type=None):
         """ Get an option from the configuration file parser. Automatically
         detects the type from the type of the default if given and calls the
@@ -210,6 +227,7 @@ class PeekabooConfigParser( # pylint: disable=too-many-ancestors
 
             # these only work when given explicitly as option_type
             self.LOG_LEVEL: self.get_log_level,
+            self.OCTAL: self.getoctal,
             self.RELIST: self.getrelist,
             self.IRELIST: self.getirelist,
         }
@@ -290,6 +308,8 @@ class PeekabooConfig(PeekabooConfigParser):
         self.group = None
         self.pid_file = '/var/run/peekaboo/peekaboo.pid'
         self.sock_file = '/var/run/peekaboo/peekaboo.sock'
+        self.sock_group = None
+        self.sock_mode = 0o0660
         self.log_level = logging.INFO
         self.log_format = '%(asctime)s - %(name)s - (%(threadName)s) - ' \
                           '%(levelname)s - %(message)s'
@@ -328,6 +348,8 @@ class PeekabooConfig(PeekabooConfigParser):
             'group': ['global', 'group'],
             'pid_file': ['global', 'pid_file'],
             'sock_file': ['global', 'socket_file'],
+            'sock_group': ['global', 'socket_group'],
+            'sock_mode': ['global', 'socket_mode', self.OCTAL],
             'interpreter': ['global', 'interpreter'],
             'worker_count': ['global', 'worker_count'],
             'sample_base_dir': ['global', 'sample_base_dir'],
