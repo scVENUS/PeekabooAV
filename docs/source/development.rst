@@ -17,8 +17,8 @@ In order to develop Python applications you should always use virtualenv. So, yo
 
 .. code-block:: shell
 
-    sudo apt-get install python-virtualenv
-    virtualenv /path/to/your/venv
+    sudo apt-get install virtualenv
+    virtualenv --python=python3 /path/to/your/venv
     /path/to/your/venv/bin/pip install -r dev_requirements.txt
 
 
@@ -40,11 +40,25 @@ Peekaboo
 Simply
 
 * Clone the git repository
-* ``/path/to/your/venv/bin/pip install -r requirements.txt``
-* ``/path/to/your/venv/bin/pip install -r dev-requirements.txt``
 * Derive your own config from ``peekaboo.conf.sample`` and save it to ``peekaboo.conf``
-* Run Peekaboo with: ``/path/to/your/venv/bin/python peekaboo_debug.py``
-* For command line options run ``/path/to/your/venv/bin/python peekaboo_debug.py --help``
+* Install Peekaboo in `development mode <setuptools_develop_>`_ into the virtual
+  environment so that changes to the source take effect without reinstallation:
+  ``/path/to/your/venv/bin/pip install -e .``
+  (Option -e to pip enables development mode in setuptools.)
+* Run Peekaboo with: ``/path/to/your/venv/bin/peekaboo -c peekaboo.conf``
+* For command line options run ``/path/to/your/venv/bin/peekaboo --help``
+* To get a fully functional development environment,
+  also install the dev requirements (git-lint, sphinx, ...) like so:
+  ``/path/to/your/venv/bin/pip install -r dev-requirements.txt``
+
+Summary:
+
+.. code-block:: shell
+
+    $ /path/to/your/venv/bin/pip install -e .
+    $ /path/to/your/venv/bin/pip install -r dev-requirements.txt
+
+.. _setuptools_develop: https://setuptools.readthedocs.io/en/latest/setuptools.html#development-mode
 
 Code Quality
 ============

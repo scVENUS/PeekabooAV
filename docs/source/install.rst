@@ -20,7 +20,7 @@ Install the required packages:
 
 .. code-block:: shell
 
-    sudo apt-get install python3-virtualenv \
+    sudo apt-get install virtualenv \
                          postfix \
                          amavisd-new \
                          libjpeg-dev \
@@ -77,7 +77,7 @@ Create a new python virtual environment and install cuckoo into it using pip:
 
 .. code-block:: shell
 
-    $ sudo virtualenv --python=/usr/bin/python2 /opt/cuckoo
+    $ sudo virtualenv --python=python2 /opt/cuckoo
     $ sudo /opt/cuckoo/bin/pip install cuckoo
 
 Again depending on your choice of DBMS you now need to install the necessary
@@ -129,7 +129,7 @@ A released version of Peekaboo can be installed directly via pip as follows:
 
 .. code-block:: shell
 
-    $ sudo virtualenv --python=/usr/bin/python3 /opt/peekaboo
+    $ sudo virtualenv --python=python3 /opt/peekaboo
     $ sudo /opt/peekaboo/bin/pip install peekabooav
 
 The same steps for installing a DBMS-specific module as for Cuckoo above apply,
@@ -168,7 +168,7 @@ together with all its dependencies into it:
 
 .. code-block:: shell
 
-    $ sudo virtualenv --python=/usr/bin/python3 /opt/peekaboo
+    $ sudo virtualenv --python=python3 /opt/peekaboo
     $ sudo /opt/peekaboo/bin/pip install .
 
 **Note**: Do not use ``./setup.py install`` for installation since there are

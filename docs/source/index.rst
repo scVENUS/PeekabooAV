@@ -32,6 +32,7 @@ For news and announcements follow us on twitter [@peekabooAV](https://twitter.co
 .. toctree::
    install
    config
+   ruleset
    development
    l18n
    :maxdepth: 3

@@ -4,8 +4,12 @@ See documentation for details.
 
 ## devel
 
-- Embedded Cuckoo mode is deprecated now and scheduled for removal in a future
-  release. A warning is printed at startup if embed mode is in use.
+## 2.0
+
+- Embedded Cuckoo mode and python2 support are deprecated now and scheduled for
+  removal in a future release. Warnings to that effect are printed at startup
+  if embed mode is in use or python2 is detected. Both are more than likely to
+  be gone in release 2.1 so update your setup now!
 - Generic rules allow to evaluate expressions with sample, cuckooreport and
   olereport and filereport
 - Distribute and install sample configuration files in/from PyPI source

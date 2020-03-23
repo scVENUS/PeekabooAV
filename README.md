@@ -31,18 +31,16 @@ For news and announcements follow us on twitter [@peekabooAV](https://twitter.co
 
 ### Installation ###
 
-Clone the repository
+Install from PyPI into a new virtual environment:
+```shell
+virtualenv --python=python3 /path/to/venv
+/path/to/venv/bin/pip install peekabooav
+```
+
+Or use this repository:
 ```shell
 git clone https://github.com/scVENUS/PeekabooAV.git
-```
-
-Start a new virtualenv
-```shell
-virtualenv /path/to/venv
-```
-
-Install PeekabooAV
-```shell
+virtualenv --python=python3 /path/to/venv
 /path/to/venv/bin/pip install .
 ```
 
@@ -56,7 +54,7 @@ Take a look at ``peekaboo.conf.sample`` and ``ruleset.conf.sample``.
 
 Runs the unit tests
 ```shell
-/path/to/venv/bin/python test.py
+/path/to/venv/bin/python tests/test.py
 ```
 
 
@@ -74,20 +72,17 @@ Also, for detailed command line options run
 peekaboo --help
 ```
 
-### Usage without Installation ###
+### Development Quickstart ###
 
-You can also run PeekabooAV without installing it using the ``peekaboo_debug.py`` script.
-```shell
-python peekaboo_debug.py -c /path/to/your/peekaboo.conf
-```
-
-**Note:** ``peekaboo_debug.py`` provides the same command line options like ``peekaboo``.
-They can be displayed by running
+Just install Peekaboo using pip like above but in editable/development mode:
 
 ```shell
-python peekaboo_debug.py --help
+/path/to/venv/bin/pip install -e .
 ```
 
+Now you can run it as before but changes to the source code will take effect
+without reinstallation.
+See the [development documentation](docs/source/development.rst) for details.
 
 ## Contributing ##
 Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduct, and the process for submitting pull requests to us.
@@ -97,6 +92,11 @@ Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduc
 
 We use [SemVer](http://semver.org/) for versioning. For the versions available,
 see the [tags on this repository](https://github.com/scVENUS/PeekabooAV/releases).
+
+## Deprecations ##
+
+Release 2.0 is more than likely the last release to support Cuckoo embed mode
+and python 2. Update your setup now!
 
 ## Past and present Developers and Contributors ##
 
