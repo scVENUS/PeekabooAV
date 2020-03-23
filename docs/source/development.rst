@@ -17,8 +17,8 @@ In order to develop Python applications you should always use virtualenv. So, yo
 
 .. code-block:: shell
 
-    sudo apt-get install python-virtualenv
-    virtualenv /path/to/your/venv
+    sudo apt-get install virtualenv
+    virtualenv --python=python3 /path/to/your/venv
     /path/to/your/venv/bin/pip install -r dev_requirements.txt
 
 
