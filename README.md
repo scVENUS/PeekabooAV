@@ -74,20 +74,17 @@ Also, for detailed command line options run
 peekaboo --help
 ```
 
-### Usage without Installation ###
+### Development Quickstart ###
 
-You can also run PeekabooAV without installing it using the ``peekaboo_debug.py`` script.
-```shell
-python peekaboo_debug.py -c /path/to/your/peekaboo.conf
-```
-
-**Note:** ``peekaboo_debug.py`` provides the same command line options like ``peekaboo``.
-They can be displayed by running
+Just install Peekaboo using pip like above but in editable/development mode:
 
 ```shell
-python peekaboo_debug.py --help
+/path/to/venv/bin/pip install -e .
 ```
 
+Now you can run it as before but changes to the source code will take effect
+without reinstallation.
+See the documentation for details.
 
 ## Contributing ##
 Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduct, and the process for submitting pull requests to us.

@@ -76,7 +76,7 @@ The translation can be tested by starting up the debug Peekaboo with with the
 
 .. code-block:: shell
 
-    $ LANG=de_DE ./peekaboo_debug.py -c peekaboo.conf
+    $ LANG=de_DE peekaboo -c peekaboo.conf
 
 In another terminal:
 
