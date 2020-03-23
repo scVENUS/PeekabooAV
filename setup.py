@@ -119,6 +119,7 @@ setup(
     entry_points={
         'console_scripts': [
             'peekaboo = peekaboo.daemon:run',
+            'peekaboo-util = peekaboo.cli:main',
         ],
     }
 )
