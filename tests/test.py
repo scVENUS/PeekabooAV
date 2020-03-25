@@ -126,6 +126,7 @@ class TestConfigParser(CompatibleTestCase):
 
 [rule1]
 option1: foo
+octal: 0717
 option2.1: bar
 option2.2: baz
 
@@ -140,6 +141,7 @@ rule.3 : rule3
         with self.assertRaises(KeyError):
             self.config['rule0']
         self.assertEqual(self.config['rule1']['option1'], 'foo')
+        self.assertEqual(self.config['rule1'].getoctal('octal'), 0o0717)
         self.assertEqual(self.config['rule1'].getlist('option2'),
                          ['bar', 'baz'])
 
@@ -155,6 +157,18 @@ option1.1: bar'''
                 'given as individual setting'):
             CreatingConfigParser(config).getlist('rule1', 'option1')
 
+    def test_4_octal_mismatch(self):
+        """ Test correct error is thrown if octal format is wrong """
+        config = '''[section]
+nonoctal1: 8
+nonoctal2: deadbeef'''
+
+        for nonoctal in ['nonoctal1', 'nonoctal2']:
+            with self.assertRaisesRegex(
+                    PeekabooConfigException,
+                    'Invalid value for octal option %s in section section: '
+                    % nonoctal):
+                CreatingConfigParser(config).getoctal('section', nonoctal)
 
 
 class TestDefaultConfig(CompatibleTestCase):
@@ -169,9 +183,11 @@ class TestDefaultConfig(CompatibleTestCase):
         self.assertEqual(
             self.config.config_file, self.config.created_config_file)
         self.assertEqual(self.config.user, 'peekaboo')
-        self.assertEqual(self.config.group, 'peekaboo')
+        self.assertEqual(self.config.group, None)
         self.assertEqual(
             self.config.sock_file, '/var/run/peekaboo/peekaboo.sock')
+        self.assertEqual(self.config.sock_group, None)
+        self.assertEqual(self.config.sock_mode, 0o0660)
         self.assertEqual(
             self.config.pid_file, '/var/run/peekaboo/peekaboo.pid')
         self.assertEqual(self.config.interpreter, '/usr/bin/python2 -u')
@@ -211,6 +227,8 @@ class TestValidConfig(CompatibleTestCase):
 user             :    user1
 group            :    group1
 socket_file      :    /socket/1
+socket_group     :    riddlers
+socket_mode      :    0141
 pid_file         :    /pid/1
 interpreter      :    /inter/1
 worker_count     :    18
@@ -251,6 +269,8 @@ duplicate_check_interval: 61
         self.assertEqual(self.config.user, 'user1')
         self.assertEqual(self.config.group, 'group1')
         self.assertEqual(self.config.sock_file, '/socket/1')
+        self.assertEqual(self.config.sock_group, 'riddlers')
+        self.assertEqual(self.config.sock_mode, 0o0141)
         self.assertEqual(self.config.pid_file, '/pid/1')
         self.assertEqual(self.config.interpreter, '/inter/1')
         self.assertEqual(self.config.worker_count, 18)

@@ -30,6 +30,11 @@ See documentation for details.
 - Add database indices to speed up processing and lower database CPU load.
   Rename analyses\_time column to analysis\_time in analysis\_jobs table.
   Raises schema version to 7. (#124)
+- No longer require configuration of a primary group to drop privileges to.
+  Instead use the droppriv user's primary group and supplementary group list by
+  default.
+- Add new options socket\_group and socket\_mode to explicitly open up the
+  socket to client connections with a secure default.
 
 ## 1.7
 

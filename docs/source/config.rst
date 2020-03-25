@@ -23,13 +23,37 @@ the files from an email created by AMaViSd:
 
 .. code-block:: shell
 
-    $ gpasswd -a amavis peekaboo
+    $ gpasswd -a peekaboo amavis
 
-**Note**: The group membership only affects direct launch of Peekaboo as that
-user.
-The same convention is implemented in the systemd unit.
-Also, option ``group`` of ``peekaboo.conf`` affects the group Peekaboo changes
-to when started as root.
+**Note**: Extending the supplementary group list of the ``peekaboo`` user is
+the preferred way to achieve access to submitted files.
+A separate group can be employed for that if ``peekaboo`` would otherwise gain
+access to more files than necessary and the client application supports
+changing file ownership to that group before submit.
+Alternatively, option ``group`` of ``peekaboo.conf`` can be used to affect the
+group Peekaboo changes to when started as root.
+
+In order for clients to submit files to Peekaboo, you will need to open its unix
+domain socket up for connections by users other than ``peekaboo``.
+The preferred way for that is to create a separate group, make all users who
+will be submitting files to Peekaboo members of that group and then configure
+the Peekaboo daemon to change group ownership of its socket to that group upon
+startup using option ``socket_group``. Note that the ``peekaboo`` user itself
+needs to be a member of that group in order to be allowed to change ownership
+of its socket to it.
+
+.. code-block:: shell
+
+    $ groupadd -g 151 peekaboo-clients
+    $ gpasswd -a peekaboo peekaboo-clients
+    $ gpasswd -a amavis peekaboo-clients
+
+If there's only a single client, i.e. amavis, the socket owner group can also
+just be its primary group, of which ``peekaboo`` may already be a member in
+order to access submitted files.
+
+It is also possible, although not recommended, to open up the socket to all
+users on the system by adjusting option ``socket_mode``.
 
 You may choose VirtualBox as hypervisor. If so, you must add the Peekaboo user to the
 ``vboxusers`` group.

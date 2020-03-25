@@ -1,6 +1,6 @@
 Sphinx
 twine
-pydoctor
+git+https://github.com/twisted/pydoctor.git
 babel
 git-lint
 docutils

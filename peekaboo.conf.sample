@@ -6,8 +6,12 @@
 
 [global]
 #user             :    peekaboo
-#group            :    peekaboo
+# specific group to drop privileges to if not primary group of user
+#group            :    <empty>
 #socket_file      :    /var/run/peekaboo/peekaboo.sock
+# change socket group and mode to open up client access
+#socket_group     :    <empty>
+#socket_mode      :    0660
 #pid_file         :    /var/run/peekaboo/peekaboo.pid
 #interpreter      :    /usr/bin/python2 -u
 #worker_count     :    3
