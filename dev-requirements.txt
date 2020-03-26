@@ -6,3 +6,5 @@ git-lint
 docutils
 pycodestyle
 pylint
+flask
+flask-restful

@@ -30,6 +30,10 @@ communicate with Cuckoo. These scripts can be found in the ``bin/`` folder of ou
 * ``dummy_cukcoo.py``: Simulates the Cuckoo output if an analysis task is completed.
 * ``dummy_cuckoo_submit.py``: Simulates the Cuckoo output when submitting a file or directory to cuckoo.
 
+To develop in api mode:
+
+* ``dummy_cuckoo_api.py``: Simulates the Cuckoo API. It listens on port ``127.0.0.1:5002``.
+
 
 For further information about Cuckoo, please refer to the Cuckoo documentation available at
 https://cuckoo.sh/docs/index.html.
