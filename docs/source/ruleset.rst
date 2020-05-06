@@ -135,3 +135,15 @@ Attributes of knownreport
 
 ``first`` and ``last`` refer to the number of days since this sample was first
 encountered and its last occurrence.
+
+Attribues of cortexreport
+-------------------------
+
+.. code-block:: shell
+
+    File_InfoReport.full
+    HybridAnalysisReport.full
+    VirusTotalQueryReport.n_of_all
+    VirusTotalQueryReport.level
+    CuckooSandboxFileReport.signatures
+    CuckooSandboxFileReport.malscore

@@ -84,6 +84,7 @@ keyword.2 : AutoClose
 
 #expression.0  : knownreport.known -> knownreport.result
 #expression.0  : knownreport.known and knownreport.first < 14 -> knownreport.result
+#expression.0  : cortexreport.File_InfoReport.full -> bad
 expression.1  : {sample.type_declared}|filereport.mime_types <= {
                     'text/plain', 'inode/x-empty'} -> ignore
 expression.2  : sample.name_declared == /smime.p7[mcs]/
@@ -103,10 +104,15 @@ expression.4  : sample.file_extension in {
                         'xls', 'xlsm', 'xlsx' }
                     and olereport.has_office_macros == True
                     and cuckooreport.score > 4 -> bad
+#expression.5  : cortexreport.VirusTotalQueryReport.n_of_all == 0
+#                    and cortexreport.VirusTotalQueryReport.level == 'safe'
+#                    ->  unknown
+# cortex way to access CuckooSandbox and Malscore
+#expression.6  : cortexreport.CuckooSandboxFileReport.malscore > 6 -> bad
 # inline content will normally be rendered by the mail client and not presented
 # as an attachment for the user to open -> no need to scan (if exploiting the
 # mail client is not a concern)
-expression.5  : sample.content_disposition == 'inline'
+expression.7  : sample.content_disposition == 'inline'
                     and sample.type_declared in {
                         'image/png', 'image/jpeg', 'image/gif', 'image/bmp'
                     } -> ignore

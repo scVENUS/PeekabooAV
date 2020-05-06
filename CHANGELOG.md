@@ -8,6 +8,8 @@ See documentation for details.
   Removes tables PeekabooMetadata and AnalysisJournal, and adds field
   analysis\_time to SampleInfo.
 - Generic rules can now make use of the new analyser `knownreport`
+- Introduce cortexreport toolbox analyser to connect to Cortex by TheHive.
+  There already are a few sub analysers that can be used.
 
 ## 2.0
 
