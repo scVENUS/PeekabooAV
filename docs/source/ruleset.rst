@@ -115,3 +115,15 @@ Attributes of filereport
     type_by_content
     type_by_name
     type_as_text
+
+Attribues of cortexreport
+-------------------------
+
+.. code-block:: shell
+
+    File_InfoReport.full
+    HybridAnalysisReport.full
+    VirusTotalQueryReport.n_of_all
+    VirusTotalQueryReport.level
+    CuckooSandboxFileReport.signatures
+    CuckooSandboxFileReport.malscore

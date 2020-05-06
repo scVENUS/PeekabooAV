@@ -37,6 +37,7 @@ from peekaboo.sample import Sample
 from peekaboo.toolbox.cuckoo import CuckooReport
 from peekaboo.toolbox.ole import Oletools, OletoolsReport
 from peekaboo.toolbox.file import Filetools, FiletoolsReport
+from peekaboo.toolbox.cortex import Cortextools, CortexReport
 
 
 logger = logging.getLogger(__name__)
@@ -147,6 +148,13 @@ class Rule:
         @returns: FiletoolsReport
         """
         return Filetools(sample).get_report()
+
+    def get_cortextools_report(self, sample):
+        """ Get a Cortextools report on the sample.
+
+        @returns: CortextoolsReport
+        """
+        return Cortextools(sample).get_report()
 
 
 class KnownRule(Rule):
@@ -531,6 +539,7 @@ class ExpressionRule(Rule):
                 'cuckooreport': CuckooReport(),
                 'olereport': OletoolsReport(),
                 'filereport': FiletoolsReport(),
+                'cortexreport': CortexReport(),
             }
         }
 
@@ -593,6 +602,9 @@ class ExpressionRule(Rule):
                 elif identifier == "filereport":
                     logger.debug("Expression requests filetools report")
                     value = self.get_filetools_report(sample)
+                elif identifier == "cortexreport":
+                    logger.debug("Expression requests cortextools report")
+                    value = self.get_cortextools_report(sample)
                 # elif here for other identifiers
                 else:
                     return self.result(

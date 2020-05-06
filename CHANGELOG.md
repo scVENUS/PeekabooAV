@@ -4,6 +4,9 @@ See documentation for details.
 
 ## devel
 
+- Introduce cortexreport toolbox analyser to connect to Cortex by TheHive.
+  There already are a few sub analysers that can be used.
+
 ## 2.0
 
 - Embedded Cuckoo mode and python2 support are deprecated now and scheduled for
