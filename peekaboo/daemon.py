@@ -46,7 +46,7 @@ from peekaboo.sample import SampleFactory
 from peekaboo.server import PeekabooServer
 from peekaboo.exceptions import PeekabooDatabaseError, \
         PeekabooConfigException, PeekabooRulesetConfigError
-from peekaboo.toolbox.cuckoo import CuckooApi
+from peekaboo.toolbox.cuckoo import Cuckoo
 
 
 logger = logging.getLogger(__name__)
@@ -368,11 +368,11 @@ def run():
         db_con=db_con,
         cluster_duplicate_check_interval=cldup_check_interval)
 
-    cuckoo = CuckooApi(job_queue, config.cuckoo_url,
-                       config.cuckoo_api_token,
-                       config.cuckoo_poll_interval,
-                       config.cuckoo_submit_original_filename,
-                       config.cuckoo_maximum_job_age)
+    cuckoo = Cuckoo(job_queue, config.cuckoo_url,
+                    config.cuckoo_api_token,
+                    config.cuckoo_poll_interval,
+                    config.cuckoo_submit_original_filename,
+                    config.cuckoo_maximum_job_age)
 
     sig_handler = SignalHandler()
     sig_handler.register_listener(cuckoo)
