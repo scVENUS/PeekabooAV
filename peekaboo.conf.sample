@@ -13,7 +13,6 @@
 #socket_group     :    <empty>
 #socket_mode      :    0660
 #pid_file         :    /var/run/peekaboo/peekaboo.pid
-#interpreter      :    /usr/bin/python2 -u
 #worker_count     :    3
 #sample_base_dir  :    /tmp
 #job_hash_regex   :    /amavis/tmp/([^/]+)/parts/
@@ -67,17 +66,6 @@
 # Cuckoo specific settings
 #
 [cuckoo]
-# mode has two options:
-#  embed   : for legacy embeded mode
-#  api     : to access cuckoo via the REST api
-#mode             :    api
-
-# embed mode
-#exec             :    /opt/cuckoo/bin/cuckoo
-#submit           :    /opt/cuckoo/bin/cuckoo submit
-#storage_path     :    /var/lib/peekaboo/.cuckoo/storage
-
-# api mode
 #url              :    http://127.0.0.1:8090
 #poll_interval    :    5
 

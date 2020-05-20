@@ -190,7 +190,6 @@ class TestDefaultConfig(CompatibleTestCase):
         self.assertEqual(self.config.sock_mode, 0o0660)
         self.assertEqual(
             self.config.pid_file, '/var/run/peekaboo/peekaboo.pid')
-        self.assertEqual(self.config.interpreter, '/usr/bin/python2 -u')
         self.assertEqual(self.config.worker_count, 3)
         self.assertEqual(self.config.sample_base_dir, '/tmp')
         self.assertEqual(
@@ -206,10 +205,6 @@ class TestDefaultConfig(CompatibleTestCase):
             self.config.log_format, '%(asctime)s - %(name)s - '
             '(%(threadName)s) - %(levelname)s - %(message)s')
         self.assertEqual(self.config.db_url, 'sqlite:////var/lib/peekaboo/peekaboo.db')
-        self.assertEqual(self.config.cuckoo_mode, 'api')
-        self.assertEqual(self.config.cuckoo_exec, '/opt/cuckoo/bin/cuckoo')
-        self.assertEqual(self.config.cuckoo_submit, '/opt/cuckoo/bin/cuckoo submit')
-        self.assertEqual(self.config.cuckoo_storage, '/var/lib/peekaboo/.cuckoo/storage')
         self.assertEqual(self.config.cuckoo_url, 'http://127.0.0.1:8090')
         self.assertEqual(self.config.cuckoo_poll_interval, 5)
         self.assertEqual(self.config.cuckoo_submit_original_filename, True)
@@ -230,7 +225,6 @@ socket_file      :    /socket/1
 socket_group     :    riddlers
 socket_mode      :    0141
 pid_file         :    /pid/1
-interpreter      :    /inter/1
 worker_count     :    18
 sample_base_dir  :    /tmp/1
 job_hash_regex   :    /var/2
@@ -248,10 +242,6 @@ log_format       :    format%%foo1
 url              :    sqlite:////peekaboo.db1
 
 [cuckoo]
-mode             :    api1
-exec             :    /cuckoo/1
-submit           :    /submit/1
-storage_path     :    /storage/1
 url              :    http://api:1111
 poll_interval    :    51
 submit_original_filename : no
@@ -272,7 +262,6 @@ duplicate_check_interval: 61
         self.assertEqual(self.config.sock_group, 'riddlers')
         self.assertEqual(self.config.sock_mode, 0o0141)
         self.assertEqual(self.config.pid_file, '/pid/1')
-        self.assertEqual(self.config.interpreter, '/inter/1')
         self.assertEqual(self.config.worker_count, 18)
         self.assertEqual(self.config.sample_base_dir, '/tmp/1')
         self.assertEqual(self.config.job_hash_regex, '/var/2')
@@ -282,10 +271,6 @@ duplicate_check_interval: 61
         self.assertEqual(self.config.log_level, logging.DEBUG)
         self.assertEqual(self.config.log_format, 'format%foo1')
         self.assertEqual(self.config.db_url, 'sqlite:////peekaboo.db1')
-        self.assertEqual(self.config.cuckoo_mode, 'api1')
-        self.assertEqual(self.config.cuckoo_exec, '/cuckoo/1')
-        self.assertEqual(self.config.cuckoo_submit, '/submit/1')
-        self.assertEqual(self.config.cuckoo_storage, '/storage/1')
         self.assertEqual(self.config.cuckoo_url, 'http://api:1111')
         self.assertEqual(self.config.cuckoo_poll_interval, 51)
         self.assertEqual(self.config.cuckoo_submit_original_filename, False)

@@ -9,7 +9,6 @@ Setup Directories and Users
 ===========================
 We assume that the user you run Peekaboo with is ``peekaboo``.
 Its home directory will be used by Peekaboo to store transient data.
-Also, in embed mode, the ``.cuckoo`` instance directory will reside there.
 ``/var/lib/peekaboo`` is a good choice for this path and the default:
 
 .. code-block:: shell

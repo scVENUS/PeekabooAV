@@ -46,7 +46,7 @@ from peekaboo.sample import SampleFactory
 from peekaboo.server import PeekabooServer
 from peekaboo.exceptions import PeekabooDatabaseError, \
         PeekabooConfigException, PeekabooRulesetConfigError
-from peekaboo.toolbox.cuckoo import CuckooEmbed, CuckooApi
+from peekaboo.toolbox.cuckoo import CuckooApi
 
 
 logger = logging.getLogger(__name__)
@@ -60,13 +60,12 @@ class SignalHandler():
 
         signal.signal(signal.SIGINT, self.signal_handler)
         signal.signal(signal.SIGTERM, self.signal_handler)
-        signal.signal(signal.SIGCHLD, self.signal_handler)
 
     def register_listener(self, listener):
         """ Register a listener object which is expected to implement a very
         simple interface: Method shut_down() is called if SIGINT or SIGTERM
-        arrive, reap_children() is called if SIGCHLD arrives. Both are expected
-        to defer actual handling of the condition. """
+        arrive. It is expected to defer actual handling of the condition.
+        """
         self.listeners.append(listener)
 
     def signal_handler(self, sig, frame):
@@ -78,11 +77,6 @@ class SignalHandler():
             # these should take serious care about being called across threads
             for listener in self.listeners:
                 listener.shut_down()
-
-        if sig == signal.SIGCHLD:
-            logger.debug("SIGCHLD")
-            for listener in self.listeners:
-                listener.reap_children()
 
 
 class PeekabooDaemonInfrastructure(object):
@@ -374,21 +368,11 @@ def run():
         db_con=db_con,
         cluster_duplicate_check_interval=cldup_check_interval)
 
-    if config.cuckoo_mode == "embed":
-        logger.warning(
-            "Embedded mode for Cuckoo is deprecated and will be removed in "
-            "a future release. Please switch to REST API mode.")
-
-        cuckoo = CuckooEmbed(job_queue, config.cuckoo_exec,
-                             config.cuckoo_submit, config.cuckoo_storage,
-                             config.interpreter)
-    # otherwise it's the new API method and default
-    else:
-        cuckoo = CuckooApi(job_queue, config.cuckoo_url,
-                           config.cuckoo_api_token,
-                           config.cuckoo_poll_interval,
-                           config.cuckoo_submit_original_filename,
-                           config.cuckoo_maximum_job_age)
+    cuckoo = CuckooApi(job_queue, config.cuckoo_url,
+                       config.cuckoo_api_token,
+                       config.cuckoo_poll_interval,
+                       config.cuckoo_submit_original_filename,
+                       config.cuckoo_maximum_job_age)
 
     sig_handler = SignalHandler()
     sig_handler.register_listener(cuckoo)
