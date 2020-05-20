@@ -313,7 +313,6 @@ class PeekabooConfig(PeekabooConfigParser):
         self.log_level = logging.INFO
         self.log_format = '%(asctime)s - %(name)s - (%(threadName)s) - ' \
                           '%(levelname)s - %(message)s'
-        self.interpreter = '/usr/bin/python2 -u'
         self.worker_count = 3
         self.sample_base_dir = '/tmp'
         self.job_hash_regex = '/amavis/tmp/([^/]+)/parts/'
@@ -324,15 +323,11 @@ class PeekabooConfig(PeekabooConfigParser):
         self.db_log_level = logging.WARNING
         self.config_file = '/opt/peekaboo/etc/peekaboo.conf'
         self.ruleset_config = '/opt/peekaboo/etc/ruleset.conf'
-        self.cuckoo_mode = "api"
         self.cuckoo_url = 'http://127.0.0.1:8090'
         self.cuckoo_api_token = ''
         self.cuckoo_poll_interval = 5
         self.cuckoo_submit_original_filename = True
         self.cuckoo_maximum_job_age = 15*60
-        self.cuckoo_storage = '/var/lib/peekaboo/.cuckoo/storage'
-        self.cuckoo_exec = '/opt/cuckoo/bin/cuckoo'
-        self.cuckoo_submit = '/opt/cuckoo/bin/cuckoo submit'
         self.cluster_instance_id = 0
         self.cluster_stale_in_flight_threshold = 15*60
         self.cluster_duplicate_check_interval = 60
@@ -350,7 +345,6 @@ class PeekabooConfig(PeekabooConfigParser):
             'sock_file': ['global', 'socket_file'],
             'sock_group': ['global', 'socket_group'],
             'sock_mode': ['global', 'socket_mode', self.OCTAL],
-            'interpreter': ['global', 'interpreter'],
             'worker_count': ['global', 'worker_count'],
             'sample_base_dir': ['global', 'sample_base_dir'],
             'job_hash_regex': ['global', 'job_hash_regex'],
@@ -360,16 +354,12 @@ class PeekabooConfig(PeekabooConfigParser):
             'db_url': ['db', 'url'],
             'db_log_level': ['db', 'log_level', self.LOG_LEVEL],
             'ruleset_config': ['ruleset', 'config'],
-            'cuckoo_mode': ['cuckoo', 'mode'],
             'cuckoo_url': ['cuckoo', 'url'],
             'cuckoo_api_token': ['cuckoo', 'api_token'],
             'cuckoo_poll_interval': ['cuckoo', 'poll_interval'],
             'cuckoo_submit_original_filename': [
                 'cuckoo', 'submit_original_filename'],
             'cuckoo_maximum_job_age': ['cuckoo', 'maximum_job_age'],
-            'cuckoo_storage': ['cuckoo', 'storage_path'],
-            'cuckoo_exec': ['cuckoo', 'exec'],
-            'cuckoo_submit': ['cuckoo', 'submit'],
             'cluster_instance_id': ['cluster', 'instance_id'],
             'cluster_stale_in_flight_threshold': ['cluster', 'stale_in_flight_threshold'],
             'cluster_duplicate_check_interval': ['cluster', 'duplicate_check_interval'],

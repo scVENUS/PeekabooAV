@@ -27,19 +27,12 @@
 from future.builtins import super  # pylint: disable=wrong-import-order
 
 import datetime
-import re
 import os
-import locale
 import logging
-import json
-import subprocess
-import random
 import requests
 import urllib3.util.retry
 
 from threading import RLock, Event
-from time import sleep
-from twisted.internet import protocol, reactor, process
 
 from peekaboo.exceptions import CuckooSubmitFailedException
 
@@ -168,140 +161,10 @@ class Cuckoo(object):
         """ Request the module to shut down. """
         self.shutdown_requested.set()
 
-    def reap_children(self):
-        pass
-
     def get_report(self, job_id):
         """ Extract the report of a finished analysis from Cuckoo. To be
         overridden by derived classes for actual implementation. """
         raise NotImplementedError
-
-class CuckooEmbed(Cuckoo):
-    """ Runs and interfaces with Cuckoo in IPC. """
-    def __init__(self, job_queue, cuckoo_exec, cuckoo_submit,
-                 cuckoo_storage, interpreter=None):
-        super().__init__(job_queue)
-        self.interpreter = interpreter
-        self.cuckoo_exec = cuckoo_exec
-        self.cuckoo_submit = cuckoo_submit
-        self.cuckoo_storage = cuckoo_storage
-        self.exit_code = 0
-
-        # process output to get job ID
-        patterns = (
-            # Example: Success: File "/var/lib/peekaboo/.bashrc" added as task with ID #4
-            "Success.*: File .* added as task with ID #([0-9]*)",
-            "added as task with ID ([0-9]*)",
-        )
-        self.job_id_patterns = [re.compile(pattern) for pattern in patterns]
-
-    def submit(self, sample):
-        """
-        Submit a file or directory to Cuckoo for behavioural analysis.
-
-        @param sample: Sample object to analyse.
-        @return: The job ID used by Cuckoo to identify this analysis task.
-        """
-        try:
-            # cuckoo_submit is a list, make a copy as to not modify the
-            # original value
-            proc = self.cuckoo_submit.split(' ') + [sample.submit_path]
-
-            # universal_newlines opens channels to child in text mode and
-            # returns strings instead of bytes in return which we do to avoid
-            # the need to handle decoding ourselves
-            p = subprocess.Popen(proc,
-                                 stdout=subprocess.PIPE,
-                                 stderr=subprocess.PIPE,
-                                 universal_newlines=True)
-            p.wait()
-        except Exception as error:
-            raise CuckooSubmitFailedException(error)
-
-        if not p.returncode == 0:
-            raise CuckooSubmitFailedException(
-                'cuckoo submit returned a non-zero return code.')
-
-        out, err = p.communicate()
-        logger.debug("cuckoo submit STDOUT: %s", out)
-        logger.debug("cuckoo submit STDERR: %s", err)
-
-        match = None
-        pattern_no = 0
-        for pattern in self.job_id_patterns:
-            match = re.search(pattern, out)
-            if match is not None:
-                logger.debug('Pattern %d matched.', pattern_no)
-                break
-
-            pattern_no += 1
-
-        if match is not None:
-            job_id = int(match.group(1))
-            self.register_running_job(job_id, sample)
-            return job_id
-
-        raise CuckooSubmitFailedException(
-            'Unable to extract job ID from given string %s' % out)
-
-    def get_report(self, job_id):
-        path = os.path.join(self.cuckoo_storage,
-                'analyses/%d/reports/report.json' % job_id)
-
-        if not os.path.isfile(path):
-            return None
-
-        logger.debug('Accessing Cuckoo report for task %d at %s ' %
-                (job_id, path))
-
-        report = None
-        with open(path) as data:
-            try:
-                report = json.load(data)
-            except ValueError as e:
-                logger.warning("Error loading JSON report for cuckoo "
-                               "job id %d", job_id)
-
-        return report
-
-    def do(self):
-        """ Run Cuckoo sandbox, parse log output, and report back of Peekaboo. """
-        command = self.cuckoo_exec.split(' ')
-
-        # allow for injecting a custom interpreter which we use to run cuckoo
-        # with python -u for unbuffered standard output
-        if self.interpreter:
-            command = self.interpreter.split(' ') + command
-
-        reactor.spawnProcess(CuckooServer(self), command[0], command)
-
-        # do not install twisted's signal handlers because it will screw with
-        # our logic (install a handler for SIGTERM and SIGCHLD but not for
-        # SIGINT). Instead do what their SIGCHLD handler would do and call the
-        # global process reaper.
-        reactor.run(installSignalHandlers = False)
-        process.reapAllProcesses()
-        return self.exit_code
-
-    def shut_down(self, exit_code = 0):
-        """ Signal handler callback but in this instance also used as callback
-        for protocol to ask us to shut down if anything adverse happens to the
-        child """
-        # the reactor doesn't like it to be stopped more than once and catching
-        # the resulting ReactorNotRunning exception is foiled by the fact that
-        # sigTerm defers the call through a queue into another thread which
-        # insists on logging it
-        if not self.shutdown_requested.is_set():
-            reactor.sigTerm(0)
-
-        self.shutdown_requested.set()
-        self.exit_code = exit_code
-
-    def reap_children(self):
-        """ Since we only have one child, SIGCHLD will cause us to shut down
-        and we reap all child processes on shutdown. This method is therefore
-        (currently) intentionally a no-op. """
-        pass
 
 
 class WhitelistRetry(urllib3.util.retry.Retry):
@@ -490,82 +353,6 @@ class CuckooApi(Cuckoo):
 
         logger.debug("Shutting down.")
         return 0
-
-class CuckooServer(protocol.ProcessProtocol):
-    """ Class that is used by twisted.internet.reactor to process Cuckoo output
-    and process its behavior. Usage::
-
-        srv = CuckooServer()
-        reactor.spawnProcess(srv, 'python2', ['python2', '/path/to/cukoo.py'])
-        reactor.run() """
-    def __init__(self, cuckoo):
-        self.cuckoo = cuckoo
-        self.encoding = locale.getpreferredencoding()
-
-    def connectionMade(self):
-        logger.info('Connected. Cuckoo PID: %s' % self.transport.pid)
-        return None
-
-    def outReceived(self, data):
-        """ on receiving output on STDOUT from Cuckoo """
-        # explicit decoding: The program is sending us stuff and because it's
-        # just stdout/stderr we have no defined protocol, no structure and no
-        # guaranteed encoding. Normally we'd tell popen to open in text mode
-        # which would automatically apply the system encoding. With Twisted
-        # there doesn't seem to be that option. But since it's our child, we
-        # can (hopefully) assume that it uses our locale settings. So we use
-        # the default encoding as returned by our interpreter.
-        logger.debug('STDOUT %s', data.decode(self.encoding))
-
-    def errReceived(self, data):
-        """ on receiving output on STDERR from Cuckoo """
-        content = data.decode(self.encoding)
-        logger.debug('STDERR %s', content.replace('\n', ''))
-
-        #
-        # FILE SUBMITTED
-        # printed out but has no further effect
-        #
-        # 2016-04-12 09:14:06,984 [lib.cuckoo.core.scheduler] INFO: Starting
-        # analysis of FILE "cuckoo.png" (task #201, options "")
-        # INFO: Starting analysis of FILE ".bashrc" (task #4, options "")
-        match = re.match(r'.*INFO: Starting analysis of FILE "(.*)" '
-                         r'\(task #([0-9]*), options .*', content)
-
-        if match:
-            logger.info("File submitted: task #%s, filename %s",
-                        match.group(2), match.group(1))
-
-        #
-        # ANALYSIS DONE
-        #
-        # 2016-04-12 09:25:27,824 [lib.cuckoo.core.scheduler] INFO: Task #202:
-        # reports generation completed ...
-        m = re.match(".*INFO: Task #([0-9]*): reports generation completed.*",
-                     content)
-        if m:
-            job_id = int(m.group(1))
-            self.cuckoo.resubmit_with_report(job_id)
-
-    def inConnectionLost(self):
-        logger.debug("Cuckoo closed STDIN")
-        self.cuckoo.shut_down(1)
-
-    def outConnectionLost(self):
-        logger.debug("Cuckoo closed STDOUT")
-        self.cuckoo.shut_down(1)
-
-    def errConnectionLost(self):
-        logger.warning("Cuckoo closed STDERR")
-        self.cuckoo.shut_down(1)
-
-    def processExited(self, reason):
-        logger.info("Cuckoo exited with status %s", reason.value.exitCode)
-        self.cuckoo.shut_down()
-
-    def processEnded(self, reason):
-        logger.info("Cuckoo ended with status %s", reason.value.exitCode)
-        self.cuckoo.shut_down()
 
 
 class CuckooReport(object):

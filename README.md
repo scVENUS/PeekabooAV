@@ -93,11 +93,6 @@ Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduc
 We use [SemVer](http://semver.org/) for versioning. For the versions available,
 see the [tags on this repository](https://github.com/scVENUS/PeekabooAV/releases).
 
-## Deprecations ##
-
-Release 2.0 is more than likely the last release to support Cuckoo embed mode
-and python 2. Update your setup now!
-
 ## Past and present Developers and Contributors ##
 
 * **Felix Bauer** - *Security Analyst and Project Leader* - [@Jack28](https://github.com/Jack28)
