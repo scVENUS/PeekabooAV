@@ -29,10 +29,10 @@ from future.builtins import super  # pylint: disable=wrong-import-order
 import datetime
 import os
 import logging
+import threading
+
 import requests
 import urllib3.util.retry
-
-from threading import RLock, Event
 
 from peekaboo.exceptions import CuckooSubmitFailedException
 
@@ -58,15 +58,93 @@ class CuckooJob(object):
         return self.__sample
 
 
-class Cuckoo(object):
-    """ Parent class, defines interface to Cuckoo. """
-    def __init__(self, job_queue):
+class WhitelistRetry(urllib3.util.retry.Retry):
+    """ A Retry class which has a status code whitelist, allowing to retry all
+    requests not whitelisted in a hard-core, catch-all manner. """
+    def __init__(self, status_whitelist=None, **kwargs):
+        super().__init__(**kwargs)
+        self.status_whitelist = status_whitelist or set()
+
+    def is_retry(self, method, status_code, has_retry_after=False):
+        """ Override Retry's is_retry to introduce our status whitelist logic.
+        """
+        # we retry all methods so no check if method is retryable here
+
+        if self.status_whitelist and status_code not in self.status_whitelist:
+            return True
+
+        return super().is_retry(method, status_code, has_retry_after)
+
+
+class Cuckoo:
+    """ Interfaces with a Cuckoo installation via its REST API. """
+    def __init__(self, job_queue, url="http://localhost:8090", api_token="",
+                 poll_interval=5, submit_original_filename=True,
+                 max_job_age=900, retries=5, backoff=0.5):
         self.job_queue = job_queue
-        self.shutdown_requested = Event()
+        self.shutdown_requested = threading.Event()
         self.shutdown_requested.clear()
         self.running_jobs = {}
         # reentrant because we're doing nested calls within critical sections
-        self.running_jobs_lock = RLock()
+        self.running_jobs_lock = threading.RLock()
+        self.url = url
+        self.api_token = api_token
+        self.poll_interval = poll_interval
+        self.submit_original_filename = submit_original_filename
+        self.max_job_age = max_job_age
+
+        # urrlib3 backoff formula:
+        # <backoff factor> * (2 ^ (<retry count so far> - 1))
+        # with second try intentionally having no sleep,
+        # e.g. with retry count==5 and backoff factor==0.5:
+        # try 1: fail, sleep(0.5*2^(1-1)==0.5*2^0==0.5*1==0.5->intentionally
+        #   overridden to 0)
+        # try 2: fail, sleep(0.5*2^(2-1)==0.5*2^1==1)
+        # try 3: fail, sleep(0.5*2^(3-1)==0.5*2^2==2)
+        # try 4: fail, sleep(0.5*2^(4-1)==0.5*2^3==4)
+        # try 5: fail, abort, sleep would've been 8 before try 6
+        #
+        # Also, use method_whitelist=False to enable POST and other methods for
+        # retry which aren't by default because they're not considered
+        # idempotent. We assume that with the REST API a request either
+        # succeeds or fails without residual effects, making them atomic and
+        # idempotent.
+        #
+        # And finally we retry everything but a 200 response, which admittedly
+        # is a bit hard-core but serves our purposes for now.
+        retry_config = WhitelistRetry(total=retries,
+                                      backoff_factor=backoff,
+                                      method_whitelist=False,
+                                      status_whitelist=set([200]))
+        retry_adapter = requests.adapters.HTTPAdapter(max_retries=retry_config)
+        self.session = requests.session()
+        self.session.mount('http://', retry_adapter)
+        self.session.mount('https://', retry_adapter)
+
+    def __get(self, path):
+        request_url = "%s/%s" % (self.url, path)
+        logger.debug("Getting %s", request_url)
+        headers = {"Authorization": "Bearer %s" % self.api_token}
+
+        try:
+            response = self.session.get(request_url, headers=headers)
+        # all requests exceptions are derived from RequestsException, including
+        # RetryError, TooManyRedirects and Timeout
+        except requests.exceptions.RequestException as error:
+            logger.error('Request to REST API failed: %s', error)
+            return None
+
+        # no check for status code here since we retry all but 200
+        # responses and raise an exception if retries fail
+        try:
+            json_resp = response.json()
+        except ValueError as error:
+            logger.error(
+                'Invalid JSON in response when getting %s: %s',
+                request_url, error)
+            return None
+
+        return json_resp
 
     def register_running_job(self, job_id, sample):
         """ Register a job as running. Detect if another sample has already
@@ -129,7 +207,7 @@ class Cuckoo(object):
             return None
 
         logger.debug('Requesting Cuckoo report for sample %s', sample)
-        report = self.get_report(job_id)
+        report = self.__get("tasks/report/%d" % job_id)
         if report is None:
             # mark analysis as failed if we could not get the report e.g.
             # because it was corrupted or the API connection failed.
@@ -156,99 +234,6 @@ class Cuckoo(object):
                            "too long", job_id)
             sample.mark_cuckoo_failure()
             self.job_queue.submit(sample, self.__class__)
-
-    def shut_down(self):
-        """ Request the module to shut down. """
-        self.shutdown_requested.set()
-
-    def get_report(self, job_id):
-        """ Extract the report of a finished analysis from Cuckoo. To be
-        overridden by derived classes for actual implementation. """
-        raise NotImplementedError
-
-
-class WhitelistRetry(urllib3.util.retry.Retry):
-    """ A Retry class which has a status code whitelist, allowing to retry all
-    requests not whitelisted in a hard-core, catch-all manner. """
-    def __init__(self, status_whitelist=None, **kwargs):
-        super().__init__(**kwargs)
-        self.status_whitelist = status_whitelist or set()
-
-    def is_retry(self, method, status_code, has_retry_after=False):
-        """ Override Retry's is_retry to introduce our status whitelist logic.
-        """
-        # we retry all methods so no check if method is retryable here
-
-        if self.status_whitelist and status_code not in self.status_whitelist:
-            return True
-
-        return super().is_retry(method, status_code, has_retry_after)
-
-
-class CuckooApi(Cuckoo):
-    """ Interfaces with a Cuckoo installation via its REST API. """
-    def __init__(self, job_queue, url="http://localhost:8090", api_token="",
-                 poll_interval=5, submit_original_filename=True,
-                 max_job_age=900, retries=5, backoff=0.5):
-        super().__init__(job_queue)
-        self.url = url
-        self.api_token = api_token
-        self.poll_interval = poll_interval
-        self.submit_original_filename = submit_original_filename
-        self.max_job_age = max_job_age
-
-        # urrlib3 backoff formula:
-        # <backoff factor> * (2 ^ (<retry count so far> - 1))
-        # with second try intentionally having no sleep,
-        # e.g. with retry count==5 and backoff factor==0.5:
-        # try 1: fail, sleep(0.5*2^(1-1)==0.5*2^0==0.5*1==0.5->intentionally
-        #   overridden to 0)
-        # try 2: fail, sleep(0.5*2^(2-1)==0.5*2^1==1)
-        # try 3: fail, sleep(0.5*2^(3-1)==0.5*2^2==2)
-        # try 4: fail, sleep(0.5*2^(4-1)==0.5*2^3==4)
-        # try 5: fail, abort, sleep would've been 8 before try 6
-        #
-        # Also, use method_whitelist=False to enable POST and other methods for
-        # retry which aren't by default because they're not considered
-        # idempotent. We assume that with the REST API a request either
-        # succeeds or fails without residual effects, making them atomic and
-        # idempotent.
-        #
-        # And finally we retry everything but a 200 response, which admittedly
-        # is a bit hard-core but serves our purposes for now.
-        retry_config = WhitelistRetry(total=retries,
-                                      backoff_factor=backoff,
-                                      method_whitelist=False,
-                                      status_whitelist=set([200]))
-        retry_adapter = requests.adapters.HTTPAdapter(max_retries=retry_config)
-        self.session = requests.session()
-        self.session.mount('http://', retry_adapter)
-        self.session.mount('https://', retry_adapter)
-
-    def __get(self, path):
-        request_url = "%s/%s" % (self.url, path)
-        logger.debug("Getting %s", request_url)
-        headers = {"Authorization": "Bearer %s" % self.api_token}
-
-        try:
-            response = self.session.get(request_url, headers=headers)
-        # all requests exceptions are derived from RequestsException, including
-        # RetryError, TooManyRedirects and Timeout
-        except requests.exceptions.RequestException as error:
-            logger.error('Request to REST API failed: %s', error)
-            return None
-
-        # no check for status code here since we retry all but 200
-        # responses and raise an exception if retries fail
-        try:
-            json_resp = response.json()
-        except ValueError as error:
-            logger.error(
-                'Invalid JSON in response when getting %s: %s',
-                request_url, error)
-            return None
-
-        return json_resp
 
     def submit(self, sample):
         path = sample.submit_path
@@ -287,10 +272,6 @@ class CuckooApi(Cuckoo):
 
         raise CuckooSubmitFailedException(
             'Unable to extract job ID from response %s' % json_resp)
-
-    def get_report(self, job_id):
-        logger.debug("Report from Cuckoo API requested, job_id = %d" % job_id)
-        return self.__get("tasks/report/%d" % job_id)
 
     def do(self):
         """ Do the polling for finished jobs. """
@@ -353,6 +334,10 @@ class CuckooApi(Cuckoo):
 
         logger.debug("Shutting down.")
         return 0
+
+    def shut_down(self):
+        """ Request the module to shut down. """
+        self.shutdown_requested.set()
 
 
 class CuckooReport(object):
