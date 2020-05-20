@@ -1,6 +1,5 @@
 sqlalchemy>=1.1.0
 Twisted>=17.1.0
-service_identity>=16.0.0
 python-magic>=0.4.12
 oletools>=0.54
 sdnotify>=0.3.1
