@@ -267,11 +267,9 @@ class JobQueue:
         ping. """
         return self.jobs.get(True)
 
-    def shut_down(self, timeout = None):
-        if not timeout:
-            timeout = self.shutdown_timeout
-
-        logger.info("Shutting down. Giving workers %d seconds to stop" % timeout)
+    def shut_down(self):
+        """ Trigger a shutdown of the queue including the workers. """
+        logger.info("Queue shutdown requested. Signalling workers.")
 
         if self.cluster_duplicate_handler:
             self.cluster_duplicate_handler.shut_down()
@@ -287,12 +285,19 @@ class JobQueue:
         for worker in self.workers:
             self.jobs.put(None)
 
+    def close_down(self, timeout=None):
+        """ Wait for workers to stop and free up resources. """
+        if not timeout:
+            timeout = self.shutdown_timeout
+
+        logger.info("Closing down. Giving workers %d seconds to stop", timeout)
+
         # wait for workers to end
         interval = 1
         for attempt in range(1, timeout // interval + 1):
             still_running = []
             for worker in self.workers:
-                if worker.running:
+                if worker.is_alive():
                     still_running.append(worker)
 
             self.workers = still_running
@@ -305,6 +310,10 @@ class JobQueue:
 
         if len(self.workers) > 0:
             logger.error("Some workers refused to stop.")
+
+        if self.cluster_duplicate_handler:
+            self.cluster_duplicate_handler.join()
+
 
 class ClusterDuplicateHandler(Thread):
     def __init__(self, job_queue, interval=5):
@@ -338,9 +347,6 @@ class Worker(Thread):
         # whether we should run
         self.shutdown_requested = Event()
         self.shutdown_requested.clear()
-        # whether we are actually running
-        self.running_flag = Event()
-        self.running_flag.clear()
         self.worker_id = wid
         self.job_queue = job_queue
         self.ruleset_engine = ruleset_engine
@@ -348,7 +354,6 @@ class Worker(Thread):
         Thread.__init__(self, name="Worker-%d" % wid)
 
     def run(self):
-        self.running_flag.set()
         while not self.shutdown_requested.is_set():
             logger.debug('Worker %d: Ready', self.worker_id)
 
@@ -407,11 +412,6 @@ class Worker(Thread):
             self.job_queue.done(sample)
 
         logger.info('Worker %d: Stopped' % self.worker_id)
-        self.running_flag.clear()
 
     def shut_down(self):
         self.shutdown_requested.set()
-
-    @property
-    def running(self):
-        return self.running_flag.is_set()

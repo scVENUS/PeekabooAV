@@ -361,22 +361,23 @@ def run():
         logging.critical(error)
         sys.exit(1)
 
+    sig_handler = SignalHandler()
     job_queue = JobQueue(
         worker_count=config.worker_count, ruleset_engine=engine,
         db_con=db_con,
         cluster_duplicate_check_interval=cldup_check_interval)
+    sig_handler.register_listener(job_queue)
 
     cuckoo = Cuckoo(job_queue, config.cuckoo_url,
                     config.cuckoo_api_token,
                     config.cuckoo_poll_interval,
                     config.cuckoo_submit_original_filename,
                     config.cuckoo_maximum_job_age)
-
-    sig_handler = SignalHandler()
     sig_handler.register_listener(cuckoo)
 
     if not cuckoo.start_tracker():
         job_queue.shut_down()
+        job_queue.close_down()
         sys.exit(1)
 
     # Factory producing almost identical samples providing them with global
@@ -399,6 +400,7 @@ def run():
         cuckoo.shut_down()
         job_queue.shut_down()
         cuckoo.close_down()
+        job_queue.close_down()
         sys.exit(1)
 
     sig_handler.register_listener(server)
@@ -413,6 +415,7 @@ def run():
 
     # close down components after they've shut down
     cuckoo.close_down()
+    job_queue.close_down()
 
     # do a final cleanup pass through the database
     try:
