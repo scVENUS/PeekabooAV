@@ -65,20 +65,6 @@ from peekaboo.db import PeekabooDatabase, PeekabooDatabaseError
 # pylint: enable=wrong-import-position
 
 
-""" Since Python 3.2 assertRegexpMatches and assertRaisesRegexp
-have been renamed to assertRegex() and assertRaisesRegex(). """
-if sys.version_info[0] < 3:
-    class CompatibleTestCase(unittest.TestCase):
-        def assertRaisesRegex(self, exc, r, callable=None, *args, **kwds):
-            return self.assertRaisesRegexp(exc, r, callable, *args, **kwds)
-
-        def assertRegex(self, text, regex, msg=None):
-            return self.assertRegexpMatches(text, regex, msg)
-else:
-    class CompatibleTestCase(unittest.TestCase):
-        pass
-
-
 class CreatingConfigMixIn:
     """ A class for adding config file creation logic to any other class. """
     def create_config(self, content):
@@ -117,7 +103,7 @@ class CreatingPeekabooConfig(PeekabooConfig, CreatingConfigMixIn):
         self.remove_config()
 
 
-class TestConfigParser(CompatibleTestCase):
+class TestConfigParser(unittest.TestCase):
     """ Test a configuration with all values different from the defaults. """
     @classmethod
     def setUpClass(cls):
@@ -171,7 +157,7 @@ nonoctal2: deadbeef'''
                 CreatingConfigParser(config).getoctal('section', nonoctal)
 
 
-class TestDefaultConfig(CompatibleTestCase):
+class TestDefaultConfig(unittest.TestCase):
     """ Test a configuration of all defaults. """
     @classmethod
     def setUpClass(cls):
@@ -213,7 +199,7 @@ class TestDefaultConfig(CompatibleTestCase):
         self.assertEqual(self.config.cluster_duplicate_check_interval, 60)
 
 
-class TestValidConfig(CompatibleTestCase):
+class TestValidConfig(unittest.TestCase):
     """ Test a configuration with all values different from the defaults. """
     @classmethod
     def setUpClass(cls):
@@ -279,7 +265,7 @@ duplicate_check_interval: 61
         self.assertEqual(self.config.cluster_duplicate_check_interval, 61)
 
 
-class TestInvalidConfig(CompatibleTestCase):
+class TestInvalidConfig(unittest.TestCase):
     """ Various tests of invalid config files. """
     def test_1_section_header(self):
         """ Test correct error is thrown if section header syntax is wrong """
@@ -363,7 +349,7 @@ class CreatingSampleFactory(SampleFactory):
         shutil.rmtree(self.directory)
 
 
-class TestDatabase(CompatibleTestCase):
+class TestDatabase(unittest.TestCase):
     """ Unittests for Peekaboo's database module. """
     @classmethod
     def setUpClass(cls):
@@ -508,7 +494,7 @@ class TestDatabase(CompatibleTestCase):
         del cls.factory
 
 
-class TestSample(CompatibleTestCase):
+class TestSample(unittest.TestCase):
     """ Unittests for Samples. """
     @classmethod
     def setUpClass(cls):
@@ -658,7 +644,7 @@ class OletoolsSample:  # pylint: disable=too-few-public-methods
         self.oletools_report = report
 
 
-class TestOletools(CompatibleTestCase):
+class TestOletools(unittest.TestCase):
     """ Unittests for Oletools. """
     @classmethod
     def setUpClass(cls):
@@ -720,7 +706,7 @@ class FiletoolsSample:  # pylint: disable=too-few-public-methods
         self.filetools_report = report
 
 
-class TestFiletools(CompatibleTestCase):
+class TestFiletools(unittest.TestCase):
     """ Unittests for Oletools. """
     @classmethod
     def setUpClass(cls):
@@ -778,7 +764,7 @@ class TestFiletools(CompatibleTestCase):
         self.assertIs(report, new_report)
 
 
-class TestRulesetEngine(CompatibleTestCase):
+class TestRulesetEngine(unittest.TestCase):
     """ Unittests for the Ruleset Engine. """
     def test_no_rules_configured(self):
         """ Test that correct error is shown if no rules are configured. """
@@ -839,7 +825,7 @@ class CuckooReportSample:  # pylint: disable=too-few-public-methods
         self.cuckoo_failed = failed
 
 
-class TestRules(CompatibleTestCase):
+class TestRules(unittest.TestCase):
     """ Unittests for Rules. """
     @classmethod
     def setUpClass(cls):
@@ -1517,7 +1503,7 @@ unknown : baz'''
         FinalRule(CreatingConfigParser(config), None)
 
 
-class TestExpressionParser(CompatibleTestCase):
+class TestExpressionParser(unittest.TestCase):
     """ Unittests for the expression parser. """
     @classmethod
     def setUpClass(cls):
