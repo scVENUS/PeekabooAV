@@ -33,7 +33,7 @@ import magic
 logger = logging.getLogger(__name__)
 
 
-class Filetools(object):
+class Filetools:
     """ Parent class, defines interface to various file tools. """
     def __init__(self, sample):
         self.sample = sample
@@ -85,7 +85,7 @@ class Filetools(object):
         return ftreport
 
 
-class FiletoolsReport(object):
+class FiletoolsReport:
     """ Represents a custom Filetools report. """
     def __init__(self, report=None):
         if report is None:

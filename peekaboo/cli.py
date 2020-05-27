@@ -40,7 +40,7 @@ logging.basicConfig()
 logger = logging.getLogger(__name__)
 
 
-class PeekabooUtil(object):
+class PeekabooUtil:
     """ Utility fo interface with Peekaboo API over the socket connection """
     def __init__(self, socket_file):
         logger.debug('Initialising PeekabooUtil')

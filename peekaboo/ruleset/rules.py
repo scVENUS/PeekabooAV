@@ -42,7 +42,7 @@ from peekaboo.toolbox.file import Filetools, FiletoolsReport
 logger = logging.getLogger(__name__)
 
 
-class Rule(object):
+class Rule:
     """ This is the base class for all rules. It provides common infrastructure
     such as resources that can be used by the rules (configuration, database
     connection) or helper functions. """

@@ -52,7 +52,7 @@ from peekaboo.toolbox.cuckoo import Cuckoo
 logger = logging.getLogger(__name__)
 
 
-class SignalHandler():
+class SignalHandler:
     """ Signal handler. """
     def __init__(self):
         """ register custom signal handler """
@@ -79,7 +79,7 @@ class SignalHandler():
                 listener.shut_down()
 
 
-class PeekabooDaemonInfrastructure(object):
+class PeekabooDaemonInfrastructure:
     """ A class that manages typical daemon infrastructure such as PID file and
     privileges. """
     def __init__(self, pid_file, sock_file, user, group):
