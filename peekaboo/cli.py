@@ -25,13 +25,14 @@
 #                                                                             #
 ###############################################################################
 
+""" The peekaboo-util command line interface. """
 
-from os import path
-from argparse import ArgumentParser
+import argparse
 import json
-import socket
-import re
 import logging
+import os
+import re
+import socket
 import sys
 
 
@@ -75,7 +76,7 @@ class PeekabooUtil:
                 # try to parse and stop at first thing that parses
                 outdata = json.loads(line)
                 break
-            except ValueError as error:
+            except ValueError:
                 # FIXME: daemon talks a mix of plain text and JSON. So for now
                 # we must ignore everything that doesn't parse. This includes
                 # errors.  We can't even employ a heuristic since all of those
@@ -129,7 +130,7 @@ class PeekabooUtil:
         requests = []
         for filename in filenames:
             requests.append({"request": "scan-file",
-                             "full_name": path.abspath(filename)})
+                             "full_name": os.path.abspath(filename)})
 
         buf = self.send_receive(json.dumps(requests))
 
@@ -145,7 +146,8 @@ class PeekabooUtil:
         return exit_code
 
 def main():
-    parser = ArgumentParser()
+    """ The peekaboo-util main program. """
+    parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(help='commands')
 
     parser.add_argument('-v', '--verbose', action='store_true', required=False,
