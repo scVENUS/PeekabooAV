@@ -33,7 +33,7 @@ import os
 import stat
 import socket
 import socketserver
-from threading import Thread, Event, current_thread
+import threading
 from peekaboo.ruleset import Result
 
 
@@ -43,9 +43,8 @@ logger = logging.getLogger(__name__)
 class PeekabooStreamServer(socketserver.ThreadingUnixStreamServer):
     """ Asynchronous server. """
     def __init__(self, server_address, request_handler_cls, job_queue,
-                 sample_factory, bind_and_activate=True,
-                 request_queue_size=10, status_change_timeout=60):
-        self.server_address = server_address
+                 sample_factory, request_queue_size=10,
+                 status_change_timeout=60):
         self.__job_queue = job_queue
         self.__sample_factory = sample_factory
         self.request_queue_size = request_queue_size
@@ -55,10 +54,9 @@ class PeekabooStreamServer(socketserver.ThreadingUnixStreamServer):
         self.__request_triggers = {}
 
         # no super() since old-style classes
-        logger.debug('Starting up server.')
         socketserver.ThreadingUnixStreamServer.__init__(
             self, server_address, request_handler_cls,
-            bind_and_activate=bind_and_activate)
+            bind_and_activate=False)
 
     @property
     def job_queue(self):
@@ -93,8 +91,8 @@ class PeekabooStreamServer(socketserver.ThreadingUnixStreamServer):
 
     def shutdown(self):
         """ Shut down the server. In our case, notify requests which are
-        currently being handled to shut down as well. """
-        logger.debug('Server shutting down.')
+        currently being handled to shut down as well and then wait until all
+        are finished. """
         self.__shutdown_requested = True
         for thread in self.__request_triggers:
             # wake up the thread so it can see that we're shutting down
@@ -102,26 +100,13 @@ class PeekabooStreamServer(socketserver.ThreadingUnixStreamServer):
 
         socketserver.ThreadingUnixStreamServer.shutdown(self)
 
-    def server_close(self):
-        """ Finally completely close down the server. """
-        # no new connections from this point on
-        logger.debug('Removing connection socket %s', self.server_address)
-        try:
-            os.remove(self.server_address)
-        except OSError as oserror:
-            logger.warning('Removal of socket %s failed: %s',
-                           self.server_address, oserror)
-
-        logger.debug('Closing down server.')
-        return socketserver.ThreadingUnixStreamServer.server_close(self)
-
 
 class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
     """ Request handler used by PeekabooStreamServer to handle analysis
     requests. """
     def setup(self):
         # rename thread for higher log message clarity
-        thread = current_thread()
+        thread = threading.current_thread()
         # keep trailing thread number by replacing just the base name
         thread.name = thread.name.replace('Thread-', 'Request-')
 
@@ -132,7 +117,7 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
 
         # create an event we will give to all the samples and our server to
         # wake us if they need out attention
-        self.status_change = Event()
+        self.status_change = threading.Event()
         self.status_change.clear()
 
     def handle(self):
@@ -434,11 +419,10 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
 class PeekabooServer(object):
     """ A class wrapping the server components of Peekaboo. """
     def __init__(self, sock_file, job_queue, sample_factory, request_queue_size,
-                 sock_group = None,
-                 sock_mode = stat.S_IREAD | stat.S_IWRITE |
-                             stat.S_IRGRP | stat.S_IWGRP |
-                             stat.S_IROTH | stat.S_IWOTH):
-
+                 sock_group=None,
+                 sock_mode=(stat.S_IREAD | stat.S_IWRITE |
+                            stat.S_IRGRP | stat.S_IWGRP |
+                            stat.S_IROTH | stat.S_IWOTH)):
         """ Initialise a new server and start it. All error conditions are
         returned as exceptions.
 
@@ -459,9 +443,10 @@ class PeekabooServer(object):
         @param sock_mode: The permission bits of the socket.
         @type sock_mode: Integer (bitmask)
         """
-        self.server = None
-        self.runner = None
+        self.shutdown_requested = threading.Event()
+        self.shutdown_requested.clear()
 
+        logger.debug('Starting up server.')
         self.server = PeekabooStreamServer(
             sock_file,
             PeekabooStreamRequestHandler,
@@ -469,25 +454,53 @@ class PeekabooServer(object):
             sample_factory=sample_factory,
             request_queue_size=request_queue_size)
 
-        self.runner = Thread(target=self.server.serve_forever, name="Server")
-        self.runner.start()
-
         try:
+            # create the socket filesystem node but do not listen for
+            # connections yet so we can try to secure it and not have to worry
+            # about pending/established connections on error
+            self.server.server_bind()
+
             if sock_mode is not None:
                 os.chmod(sock_file, sock_mode)
 
             if sock_group is not None:
                 gid = grp.getgrnam(sock_group)[2]
                 os.chown(sock_file, -1, gid)
-        except:
-            self.shutdown()
+
+            self.server.server_activate()
+        except OSError:
+            try:
+                os.remove(sock_file)
+            except OSError:
+                pass
+            self.server.server_close()
             raise
 
-        logger.info('Peekaboo server is now listening on %s',
-                    self.server.server_address)
+        logger.info('Peekaboo server is now listening on %s', sock_file)
+        self.sock_file = sock_file
 
-    def shutdown(self):
-        """ Shuts down the server. """
+    def serve(self):
+        """ Serves requests until shutdown is requested from the outside. """
+        runner = threading.Thread(
+            target=self.server.serve_forever, name='Server')
+        runner.start()
+        self.shutdown_requested.wait()
         self.server.shutdown()
+        runner.join()
+
+        # no new connections from this point on
+        logger.debug('Removing connection socket %s', self.sock_file)
+        try:
+            os.remove(self.sock_file)
+        except OSError as oserror:
+            logger.warning('Removal of socket %s failed: %s',
+                           self.sock_file, oserror)
+
         self.server.server_close()
-        self.runner.join()
+        logger.debug('Server shut down.')
+
+    def shut_down(self):
+        """ Triggers a shutdown of the server, used by the signal handler and
+        potentially other components to cause the main loop to exit. """
+        logger.debug('Server shutdown requested.')
+        self.shutdown_requested.set()

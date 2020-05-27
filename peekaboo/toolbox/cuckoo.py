@@ -121,6 +121,8 @@ class Cuckoo:
         self.session.mount('http://', retry_adapter)
         self.session.mount('https://', retry_adapter)
 
+        self.tracker = None
+
     def __get(self, path):
         request_url = "%s/%s" % (self.url, path)
         logger.debug("Getting %s", request_url)
@@ -273,8 +275,8 @@ class Cuckoo:
         raise CuckooSubmitFailedException(
             'Unable to extract job ID from response %s' % json_resp)
 
-    def do(self):
-        """ Do the polling for finished jobs. """
+    def start_tracker(self):
+        """ Start tracking running jobs in a separate thread. """
         # do a simple initial test of connectivity. With this we require the
         # API to be reachable at startup (with the usual retries to account for
         # a bit of a race condition in parallel startup) but later on hope
@@ -282,16 +284,23 @@ class Cuckoo:
         status = self.__get("cuckoo/status")
         if status is None:
             logger.critical("Connection to Cuckoo REST API failed")
-            return 1
+            return False
         if "tasks" not in status or "reported" not in status["tasks"]:
             logger.critical("Invalid status JSON structure from Cuckoo REST "
                             "API: %s", status)
-            return 1
+            return False
 
         reported = status["tasks"]["reported"]
         logger.info("Connection to Cuckoo seems to work, "
                     "%i reported tasks seen", reported)
 
+        self.tracker = threading.Thread(target=self.track,
+                                        name="CuckooJobTracker")
+        self.tracker.start()
+        return True
+
+    def track(self):
+        """ Do the polling for finished jobs. """
         while not self.shutdown_requested.wait(self.poll_interval):
             # no lock, atomic, copy() because keys() returns an iterable view
             # instead of a fresh new list in python3
@@ -314,11 +323,10 @@ class Cuckoo:
                     # ignore and retry on next polling run
                     continue
 
-                # but fail hard if we get invalid stuff
                 if "task" not in job or "status" not in job["task"]:
                     logger.error("Invalid JSON structure from Cuckoo REST "
                                  "API: %s", job)
-                    return 1
+                    continue
 
                 if job["task"]["status"] == "reported":
                     self.resubmit_with_report(job_id)
@@ -332,12 +340,19 @@ class Cuckoo:
                 # same sample.
                 self.resubmit_as_failed_if_too_old(job_id, self.max_job_age)
 
-        logger.debug("Shutting down.")
-        return 0
+        logger.debug("Cuckoo job tracker shut down.")
 
     def shut_down(self):
-        """ Request the module to shut down. """
+        """ Request the module to shut down, used by the signal handler. """
+        logger.debug("Cuckoo job tracker shutdown requested.")
         self.shutdown_requested.set()
+
+    def close_down(self):
+        """ Close down tracker resources, particularly, wait for the thread to
+        terminate. """
+        if self.tracker:
+            self.tracker.join()
+            self.tracker = None
 
 
 class CuckooReport(object):

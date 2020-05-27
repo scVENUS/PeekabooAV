@@ -326,8 +326,6 @@ def run():
         config.pid_file, config.sock_file, config.user, config.group)
     daemon_infrastructure.init()
 
-    systemd = SystemdNotifier()
-
     # clear all our in flight samples and all instances' stale in flight
     # samples
     db_con.clear_in_flight_samples()
@@ -377,6 +375,10 @@ def run():
     sig_handler = SignalHandler()
     sig_handler.register_listener(cuckoo)
 
+    if not cuckoo.start_tracker():
+        job_queue.shut_down()
+        sys.exit(1)
+
     # Factory producing almost identical samples providing them with global
     # config values and references to other objects they need, such as cuckoo,
     # database connection and connection map.
@@ -394,26 +396,32 @@ def run():
             sock_mode=config.sock_mode)
     except Exception as error:
         logger.critical('Failed to start Peekaboo Server: %s', error)
+        cuckoo.shut_down()
         job_queue.shut_down()
+        cuckoo.close_down()
         sys.exit(1)
 
-    exit_code = 1
-    try:
-        systemd.notify("READY=1")
-        # If this dies Peekaboo dies, since this is the main thread. (legacy)
-        exit_code = cuckoo.do()
-    except Exception as error:
-        logger.critical('Main thread aborted: %s', error)
-    finally:
-        server.shutdown()
-        job_queue.shut_down()
-        try:
-            db_con.clear_in_flight_samples()
-            db_con.clear_stale_in_flight_samples()
-        except PeekabooDatabaseError as dberr:
-            logger.error(dberr)
+    sig_handler.register_listener(server)
+    SystemdNotifier().notify("READY=1")
+    server.serve()
 
-    sys.exit(exit_code)
+    # trigger shutdowns of other components (if not already ongoing triggered
+    # by e.g. the signal handler), server will already be shut down at this
+    # point signaled by the fact that serve() above returned
+    cuckoo.shut_down()
+    job_queue.shut_down()
+
+    # close down components after they've shut down
+    cuckoo.close_down()
+
+    # do a final cleanup pass through the database
+    try:
+        db_con.clear_in_flight_samples()
+        db_con.clear_stale_in_flight_samples()
+    except PeekabooDatabaseError as dberr:
+        logger.error(dberr)
+
+    sys.exit(0)
 
 if __name__ == '__main__':
     run()
