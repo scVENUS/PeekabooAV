@@ -45,9 +45,7 @@ class PeekabooConfigParser( # pylint: disable=too-many-ancestors
     IRELIST = object()
 
     def __init__(self, config_file):
-        # super() does not work here because ConfigParser uses old-style
-        # classes in python 2
-        configparser.ConfigParser.__init__(self)
+        super().__init__()
 
         try:
             self.read_file(open(config_file))
@@ -380,7 +378,7 @@ class PeekabooConfig(PeekabooConfigParser):
         # read configuration file. Note that we require a configuration file
         # here. We may change that if we decide that we want to allow the user
         # to run us with the above defaults only.
-        PeekabooConfigParser.__init__(self, self.config_file)
+        super().__init__(self.config_file)
 
         # overwrite above defaults in our member variables via indirect access
         settings = vars(self)

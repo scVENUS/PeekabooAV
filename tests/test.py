@@ -83,7 +83,7 @@ class CreatingConfigParser(PeekabooConfigParser, CreatingConfigMixIn):
     def __init__(self, content=''):
         self.created_config_file = None
         self.create_config(content)
-        PeekabooConfigParser.__init__(self, self.created_config_file)
+        super().__init__(self.created_config_file)
 
     def __del__(self):
         self.remove_config()
@@ -95,7 +95,7 @@ class CreatingPeekabooConfig(PeekabooConfig, CreatingConfigMixIn):
     def __init__(self, content=''):
         self.created_config_file = None
         self.create_config(content)
-        PeekabooConfig.__init__(self, self.created_config_file)
+        super().__init__(self.created_config_file)
 
     def __del__(self):
         self.remove_config()

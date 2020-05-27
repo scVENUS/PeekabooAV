@@ -53,10 +53,8 @@ class PeekabooStreamServer(socketserver.ThreadingUnixStreamServer):
         self.__shutdown_requested = False
         self.__request_triggers = {}
 
-        # no super() since old-style classes
-        socketserver.ThreadingUnixStreamServer.__init__(
-            self, server_address, request_handler_cls,
-            bind_and_activate=False)
+        super().__init__(
+            server_address, request_handler_cls, bind_and_activate=False)
 
     @property
     def job_queue(self):

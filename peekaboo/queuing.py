@@ -321,7 +321,7 @@ class ClusterDuplicateHandler(Thread):
         self.shutdown_requested.clear()
         self.job_queue = job_queue
         self.interval = interval
-        Thread.__init__(self, name="ClusterDuplicateHandler")
+        super().__init__(name="ClusterDuplicateHandler")
 
     def run(self):
         logger.debug("Cluster duplicate handler started.")
@@ -351,7 +351,7 @@ class Worker(Thread):
         self.job_queue = job_queue
         self.ruleset_engine = ruleset_engine
         self.db_con = db_con
-        Thread.__init__(self, name="Worker-%d" % wid)
+        super().__init__(name="Worker-%d" % wid)
 
     def run(self):
         while not self.shutdown_requested.is_set():
