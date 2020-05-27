@@ -279,11 +279,6 @@ def run():
         logging.critical(error)
         sys.exit(1)
 
-    if sys.version_info[0] < 3:
-        logger.warning(
-            "Python 2 support is deprecated and will be removed in a future "
-            "release. Please switch to python 3.")
-
     # find localisation in our package directory
     locale_domain = 'peekaboo'
     locale_dir = os.path.join(os.path.dirname(__file__), 'locale')
@@ -300,11 +295,7 @@ def run():
     logger.debug('Installing report message translations')
     translation = gettext.translation(locale_domain, locale_dir, languages,
                                       fallback=True)
-    # python2's gettext needs to be told explicitly to return unicode strings
-    loc_kwargs = {}
-    if sys.version_info[0] < 3:
-        loc_kwargs = {'unicode': True}
-    translation.install(loc_kwargs)
+    translation.install()
 
     # establish a connection to the database
     try:

@@ -23,7 +23,7 @@ For news and announcements follow us on twitter [@peekabooAV](https://twitter.co
 
 ### Prerequisites ####
 
-* [Python](https://www.python.org/downloads/) (3.6+ recommended, 2.7 still supported)
+* [Python](https://www.python.org/downloads/) (3.6+ required)
 * [Cuckoo 2.0](https://github.com/cuckoosandbox/cuckoo)
 * [AMaViSd 2.11.0](https://www.ijs.si/software/amavisd/)
 * Installer is available: [PeekabooAV-Installer](https://github.com/scVENUS/PeekabooAV-Installer)
