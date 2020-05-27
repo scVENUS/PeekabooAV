@@ -26,7 +26,6 @@
 ###############################################################################
 
 
-from __future__ import print_function
 from os import path
 from argparse import ArgumentParser
 import json

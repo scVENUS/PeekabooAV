@@ -27,8 +27,6 @@
 
 """ A simple expression grammar used for writing generic rules. """
 
-from future.builtins import super
-
 import logging
 import operator
 import re

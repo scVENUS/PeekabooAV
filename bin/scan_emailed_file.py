@@ -33,7 +33,6 @@ as mailserver or use the script "run_dev_mailserver.sh".
 """
 
 
-from __future__ import  print_function
 import os
 import sys
 import pwd
