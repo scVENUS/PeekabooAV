@@ -61,9 +61,27 @@ class CuckooJob(object):
 class WhitelistRetry(urllib3.util.retry.Retry):
     """ A Retry class which has a status code whitelist, allowing to retry all
     requests not whitelisted in a hard-core, catch-all manner. """
-    def __init__(self, status_whitelist=None, **kwargs):
+    def __init__(self, status_whitelist=None, abort=None, **kwargs):
         super().__init__(**kwargs)
         self.status_whitelist = status_whitelist or set()
+        # Event that is set if we're not to retry
+        self.abort = abort
+
+    def new(self, **kwargs):
+        """ Adjusted shallow copy method to carry our parameters over into our
+        copy. """
+        if 'status_whitelist' not in kwargs:
+            kwargs['status_whitelist'] = self.status_whitelist
+        if 'abort' not in kwargs:
+            kwargs['abort'] = self.abort
+        return super().new(**kwargs)
+
+    def is_exhausted(self):
+        """ Allow to abort a retry chain through an external signal. """
+        if self.abort and self.abort.is_set():
+            return True
+
+        return super().is_exhausted()
 
     def is_retry(self, method, status_code, has_retry_after=False):
         """ Override Retry's is_retry to introduce our status whitelist logic.
@@ -115,7 +133,8 @@ class Cuckoo:
         retry_config = WhitelistRetry(total=retries,
                                       backoff_factor=backoff,
                                       method_whitelist=False,
-                                      status_whitelist=set([200]))
+                                      status_whitelist=set([200]),
+                                      abort=self.shutdown_requested)
         retry_adapter = requests.adapters.HTTPAdapter(max_retries=retry_config)
         self.session = requests.session()
         self.session.mount('http://', retry_adapter)
