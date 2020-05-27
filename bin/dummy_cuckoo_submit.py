@@ -25,7 +25,6 @@
 ###############################################################################
 
 
-from __future__ import print_function
 from random import choice
 from datetime import datetime
 

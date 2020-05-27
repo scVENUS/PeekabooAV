@@ -25,7 +25,6 @@
 ###############################################################################
 
 
-from __future__ import print_function
 from time import sleep
 from sys import stderr
 from datetime import datetime
