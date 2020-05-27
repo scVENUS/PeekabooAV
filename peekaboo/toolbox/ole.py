@@ -32,7 +32,7 @@ from oletools.olevba import detect_autoexec, detect_suspicious
 logger = logging.getLogger(__name__)
 
 
-class Oletools(object):
+class Oletools:
     """ Parent class, defines interface to Oletools. """
     def __init__(self, sample):
         self.sample = sample
@@ -94,7 +94,7 @@ class Oletools(object):
         return report
 
 
-class OletoolsReport(object):
+class OletoolsReport:
     """ Represents a custom Oletools report. """
     def __init__(self, report=None):
         if report is None:

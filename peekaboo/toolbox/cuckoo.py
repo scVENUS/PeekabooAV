@@ -40,7 +40,7 @@ from peekaboo.exceptions import CuckooSubmitFailedException
 logger = logging.getLogger(__name__)
 
 
-class CuckooJob(object):
+class CuckooJob:
     """ Remember sample and submission time of a Cuckoo job. """
     def __init__(self, sample):
         self.__sample = sample
@@ -374,7 +374,7 @@ class Cuckoo:
             self.tracker = None
 
 
-class CuckooReport(object):
+class CuckooReport:
     """ Represents a Cuckoo analysis JSON report. """
     def __init__(self, report=None):
         """

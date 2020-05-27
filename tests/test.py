@@ -79,7 +79,7 @@ else:
         pass
 
 
-class CreatingConfigMixIn(object):
+class CreatingConfigMixIn:
     """ A class for adding config file creation logic to any other class. """
     def create_config(self, content):
         """ Create a configuration file with defined content and pass it to the
@@ -645,7 +645,7 @@ class TestSample(CompatibleTestCase):
         del cls.factory
 
 
-class OletoolsSample(object):  # pylint: disable=too-few-public-methods
+class OletoolsSample:  # pylint: disable=too-few-public-methods
     """ A dummy sample class that only contains a file_path and a dummy report
     registration callback for testing the Oletools analyser. """
     def __init__(self, file_path, report=None):
@@ -704,7 +704,7 @@ class TestOletools(CompatibleTestCase):
         self.assertIs(report, new_report)
 
 
-class FiletoolsSample(object):  # pylint: disable=too-few-public-methods
+class FiletoolsSample:  # pylint: disable=too-few-public-methods
     """ A dummy sample class that only contains a file_path and a dummy report
     registration callback for testing the Filetools analyser. """
     def __init__(self, filename, file_path=None, name_declared=None,
@@ -823,7 +823,7 @@ higher_than: 4.0''')
         RulesetEngine(config, None)
 
 
-class MimetypeSample(object):  # pylint: disable=too-few-public-methods
+class MimetypeSample:  # pylint: disable=too-few-public-methods
     """ A dummy sample class that only contains a set of MIME types for testing
     whitelist and greylist rules with it. """
     def __init__(self, types):
@@ -832,7 +832,7 @@ class MimetypeSample(object):  # pylint: disable=too-few-public-methods
         self.filetools_report = FiletoolsReport(types)
 
 
-class CuckooReportSample(object):  # pylint: disable=too-few-public-methods
+class CuckooReportSample:  # pylint: disable=too-few-public-methods
     """ A dummy sample that only contains a configurable cuckoo report. """
     def __init__(self, report, failed=False):
         self.cuckoo_report = CuckooReport(report)

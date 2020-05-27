@@ -41,7 +41,7 @@ from peekaboo.ruleset import Result
 logger = logging.getLogger(__name__)
 
 
-class EvalBase(object):
+class EvalBase:
     """ Base class of evaluatable objects providing common infrastructure. """
     def __init__(self, tokens):
         """ Just store the tokens for later evaluation. Expects all relevant
@@ -111,7 +111,7 @@ class EvalString(EvalBase):
         return '"%s"' % self.token
 
 
-class OperatorRegex(object):
+class OperatorRegex:
     """ A class implementing operators on regular expressions. """
     def __init__(self, string):
         self.regex = re.compile(string)
@@ -161,7 +161,7 @@ class EvalRegex(EvalBase):
         return "/%s/" % self.token
 
 
-class RegexIterableMixIn(object):
+class RegexIterableMixIn:
     """ Common functionality for lists and sets containing regular expressions
     with different behaviour of membership operators. """
     def __eq__(self, other):
@@ -466,7 +466,7 @@ class EvalLogic(EvalBase):
         return "(%s)" % (" ".join(["%s" % x for x in self.token]))
 
 
-class ExpressionParser(object):
+class ExpressionParser:
     """ Define and run the parser. """
     def __init__(self):
         # speed up infixNotation considerably at the price of some cache memory

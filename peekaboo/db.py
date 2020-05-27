@@ -180,7 +180,7 @@ class AnalysisJournal(Base):
 ##############################################################################
 
 
-class PeekabooDatabase(object):
+class PeekabooDatabase:
     """ Peekaboo's database. """
     def __init__(self, db_url, instance_id=0,
                  stale_in_flight_threshold=15*60,

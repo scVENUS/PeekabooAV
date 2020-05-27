@@ -416,7 +416,7 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
         return True
 
 
-class PeekabooServer(object):
+class PeekabooServer:
     """ A class wrapping the server components of Peekaboo. """
     def __init__(self, sock_file, job_queue, sample_factory, request_queue_size,
                  sock_group=None,

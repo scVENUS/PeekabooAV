@@ -41,7 +41,8 @@ from peekaboo.ruleset import Result
 
 logger = logging.getLogger(__name__)
 
-class SampleFactory(object):
+
+class SampleFactory:
     """ A class for churning out loads of mostly identical sample objects.
     Contains all the global configuration data and object references each
     sample needs and thus serves as a registry of potential API breakage
@@ -65,7 +66,7 @@ class SampleFactory(object):
                       self.processing_info_dir)
 
 
-class Sample(object):
+class Sample:
     """
     This class handles and describes samples to be analysed by Peekaboo.
 

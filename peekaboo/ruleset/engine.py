@@ -35,7 +35,7 @@ from peekaboo.exceptions import PeekabooAnalysisDeferred, \
 logger = logging.getLogger(__name__)
 
 
-class RulesetEngine(object):
+class RulesetEngine:
     """
     Peekaboo's ruleset engine.
 
