@@ -97,6 +97,26 @@ class Cuckoo:
     def __init__(self, job_queue, url="http://localhost:8090", api_token="",
                  poll_interval=5, submit_original_filename=True,
                  max_job_age=900, retries=5, backoff=0.5):
+        """ Initialize the object.
+
+        @param job_queue: The job queue to use from now on
+        @type job_queue: JobQueue object
+        @param url: Where to reach the Cuckoo REST API
+        @type url: string
+        @param api_token: API token to use for authentication
+        @type api_token: string
+        @param poll_interval: How long to wait inbetween job status checks
+        @type poll_interval: int
+        @param submit_original_filename: Whether to provide the original
+                                         filename to Cuckoo to enhance analysis.
+        @type submit_original_filename: bool
+        @param max_job_age: How long to track jobs before declaring them failed.
+        @type max_job_age: int (seconds)
+        @param retries: Number of retries on API requests
+        @type retries: int
+        @param backoff: Backoff factor for urllib3
+        @type backoff: float
+        """
         self.job_queue = job_queue
         self.shutdown_requested = threading.Event()
         self.shutdown_requested.clear()
@@ -255,6 +275,14 @@ class Cuckoo:
             self.job_queue.submit(sample, self.__class__)
 
     def submit(self, sample):
+        """ Submit a sample to Cuckoo.
+
+        @param sample: The sample to submit
+        @type sample: Sample object
+        @raises: CuckooSubmitFailedException if submission failed
+        @returns: cuckoo job id """
+        # no use submitting samples to Cuckoo if we cannot resubmit them into
+        # the job queue for continued processing.
         path = sample.submit_path
         filename = os.path.basename(path)
         # override with the original file name if available

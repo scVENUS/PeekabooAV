@@ -43,7 +43,8 @@ sys.path.append(os.path.dirname(TESTSDIR))
 # pylint: disable=wrong-import-position
 from peekaboo.exceptions import PeekabooConfigException, \
         PeekabooRulesetConfigError
-from peekaboo.config import PeekabooConfig, PeekabooConfigParser
+from peekaboo.config import (
+    PeekabooConfig, PeekabooConfigParser, PeekabooAnalyzerConfig)
 from peekaboo.sample import SampleFactory
 from peekaboo.ruleset import RuleResult, Result
 from peekaboo.ruleset.engine import RulesetEngine
@@ -80,18 +81,6 @@ class CreatingConfigMixIn:
 
 class CreatingConfigParser(PeekabooConfigParser, CreatingConfigMixIn):
     """ A special kind of config parser that creates the configuration file
-    with defined content. """
-    def __init__(self, content=''):
-        self.created_config_file = None
-        self.create_config(content)
-        super().__init__(self.created_config_file)
-
-    def __del__(self):
-        self.remove_config()
-
-
-class CreatingPeekabooConfig(PeekabooConfig, CreatingConfigMixIn):
-    """ A special kind of Peekaboo config that creates the configuration file
     with defined content. """
     def __init__(self, content=''):
         self.created_config_file = None
@@ -156,6 +145,18 @@ nonoctal2: deadbeef'''
                 CreatingConfigParser(config).getoctal('section', nonoctal)
 
 
+class CreatingPeekabooConfig(PeekabooConfig, CreatingConfigMixIn):
+    """ A special kind of Peekaboo config that creates the configuration file
+    with defined content. """
+    def __init__(self, content=''):
+        self.created_config_file = None
+        self.create_config(content)
+        super().__init__(self.created_config_file)
+
+    def __del__(self):
+        self.remove_config()
+
+
 class TestDefaultConfig(unittest.TestCase):
     """ Test a configuration of all defaults. """
     @classmethod
@@ -190,9 +191,6 @@ class TestDefaultConfig(unittest.TestCase):
             self.config.log_format, '%(asctime)s - %(name)s - '
             '(%(threadName)s) - %(levelname)s - %(message)s')
         self.assertEqual(self.config.db_url, 'sqlite:////var/lib/peekaboo/peekaboo.db')
-        self.assertEqual(self.config.cuckoo_url, 'http://127.0.0.1:8090')
-        self.assertEqual(self.config.cuckoo_poll_interval, 5)
-        self.assertEqual(self.config.cuckoo_submit_original_filename, True)
         self.assertEqual(self.config.cluster_instance_id, 0)
         self.assertEqual(self.config.cluster_stale_in_flight_threshold, 15*60)
         self.assertEqual(self.config.cluster_duplicate_check_interval, 60)
@@ -226,11 +224,6 @@ log_format       :    format%%foo1
 [db]
 url              :    sqlite:////peekaboo.db1
 
-[cuckoo]
-url              :    http://api:1111
-poll_interval    :    51
-submit_original_filename : no
-
 [cluster]
 instance_id: 12
 stale_in_flight_threshold: 31
@@ -256,9 +249,6 @@ duplicate_check_interval: 61
         self.assertEqual(self.config.log_level, logging.DEBUG)
         self.assertEqual(self.config.log_format, 'format%foo1')
         self.assertEqual(self.config.db_url, 'sqlite:////peekaboo.db1')
-        self.assertEqual(self.config.cuckoo_url, 'http://api:1111')
-        self.assertEqual(self.config.cuckoo_poll_interval, 51)
-        self.assertEqual(self.config.cuckoo_submit_original_filename, False)
         self.assertEqual(self.config.cluster_instance_id, 12)
         self.assertEqual(self.config.cluster_stale_in_flight_threshold, 31)
         self.assertEqual(self.config.cluster_duplicate_check_interval, 61)
@@ -321,6 +311,55 @@ foo: bar''')
 log_level: FOO''')
 
 
+class CreatingAnalyzerConfig(PeekabooAnalyzerConfig, CreatingConfigMixIn):
+    """ A special kind of analyzer config that creates the configuration file
+    with defined content. """
+    def __init__(self, content=''):
+        self.created_config_file = None
+        self.create_config(content)
+        super().__init__(self.created_config_file)
+
+    def __del__(self):
+        self.remove_config()
+
+
+class TestDefaultAnalyzerConfig(unittest.TestCase):
+    """ Test a configuration of all defaults. """
+    @classmethod
+    def setUpClass(cls):
+        """ Set up common test case resources. """
+        cls.config = CreatingAnalyzerConfig()
+
+    def test_1_default_settings(self):
+        """ Test a configuration with just defaults """
+        self.assertEqual(self.config.cuckoo_url, 'http://127.0.0.1:8090')
+        self.assertEqual(self.config.cuckoo_poll_interval, 5)
+        self.assertEqual(self.config.cuckoo_submit_original_filename, True)
+        self.assertEqual(self.config.cuckoo_maximum_job_age, 900)
+        self.assertEqual(self.config.cuckoo_api_token, '')
+
+
+class TestValidAnalyzerConfig(unittest.TestCase):
+    """ Test a configuration with all values different from the defaults. """
+    @classmethod
+    def setUpClass(cls):
+        """ Set up common test case resources. """
+        cls.config = CreatingAnalyzerConfig('''[cuckoo]
+url: http://api:1111
+poll_interval: 51
+submit_original_filename: no
+maximum_job_age: 900
+api_token: tok''')
+
+    def test_1_read_settings(self):
+        """ Test reading of configuration settings from file """
+        self.assertEqual(self.config.cuckoo_url, 'http://api:1111')
+        self.assertEqual(self.config.cuckoo_poll_interval, 51)
+        self.assertEqual(self.config.cuckoo_submit_original_filename, False)
+        self.assertEqual(self.config.cuckoo_maximum_job_age, 900)
+        self.assertEqual(self.config.cuckoo_api_token, 'tok')
+
+
 class CreatingSampleFactory(SampleFactory):
     """ A special kind of sample factory that creates the sample files with
     defined content in a temporary directory and cleans up after itself. """
@@ -361,7 +400,7 @@ class TestDatabase(unittest.TestCase):
         cls.no_cluster_db = PeekabooDatabase('sqlite:///' + cls.test_db,
                                              instance_id=0)
         cls.factory = CreatingSampleFactory(
-            cuckoo=None, base_dir=cls.conf.sample_base_dir,
+            base_dir=cls.conf.sample_base_dir,
             job_hash_regex=cls.conf.job_hash_regex, keep_mail_data=False,
             processing_info_dir=None)
         cls.sample = cls.factory.create_sample('test.py', 'test')
@@ -507,7 +546,7 @@ class TestSample(unittest.TestCase):
         cls.conf = CreatingPeekabooConfig()
         cls.db_con = PeekabooDatabase('sqlite:///' + cls.test_db)
         cls.factory = CreatingSampleFactory(
-            cuckoo=None, base_dir=cls.conf.sample_base_dir,
+            base_dir=cls.conf.sample_base_dir,
             job_hash_regex=cls.conf.job_hash_regex, keep_mail_data=False,
             processing_info_dir=None)
         part = {
@@ -531,7 +570,7 @@ class TestSample(unittest.TestCase):
                          'Job hash regex is not working')
 
         legacy_factory = CreatingSampleFactory(
-            cuckoo=None, base_dir=self.conf.sample_base_dir,
+            base_dir=self.conf.sample_base_dir,
             job_hash_regex=r'/var/lib/amavis/tmp/([^/]+)/parts.*',
             keep_mail_data=False, processing_info_dir=None)
         sample = legacy_factory.make_sample(path_with_job_hash, 'file')
@@ -774,7 +813,7 @@ class TestRulesetEngine(unittest.TestCase):
         with self.assertRaisesRegex(
                 PeekabooRulesetConfigError,
                 r'No enabled rules found, check ruleset config.'):
-            RulesetEngine(config, None)
+            RulesetEngine(config, None, None, None)
 
     def test_unknown_rule_enabled(self):
         """ Test that correct error is shown if an unknown rule is enabled. """
@@ -783,7 +822,7 @@ rule.1: foo''')
         with self.assertRaisesRegex(
                 PeekabooRulesetConfigError,
                 r'Unknown rule\(s\) enabled: foo'):
-            RulesetEngine(config, None)
+            RulesetEngine(config, None, None, None)
 
     def test_invalid_type(self):
         """ Test that correct error is shown if rule config option has wrong
@@ -797,7 +836,7 @@ higher_than: foo''')
         with self.assertRaisesRegex(
                 ValueError,
                 r"could not convert string to float: '?foo'?"):
-            RulesetEngine(config, None)
+            RulesetEngine(config, None, None, None)
 
     def test_disabled_config(self):
         """ Test that no error is shown if disabled rule has config. """
@@ -808,7 +847,7 @@ rule.1: known
 
 [cuckoo_score]
 higher_than: 4.0''')
-        RulesetEngine(config, None)
+        RulesetEngine(config, None, None, None)
 
 
 class MimetypeSample:  # pylint: disable=too-few-public-methods
@@ -903,7 +942,7 @@ unknown : baz'''
 
         # sampe factory to create samples
         factory = CreatingSampleFactory(
-            cuckoo=None, base_dir=None, job_hash_regex=None,
+            base_dir=None, job_hash_regex=None,
             keep_mail_data=False, processing_info_dir=None)
 
         # test if macro with suspicious keyword
@@ -959,7 +998,7 @@ unknown : baz'''
                           } -> ignore
         '''
         factory = CreatingSampleFactory(
-            cuckoo=None, base_dir="",
+            base_dir="",
             job_hash_regex="", keep_mail_data=False,
             processing_info_dir=None)
 
@@ -986,7 +1025,7 @@ unknown : baz'''
         '''
 
         factory = CreatingSampleFactory(
-            cuckoo=None, base_dir="",
+            base_dir="",
             job_hash_regex="", keep_mail_data=False,
             processing_info_dir=None)
 
@@ -1032,7 +1071,7 @@ unknown : baz'''
         rule = ExpressionRule(CreatingConfigParser(config), None)
 
         factory = SampleFactory(
-            cuckoo=None, base_dir=None, job_hash_regex=None,
+            base_dir=None, job_hash_regex=None,
             keep_mail_data=False, processing_info_dir=None)
 
         sample = factory.make_sample('file.1')
@@ -1102,7 +1141,7 @@ unknown : baz'''
         cuckooreport = CuckooReport(report)
 
         factory = SampleFactory(
-            cuckoo=None, base_dir=None, job_hash_regex=None,
+            base_dir=None, job_hash_regex=None,
             keep_mail_data=False, processing_info_dir=None)
 
         sample = factory.make_sample('')
@@ -1120,7 +1159,7 @@ unknown : baz'''
         '''
 
         factory = SampleFactory(
-            cuckoo=None, base_dir=None, job_hash_regex=None,
+            base_dir=None, job_hash_regex=None,
             keep_mail_data=False, processing_info_dir=None)
 
         part = {
@@ -1151,7 +1190,7 @@ unknown : baz'''
         '''
 
         factory = SampleFactory(
-            cuckoo=None, base_dir=None, job_hash_regex=None,
+            base_dir=None, job_hash_regex=None,
             keep_mail_data=False, processing_info_dir=None)
 
         part = {
@@ -1196,7 +1235,7 @@ unknown : baz'''
                                       instance_id=1,
                                       stale_in_flight_threshold=10)
         factory = CreatingSampleFactory(
-            cuckoo=None, base_dir=conf.sample_base_dir,
+            base_dir=conf.sample_base_dir,
             job_hash_regex=conf.job_hash_regex, keep_mail_data=False,
             processing_info_dir=None)
 
@@ -1244,7 +1283,7 @@ unknown : baz'''
         '''
 
         factory = CreatingSampleFactory(
-            cuckoo=None, base_dir=None, job_hash_regex=None,
+            base_dir=None, job_hash_regex=None,
             keep_mail_data=False, processing_info_dir=None)
 
         report = {
@@ -1270,7 +1309,7 @@ unknown : baz'''
         '''
 
         factory = CreatingSampleFactory(
-            cuckoo=None, base_dir=None, job_hash_regex=None,
+            base_dir=None, job_hash_regex=None,
             keep_mail_data=False, processing_info_dir=None)
 
         path = os.path.join(self.office_data_dir, 'empty.doc')
@@ -1332,7 +1371,7 @@ unknown : baz'''
         '''
 
         factory = CreatingSampleFactory(
-            cuckoo=None, base_dir=None, job_hash_regex=None,
+            base_dir=None, job_hash_regex=None,
             keep_mail_data=False, processing_info_dir=None)
         sample = factory.make_sample(os.path.join(
             self.office_data_dir, 'empty.doc'))
@@ -1663,6 +1702,8 @@ def main():
     suite.addTest(unittest.makeSuite(TestDefaultConfig))
     suite.addTest(unittest.makeSuite(TestValidConfig))
     suite.addTest(unittest.makeSuite(TestInvalidConfig))
+    suite.addTest(unittest.makeSuite(TestDefaultAnalyzerConfig))
+    suite.addTest(unittest.makeSuite(TestValidAnalyzerConfig))
     suite.addTest(unittest.makeSuite(TestSample))
     suite.addTest(unittest.makeSuite(TestDatabase))
     suite.addTest(unittest.makeSuite(TestOletools))

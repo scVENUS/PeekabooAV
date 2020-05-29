@@ -28,25 +28,41 @@ from threading import Thread, Event, Lock
 from queue import Queue, Empty
 from time import sleep
 from peekaboo.ruleset import Result, RuleResult
-from peekaboo.exceptions import PeekabooAnalysisDeferred, \
-    PeekabooDatabaseError
-
+from peekaboo.ruleset.engine import RulesetEngine
+from peekaboo.exceptions import (
+    PeekabooAnalysisDeferred, PeekabooDatabaseError, PeekabooConfigException,
+    PeekabooRulesetConfigError)
 
 logger = logging.getLogger(__name__)
 
 
 class JobQueue:
     """ Peekaboo's queuing system. """
-    def __init__(self, ruleset_engine, db_con, worker_count=4,
+    def __init__(self, ruleset_config, db_con, analyzer_config, worker_count=4,
                  queue_timeout=300, shutdown_timeout=60,
                  cluster_duplicate_check_interval=5):
         """ Initialise job queue by creating n Peekaboo worker threads to
         process samples.
 
+        @param ruleset_config: the ruleset configuration
+        @type ruleset_config: PeekabooConfigParser
         @param db_con: Database connection object for cluster instance
                        coordination, i.e. saving sample info.
-        @param worker_count: The amount of worker threads to create. Defaults to 4.
-        @param queue_timeout: How long to block before considering queueing failed.
+        @type db_con: PeekabooDatabase
+        @param worker_count: The amount of worker threads to create. Defaults
+                             to 4.
+        @type worker_count: int
+        @param queue_timeout: How long to block before considering queueing
+                              failed.
+        @type queue_timeout: int
+        @param shutdown_timeout: How long to block before considering shutdown
+                                 failed.
+        @type shutdown_timeout: int
+        @param cluster_duplicate_check_interval: How long to wait inbetween
+                                                 checks for stale cluster
+                                                 duplicate locks.
+        @type cluster_duplicate_check_interval: int
+        @raises PeekabooConfigException: if an error occured in configuration.
         """
         self.db_con = db_con
         self.jobs = Queue()
@@ -67,9 +83,22 @@ class JobQueue:
         # the other instances' cached results from the database
         self.cluster_duplicates = {}
 
+        # create a single ruleset engine for all workers, instantiates all the
+        # rules based on the ruleset configuration, may start up long-lived
+        # analyzer instances which are shared as well, is otherwise stateless to
+        # allow concurrent use by multiple worker threads
+        try:
+            self.ruleset_engine = RulesetEngine(
+                ruleset_config, self, db_con, analyzer_config)
+        except (KeyError, ValueError, PeekabooConfigException) as error:
+            raise PeekabooConfigException(
+                'Ruleset configuration error: %s' % error)
+        except PeekabooRulesetConfigError as error:
+            raise PeekabooConfigException(error)
+
         for i in range(0, self.worker_count):
             logger.debug("Create Worker %d" % i)
-            worker = Worker(i, self, ruleset_engine, db_con)
+            worker = Worker(i, self, self.ruleset_engine, db_con)
             self.workers.append(worker)
             worker.start()
 
@@ -275,6 +304,8 @@ class JobQueue:
         """ Trigger a shutdown of the queue including the workers. """
         logger.info("Queue shutdown requested. Signalling workers.")
 
+        self.ruleset_engine.shut_down()
+
         if self.cluster_duplicate_handler:
             self.cluster_duplicate_handler.shut_down()
 
@@ -317,6 +348,7 @@ class JobQueue:
 
         if self.cluster_duplicate_handler:
             self.cluster_duplicate_handler.join()
+        self.ruleset_engine.close_down()
 
 
 class ClusterDuplicateHandler(Thread):

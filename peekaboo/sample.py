@@ -47,11 +47,8 @@ class SampleFactory:
     Contains all the global configuration data and object references each
     sample needs and thus serves as a registry of potential API breakage
     perhaps deserving looking into. """
-    def __init__(self, cuckoo, base_dir, job_hash_regex,
+    def __init__(self, base_dir, job_hash_regex,
                  keep_mail_data, processing_info_dir):
-        # object references for interaction
-        self.cuckoo = cuckoo
-
         # configuration
         self.base_dir = base_dir
         self.job_hash_regex = job_hash_regex
@@ -61,7 +58,7 @@ class SampleFactory:
     def make_sample(self, file_path, status_change=None, metainfo=None):
         """ Create a new Sample object based on the factory's configured
         defaults and variable parameters. """
-        return Sample(file_path, self.cuckoo, status_change, metainfo,
+        return Sample(file_path, status_change, metainfo,
                       self.base_dir, self.job_hash_regex, self.keep_mail_data,
                       self.processing_info_dir)
 
@@ -74,14 +71,11 @@ class Sample:
     These are accessible as properties. Most properties determine their value
     on first access, especially if that determination is somewhat expensive
     such as the file checksum.
-
-    The data structure works together with Cuckoo to run behavioral analysis.
     """
-    def __init__(self, file_path, cuckoo=None, status_change=None,
+    def __init__(self, file_path, status_change=None,
                  metainfo=None, base_dir=None, job_hash_regex=None,
                  keep_mail_data=False, processing_info_dir=None):
         self.__path = file_path
-        self.__cuckoo = cuckoo
         self.__wd = None
         self.__filename = os.path.basename(self.__path)
         # A symlink that points to the actual file named
@@ -457,19 +451,6 @@ class Sample:
     def submit_path(self):
         """ Returns the path to use for submission to Cuckoo """
         return self.__submit_path
-
-    def submit_to_cuckoo(self):
-        """ Submit the sample to Cuckoo for analysis and record job id.
-
-        @raises: CuckooAnalsisFailedException if submission failed
-        @returns: cuckoo job id
-        """
-        logger.debug("Submitting %s to Cuckoo", self.__submit_path)
-        cuckoo_job_id = self.__cuckoo.submit(self)
-        self.__internal_report.append(
-            _('Sample %s successfully submitted to Cuckoo as job %d')
-            % (self, cuckoo_job_id))
-        return cuckoo_job_id
 
     def mark_cuckoo_failure(self):
         """ Records whether Cuckoo analysis failed. """

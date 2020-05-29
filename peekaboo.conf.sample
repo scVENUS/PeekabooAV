@@ -32,6 +32,8 @@
 [ruleset]
 #config           :    /opt/peekaboo/etc/ruleset.conf
 
+[analyzers]
+#config: /opt/peekaboo/etc/analyzers.conf
 
 #
 # Logging configuration
@@ -61,32 +63,6 @@
 # own logging. Can be considered another set of debug logging even beyond
 # Peekaboo's DEBUG log level.
 #log_level        :    WARNING
-
-#
-# Cuckoo specific settings
-#
-[cuckoo]
-#url              :    http://127.0.0.1:8090
-#poll_interval    :    5
-
-# Submit samples with their original filenames if available. Enhances
-# authenticity of analysis environment but also leaks original filenames into
-# Cuckoo's database.
-#submit_original_filename : yes
-
-# Specify how long to track running Cuckoo jobs before giving up on them. This
-# does not actively cancel jobs. It's rather meant to handle cases where jobs
-# have for some reason been dropped by or got stuck within Cuckoo. This value
-# is unrelated to how long our client is willing to wait for a result because
-# even if it gives up on us we would normally want to learn and cache the job
-# result because the analysis was expensive and the sample might be presented
-# to us again.
-#maximum_job_age : 900
-
-# From version 2.0.7 cuckoo API has authentication support.
-# New installations create a bearer token by default and require it but upgraded
-# installations don't automatically get one.
-#api_token        :    <empty>
 
 [cluster]
 # if multiple instances are to run in parallel and avoid concurrent analysis of

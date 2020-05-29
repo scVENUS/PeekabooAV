@@ -67,8 +67,28 @@ class EvalBase:
         implications. """
         return False
 
+    @property
+    def identifiers(self):
+        """ Return the set of identifiers referenced by this and child
+        elements. """
+        return set()
+
     def __str__(self):
         return "%s" % self.token
+
+
+class EvalIterable(EvalBase):
+    """ Add identifier determination logic to a class that contians a list of
+    elements. """
+    @property
+    def identifiers(self):
+        """ Return the set of identifiers referenced by this and child
+        elements. """
+        identifiers = set()
+        for val in self.value:
+            if isinstance(val, EvalBase):
+                identifiers |= val.identifiers
+        return identifiers
 
 
 class EvalBoolean(EvalBase):
@@ -202,7 +222,7 @@ class RegexSet(RegexIterableMixIn, set):
     membership operators. """
 
 
-class EvalList(EvalBase):
+class EvalList(EvalIterable):
     """ Class to evaluate a parsed list """
     def eval(self, context):
         logger.debug("List: %s", self.value)
@@ -220,7 +240,8 @@ class EvalList(EvalBase):
     def __str__(self):
         return "[%s]" % (", ".join(["%s" % x for x in self.token]))
 
-class EvalSet(EvalBase):
+
+class EvalSet(EvalIterable):
     """ Class to evaluate a parsed set """
     def eval(self, context):
         logger.debug("Set: %s", self.value)
@@ -266,6 +287,10 @@ class EvalIdentifier(EvalBase):
             return variables[self.value]
         except KeyError as error:
             raise IdentifierMissingException(self.value)
+
+    @property
+    def identifiers(self):
+        return set([self.value])
 
 
 class EvalResult(EvalBase):
@@ -330,7 +355,7 @@ def operator_operands(tokenlist):
             break
 
 
-class EvalArith(EvalBase):
+class EvalArith(EvalIterable):
     """ Class to evaluate typical arithmetic and bitwise operations like
     addition, multiplication, division and shifts expressions. Operator
     precedence is handled by the order in which they're evaluated by the
@@ -389,7 +414,7 @@ class EvalArith(EvalBase):
         return "(%s)" % (" ".join(["%s" % x for x in self.token]))
 
 
-class EvalLogic(EvalBase):
+class EvalLogic(EvalIterable):
     """ Class to evaluate comparison expressions """
     def __init__(self, tokens):
         super().__init__(tokens)

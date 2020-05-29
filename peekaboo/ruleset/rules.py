@@ -48,11 +48,20 @@ class Rule:
     such as resources that can be used by the rules (configuration, database
     connection) or helper functions. """
     rule_name = 'unimplemented'
+    uses_cuckoo = False
 
     def __init__(self, config, db_con):
-        """ Initialize common configuration and resources """
-        self.db_con = db_con
+        """ Initialize common configuration and resources.
+
+        @param config: the ruleset configuration
+        @type config: PeekabooConfigParser
+        @param db_con: the database connection for storing or looking up data
+        @type db_con: PeekabooDatabase
+        """
         self.config = config
+        self.db_con = db_con
+
+        self.cuckoo = None
 
         # initialise and validate configuration
         self.config_options = {}
@@ -112,6 +121,15 @@ class Rule:
         return self.config.get_by_type(
             self.rule_name, option, fallback=default, option_type=option_type)
 
+    def set_cuckoo_job_tracker(self, cuckoo):
+        """ Set the Cuckoo job tracker to use for submitting samples to Cuckoo
+        as well as tracking status.
+
+        @param cuckoo: the Cuckoo job tracker to use
+        @type cuckoo: Cuckoo
+        """
+        self.cuckoo = cuckoo
+
     def get_cuckoo_report(self, sample):
         """ Get the samples cuckoo_report or submit the sample for analysis by
             Cuckoo.
@@ -125,8 +143,9 @@ class Rule:
         if report is not None:
             return report
 
+        logger.debug("Submitting %s to Cuckoo", sample.submit_path)
         try:
-            job_id = sample.submit_to_cuckoo()
+            job_id = self.cuckoo.submit(sample)
         except CuckooSubmitFailedException as failed:
             logger.error("Submit to Cuckoo failed: %s", failed)
             return None
@@ -331,6 +350,8 @@ class OfficeMacroWithSuspiciousKeyword(OleRule):
 
 class CuckooRule(Rule):
     """ A common base class for rules that evaluate the Cuckoo report. """
+    uses_cuckoo = True
+
     def evaluate(self, sample):
         """ If a report is present for the sample in question we call method
         evaluate_report() implemented by subclasses to evaluate it for
@@ -573,6 +594,24 @@ class ExpressionRule(Rule):
                     "Invalid expression, %s: %s" % (missing, expr))
 
             self.rules.append(rule)
+
+    def uses_identifier(self, identifier):
+        """ Determine if any of the expressions uses a particular identifier.
+
+        @param identifier: the identifier to look for
+        @type identifier: string """
+        for rule in self.rules:
+            if identifier in rule.identifiers:
+                # this rule may request the cuckoo report
+                return True
+
+        return False
+
+    @property
+    def uses_cuckoo(self):
+        """ Tells if any expression uses the cuckoo report. Overrides base
+        class variable with a dynamic determination. """
+        return self.uses_identifier("cuckooreport")
 
     def evaluate(self, sample):
         """ Match what rules report against our known result status names. """
