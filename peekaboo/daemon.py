@@ -38,15 +38,14 @@ from argparse import ArgumentParser
 from sdnotify import SystemdNotifier
 from sqlalchemy.exc import SQLAlchemyError
 from peekaboo import PEEKABOO_OWL, __version__
-from peekaboo.config import PeekabooConfig, PeekabooConfigParser
+from peekaboo.config import (
+    PeekabooConfig, PeekabooConfigParser, PeekabooAnalyzerConfig)
 from peekaboo.db import PeekabooDatabase
 from peekaboo.queuing import JobQueue
-from peekaboo.ruleset.engine import RulesetEngine
 from peekaboo.sample import SampleFactory
 from peekaboo.server import PeekabooServer
 from peekaboo.exceptions import PeekabooDatabaseError, \
         PeekabooConfigException, PeekabooRulesetConfigError
-from peekaboo.toolbox.cuckoo import Cuckoo
 
 
 logger = logging.getLogger(__name__)
@@ -333,49 +332,26 @@ def run():
                            "interval to %d seconds.",
                            cldup_check_interval)
 
-    # read in the ruleset configuration
+    sig_handler = SignalHandler()
+
+    # read in the analyzer and ruleset configuration and start the job queue
     try:
         ruleset_config = PeekabooConfigParser(config.ruleset_config)
+        analyzer_config = PeekabooAnalyzerConfig(config.analyzer_config)
+        job_queue = JobQueue(
+            worker_count=config.worker_count, ruleset_config=ruleset_config,
+            db_con=db_con, analyzer_config=analyzer_config,
+            cluster_duplicate_check_interval=cldup_check_interval)
     except PeekabooConfigException as error:
         logging.critical(error)
         sys.exit(1)
-
-    # create a single ruleset engine for all workers, instantiates all the
-    # rules based on the ruleset configuration, is otherwise stateless to avoid
-    # concurrent use by multiple worker threads
-    try:
-        engine = RulesetEngine(ruleset_config, db_con)
-    except (KeyError, ValueError, PeekabooConfigException) as error:
-        logging.critical('Ruleset configuration error: %s', error)
-        sys.exit(1)
-    except PeekabooRulesetConfigError as error:
-        logging.critical(error)
-        sys.exit(1)
-
-    sig_handler = SignalHandler()
-    job_queue = JobQueue(
-        worker_count=config.worker_count, ruleset_engine=engine,
-        db_con=db_con,
-        cluster_duplicate_check_interval=cldup_check_interval)
     sig_handler.register_listener(job_queue)
 
-    cuckoo = Cuckoo(job_queue, config.cuckoo_url,
-                    config.cuckoo_api_token,
-                    config.cuckoo_poll_interval,
-                    config.cuckoo_submit_original_filename,
-                    config.cuckoo_maximum_job_age)
-    sig_handler.register_listener(cuckoo)
-
-    if not cuckoo.start_tracker():
-        job_queue.shut_down()
-        job_queue.close_down()
-        sys.exit(1)
-
     # Factory producing almost identical samples providing them with global
-    # config values and references to other objects they need, such as cuckoo,
-    # database connection and connection map.
+    # config values and references to other objects they need, such as database
+    # connection and connection map.
     sample_factory = SampleFactory(
-        cuckoo, config.sample_base_dir, config.job_hash_regex,
+        config.sample_base_dir, config.job_hash_regex,
         config.keep_mail_data, config.processing_info_dir)
 
     # We only want to accept 2 * worker_count connections.
@@ -388,9 +364,7 @@ def run():
             sock_mode=config.sock_mode)
     except Exception as error:
         logger.critical('Failed to start Peekaboo Server: %s', error)
-        cuckoo.shut_down()
         job_queue.shut_down()
-        cuckoo.close_down()
         job_queue.close_down()
         sys.exit(1)
 
@@ -401,11 +375,9 @@ def run():
     # trigger shutdowns of other components (if not already ongoing triggered
     # by e.g. the signal handler), server will already be shut down at this
     # point signaled by the fact that serve() above returned
-    cuckoo.shut_down()
     job_queue.shut_down()
 
     # close down components after they've shut down
-    cuckoo.close_down()
     job_queue.close_down()
 
     # do a final cleanup pass through the database

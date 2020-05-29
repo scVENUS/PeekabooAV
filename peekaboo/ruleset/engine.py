@@ -27,6 +27,7 @@
 import logging
 from peekaboo.ruleset import Result, RuleResult
 from peekaboo.ruleset.rules import *
+from peekaboo.toolbox.cuckoo import Cuckoo
 from peekaboo.toolbox.peekabooyar import ContainsPeekabooYarRule
 from peekaboo.exceptions import PeekabooAnalysisDeferred, \
         PeekabooConfigException, PeekabooRulesetConfigError
@@ -57,13 +58,20 @@ class RulesetEngine:
         FinalRule
     ]
 
-    def __init__(self, config, db_con):
+    def __init__(self, config, job_queue, db_con, analyzer_config):
         """ Initialise the engine, validate its and the individual rules'
         configuration.
 
         @param config: ruleset configuration parser
+        @param config: PeekabooConfigParser
+        @param job_queue: the job queue to optionally submit
+                          new/changed/updated samples to
+        @type job_queue: JobQueue
         @param db_con: database connection handed to rules (not used by engine
                        itself)
+        @type db_con: PeekabooDatabase
+        @param analyzer_config: analyzer configuration
+        @type analyzer_config: PeekabooAnalyzerConfig
         @raises PeekabooRulesetConfigError: if configuration errors are found
         """
         # create a lookup table from rule name to class
@@ -98,12 +106,35 @@ class RulesetEngine:
         known_sections += known_rule_names
         config.check_sections(known_sections)
 
+        self.cuckoo = None
+
         # instantiate enabled rules and have them check their configuration,
         # user-defined rule order is preserved in enabled_rules and through
         # ordered append() in self.rules
         self.rules = []
-        for rule in enabled_rules:
-            rule = rule_classes[rule](config, db_con)
+        for rule_name in enabled_rules:
+            rule = rule_classes[rule_name](config, db_con)
+
+            # check if the rule requires any common, long lived logic and
+            # instantiate now
+            if rule.uses_cuckoo:
+                if self.cuckoo is None:
+                    logger.debug(
+                        "Rule %s uses Cuckoo. Starting job tracker.", rule_name)
+
+                    self.cuckoo = Cuckoo(
+                        job_queue, analyzer_config.cuckoo_url,
+                        analyzer_config.cuckoo_api_token,
+                        analyzer_config.cuckoo_poll_interval,
+                        analyzer_config.cuckoo_submit_original_filename,
+                        analyzer_config.cuckoo_maximum_job_age)
+
+                    if not self.cuckoo.start_tracker():
+                        raise PeekabooRulesetConfigError(
+                            "Failure to initialize Cuckoo job tracker")
+
+                rule.set_cuckoo_job_tracker(self.cuckoo)
+
             self.rules.append(rule)
 
     def run(self, sample):
@@ -137,3 +168,14 @@ class RulesetEngine:
                 return
 
         logger.info("Rules evaluated")
+
+    def shut_down(self):
+        """ Initiate asynchronous shutdown of the ruleset engine and dependent
+        logic such as job trackers. """
+        if self.cuckoo is not None:
+            self.cuckoo.shut_down()
+
+    def close_down(self):
+        """ Finalize ruleset engine shutdown synchronously. """
+        if self.cuckoo is not None:
+            self.cuckoo.close_down()

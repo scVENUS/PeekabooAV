@@ -232,6 +232,42 @@ class PeekabooConfigParser( # pylint: disable=too-many-ancestors
 
         return getter[option_type](section, option, fallback=fallback)
 
+    def set_known_options(self, config_options):
+        """ Set a number of known config options as member variables. Also
+        checks for unknown options being present.
+
+        @param config_options: the mapping of config option to section and
+                               option name
+        @type config_options: Dict of two-item-tuples
+                              (config_option: [section, option])
+        @raises PeekabooConfigException: if any unknown sections or options are
+                                         found. """
+        settings = vars(self)
+        check_options = {}
+        for (setting, config_names) in config_options.items():
+            section = config_names[0]
+            option = config_names[1]
+
+            # remember for later checking for unknown options
+            if section not in check_options:
+                check_options[section] = []
+            check_options[section].append(option)
+
+            # maybe force the option's value type
+            option_type = None
+            if len(config_names) == 3:
+                option_type = config_names[2]
+
+            # e.g.:
+            # self.log_format = self.get('logging', 'log_format',
+            #                            self.log_format)
+            settings[setting] = self.get_by_type(
+                section, option, fallback=settings[setting],
+                option_type=option_type)
+
+        # now check for unknown options
+        self.check_config(check_options)
+
     def check_config(self, known_options):
         """ Check this configuration against a list of known options. Raise an
         exception if any unknown options are found.
@@ -321,11 +357,7 @@ class PeekabooConfig(PeekabooConfigParser):
         self.db_log_level = logging.WARNING
         self.config_file = '/opt/peekaboo/etc/peekaboo.conf'
         self.ruleset_config = '/opt/peekaboo/etc/ruleset.conf'
-        self.cuckoo_url = 'http://127.0.0.1:8090'
-        self.cuckoo_api_token = ''
-        self.cuckoo_poll_interval = 5
-        self.cuckoo_submit_original_filename = True
-        self.cuckoo_maximum_job_age = 15*60
+        self.analyzer_config = '/opt/peekaboo/etc/analyzers.conf'
         self.cluster_instance_id = 0
         self.cluster_stale_in_flight_threshold = 15*60
         self.cluster_duplicate_check_interval = 60
@@ -352,12 +384,7 @@ class PeekabooConfig(PeekabooConfigParser):
             'db_url': ['db', 'url'],
             'db_log_level': ['db', 'log_level', self.LOG_LEVEL],
             'ruleset_config': ['ruleset', 'config'],
-            'cuckoo_url': ['cuckoo', 'url'],
-            'cuckoo_api_token': ['cuckoo', 'api_token'],
-            'cuckoo_poll_interval': ['cuckoo', 'poll_interval'],
-            'cuckoo_submit_original_filename': [
-                'cuckoo', 'submit_original_filename'],
-            'cuckoo_maximum_job_age': ['cuckoo', 'maximum_job_age'],
+            'analyzer_config': ['analyzers', 'config'],
             'cluster_instance_id': ['cluster', 'instance_id'],
             'cluster_stale_in_flight_threshold': ['cluster', 'stale_in_flight_threshold'],
             'cluster_duplicate_check_interval': ['cluster', 'duplicate_check_interval'],
@@ -381,31 +408,7 @@ class PeekabooConfig(PeekabooConfigParser):
         super().__init__(self.config_file)
 
         # overwrite above defaults in our member variables via indirect access
-        settings = vars(self)
-        check_options = {}
-        for (setting, config_names) in config_options.items():
-            section = config_names[0]
-            option = config_names[1]
-
-            # remember for later checking for unknown options
-            if section not in check_options:
-                check_options[section] = []
-            check_options[section].append(option)
-
-            # maybe force the option's value type
-            option_type = None
-            if len(config_names) == 3:
-                option_type = config_names[2]
-
-            # e.g.:
-            # self.log_format = self.get('logging', 'log_format',
-            #                            self.log_format)
-            settings[setting] = self.get_by_type(
-                section, option, fallback=settings[setting],
-                option_type=option_type)
-
-        # now check for unknown options
-        self.check_config(check_options)
+        self.set_known_options(config_options)
 
         # Update logging with what we just parsed from the config
         self.setup_logging()
@@ -430,6 +433,45 @@ class PeekabooConfig(PeekabooConfigParser):
         to_console_log_handler.setFormatter(log_formatter)
         _logger.addHandler(to_console_log_handler)
         _logger.setLevel(self.log_level)
+
+    def __str__(self):
+        settings = {}
+        for (option, value) in vars(self).items():
+            if not option.startswith('_'):
+                settings[option] = value
+
+        return '<PeekabooConfig(%s)>' % settings
+
+    __repr__ = __str__
+
+
+class PeekabooAnalyzerConfig(PeekabooConfigParser):
+    """ This class represents the analyzer configuration. """
+    def __init__(self, config_file=None):
+        """ Initialise the configuration with defaults, overwrite with command
+        line options and finally read the configuration file. """
+        self.cuckoo_url = 'http://127.0.0.1:8090'
+        self.cuckoo_api_token = ''
+        self.cuckoo_poll_interval = 5
+        self.cuckoo_submit_original_filename = True
+        self.cuckoo_maximum_job_age = 15*60
+
+        config_options = {
+            'cuckoo_url': ['cuckoo', 'url'],
+            'cuckoo_api_token': ['cuckoo', 'api_token'],
+            'cuckoo_poll_interval': ['cuckoo', 'poll_interval'],
+            'cuckoo_submit_original_filename': [
+                'cuckoo', 'submit_original_filename'],
+            'cuckoo_maximum_job_age': ['cuckoo', 'maximum_job_age'],
+        }
+
+        # read configuration file. Note that we require a configuration file
+        # here. We may change that if we decide that we want to allow the user
+        # to run us with the above defaults only.
+        super().__init__(config_file)
+
+        # overwrite above defaults in our member variables via indirect access
+        self.set_known_options(config_options)
 
     def __str__(self):
         settings = {}
