@@ -44,8 +44,8 @@ from peekaboo.db import PeekabooDatabase
 from peekaboo.queuing import JobQueue
 from peekaboo.sample import SampleFactory
 from peekaboo.server import PeekabooServer
-from peekaboo.exceptions import PeekabooDatabaseError, \
-        PeekabooConfigException, PeekabooRulesetConfigError
+from peekaboo.exceptions import (
+    PeekabooDatabaseError, PeekabooConfigException)
 
 
 logger = logging.getLogger(__name__)
@@ -67,10 +67,10 @@ class SignalHandler:
         """
         self.listeners.append(listener)
 
-    def signal_handler(self, sig, frame):
+    def signal_handler(self, sig, _):
         """ catch signal and call appropriate methods in registered listener
         classes """
-        if sig == signal.SIGINT or sig == signal.SIGTERM:
+        if sig in [signal.SIGINT, signal.SIGTERM]:
             logger.debug("SIGINT/TERM")
 
             # these should take serious care about being called across threads
