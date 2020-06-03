@@ -545,16 +545,16 @@ class ExpressionRule(Rule):
         expression_logger = logging.getLogger('peekaboo.ruleset.expressions')
         expression_logger.setLevel(log_level)
 
-        self.expressions = self.get_config_value('expression', [])
-        if not self.expressions:
+        raw_expressions = self.get_config_value('expression', [])
+        if not raw_expressions:
             raise PeekabooRulesetConfigError(
                 "List of expressions empty, check %s rule config."
                 % self.rule_name)
 
-        self.rules = []
+        self.expressions = []
         parser = ExpressionParser()
 
-        # context of dummy objects to test rules against
+        # context of dummy objects to test expressions against
         context = {
             'variables': {
                 'sample': Sample("dummy"),
@@ -565,22 +565,23 @@ class ExpressionRule(Rule):
             }
         }
 
-        for expr in self.expressions:
+        for raw_expression in raw_expressions:
             try:
-                rule = parser.parse(expr)
-                logger.debug("Expression from config file: %s", expr)
-                logger.debug("Expression parsed: %s", rule)
+                parsed_expression = parser.parse(raw_expression)
+                logger.debug("Expression from config file: %s", raw_expression)
+                logger.debug("Expression parsed: %s", parsed_expression)
             except SyntaxError as error:
                 raise PeekabooRulesetConfigError(error)
 
-            if not rule.is_implication():
+            if not parsed_expression.is_implication():
                 raise PeekabooRulesetConfigError(
-                    "Malformed expression, missing implication: %s" % expr)
+                    "Malformed expression, missing implication: %s" %
+                    raw_expression)
 
             # run expression against dummy objects to find out if it's
             # attempting anything illegal
             try:
-                rule.eval(context=context)
+                parsed_expression.eval(context=context)
             except IdentifierMissingException as missing:
                 # our dummy context provides everything we would provide at
                 # runtime as well, so any missing identifier is an error at
@@ -588,21 +589,21 @@ class ExpressionRule(Rule):
                 identifier = missing.name
                 raise PeekabooRulesetConfigError(
                     "Invalid expression, unknown identifier %s: %s" % (
-                        identifier, expr))
+                        identifier, raw_expression))
             except AttributeError as missing:
                 raise PeekabooRulesetConfigError(
-                    "Invalid expression, %s: %s" % (missing, expr))
+                    "Invalid expression, %s: %s" % (missing, raw_expression))
 
-            self.rules.append(rule)
+            self.expressions.append(parsed_expression)
 
     def uses_identifier(self, identifier):
         """ Determine if any of the expressions uses a particular identifier.
 
         @param identifier: the identifier to look for
         @type identifier: string """
-        for rule in self.rules:
-            if identifier in rule.identifiers:
-                # this rule may request the cuckoo report
+        for expression in self.expressions:
+            if identifier in expression.identifiers:
+                # this expression may request the cuckoo report
                 return True
 
         return False
@@ -615,14 +616,15 @@ class ExpressionRule(Rule):
 
     def evaluate(self, sample):
         """ Match what rules report against our known result status names. """
-        for i, rule in enumerate(self.rules):
+        for ruleno, expression in enumerate(self.expressions):
             result = None
             context = {'variables': {'sample': sample}}
 
-            # retry until rule evaluation doesn't throw exceptions any more
+            # retry until expression evaluation doesn't throw exceptions any
+            # more
             while True:
                 try:
-                    result = rule.eval(context=context)
+                    result = expression.eval(context=context)
                     break
                 except IdentifierMissingException as missing:
                     identifier = missing.name
@@ -664,13 +666,13 @@ class ExpressionRule(Rule):
             # missing
             if not isinstance(result, Result):
                 logger.warning("Expression %d is returning an invalid result, "
-                               "failing evaluation: %s", i, rule)
+                               "failing evaluation: %s", ruleno, expression)
                 result = Result.failed
 
             return self.result(
                 result,
                 _("The expression (%d) classified the sample as %s")
-                % (i, result),
+                % (ruleno, result),
                 False)
 
         return self.result(
