@@ -275,10 +275,6 @@ class EvalIdentifier(EvalBase):
     def eval(self, context):
         logger.debug("Identifier: %s", self.value)
 
-        # return the literal identifier name if dereferencing it is disabled
-        if isinstance(context, dict) and not context.get('deref', True):
-            return self.value
-
         # potentially raise an actual KeyError here to not mask it as missing
         # identifier
         variables = context['variables']
@@ -287,6 +283,11 @@ class EvalIdentifier(EvalBase):
             return variables[self.value]
         except KeyError as error:
             raise IdentifierMissingException(self.value)
+
+    @property
+    def name(self):
+        """ Return the name of this identifier. """
+        return self.value
 
     @property
     def identifiers(self):
@@ -386,13 +387,10 @@ class EvalArith(EvalIterable):
             elif op == '|':
                 ret |= val.eval(context)
             elif op == '.':
-                # expect op to be an identifier, have it return its name by
-                # setting deref to False and then resolve that property in
-                # current ret by calling getattr() on it
-                property_context = context.copy()
-                property_context['deref'] = False
-                property_name = val.eval(property_context)
-                ret = getattr(ret, property_name)
+                # expect val to be an identifier, have it return its name and
+                # then resolve that property in current ret by calling
+                # getattr() on it
+                ret = getattr(ret, val.name)
             elif op == "->":
                 if ret:
                     ret = val.eval(context)
