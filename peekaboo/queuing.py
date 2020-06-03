@@ -24,9 +24,10 @@
 
 
 import logging
-from threading import Thread, Event, Lock
-from queue import Queue, Empty
-from time import sleep
+import queue
+import threading
+import time
+
 from peekaboo.ruleset import Result, RuleResult
 from peekaboo.ruleset.engine import RulesetEngine
 from peekaboo.exceptions import (
@@ -65,7 +66,7 @@ class JobQueue:
         @raises PeekabooConfigException: if an error occured in configuration.
         """
         self.db_con = db_con
-        self.jobs = Queue()
+        self.jobs = queue.Queue()
         self.workers = []
         self.worker_count = worker_count
         self.queue_timeout = queue_timeout
@@ -76,7 +77,7 @@ class JobQueue:
         # simultaneously. Once one analysis has finished, we can submit the
         # others and the ruleset will notice that we already know the result.
         self.duplicates = {}
-        self.duplock = Lock()
+        self.duplock = threading.Lock()
 
         # keep a similar backlog of samples currently being processed by
         # other instances so we can regularly try to resubmit them and re-use
@@ -339,7 +340,7 @@ class JobQueue:
             if len(self.workers) == 0:
                 break
 
-            sleep(interval)
+            time.sleep(interval)
             logger.debug('%d: %d workers still running', attempt,
                          len(self.workers))
 
@@ -351,9 +352,11 @@ class JobQueue:
         self.ruleset_engine.close_down()
 
 
-class ClusterDuplicateHandler(Thread):
+class ClusterDuplicateHandler(threading.Thread):
+    """ A housekeeping thread handling submission and cleanup cluster
+    duplicates. """
     def __init__(self, job_queue, interval=5):
-        self.shutdown_requested = Event()
+        self.shutdown_requested = threading.Event()
         self.shutdown_requested.clear()
         self.job_queue = job_queue
         self.interval = interval
@@ -377,11 +380,11 @@ class ClusterDuplicateHandler(Thread):
         self.shutdown_requested.set()
 
 
-class Worker(Thread):
+class Worker(threading.Thread):
     """ A Worker thread to process a sample. """
     def __init__(self, wid, job_queue, ruleset_engine, db_con):
         # whether we should run
-        self.shutdown_requested = Event()
+        self.shutdown_requested = threading.Event()
         self.shutdown_requested.clear()
         self.worker_id = wid
         self.job_queue = job_queue
@@ -396,7 +399,7 @@ class Worker(Thread):
             try:
                 # wait blocking for next job (thread safe) with timeout
                 sample = self.job_queue.dequeue()
-            except Empty:
+            except queue.Empty:
                 continue
 
             if sample is None:
