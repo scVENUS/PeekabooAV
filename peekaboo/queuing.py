@@ -165,7 +165,11 @@ class JobQueue:
         with self.duplock:
             # try to submit *all* samples which have been marked as being
             # processed by another instance concurrently
-            for sample_hash, sample_duplicates in self.cluster_duplicates.items():
+            # get the items view on a copy of the cluster duplicate backlog
+            # because we will change it by removing entries which would raise a
+            # RuntimeException
+            cluster_duplicates = self.cluster_duplicates.copy().items()
+            for sample_hash, sample_duplicates in cluster_duplicates:
                 # try to mark as in-flight
                 try:
                     locked = self.db_con.mark_sample_in_flight(
