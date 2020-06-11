@@ -813,7 +813,7 @@ class TestRulesetEngine(unittest.TestCase):
         with self.assertRaisesRegex(
                 PeekabooRulesetConfigError,
                 r'No enabled rules found, check ruleset config.'):
-            RulesetEngine(config, None, None, None)
+            RulesetEngine(config, None, None, None).start()
 
     def test_unknown_rule_enabled(self):
         """ Test that correct error is shown if an unknown rule is enabled. """
@@ -822,7 +822,7 @@ rule.1: foo''')
         with self.assertRaisesRegex(
                 PeekabooRulesetConfigError,
                 r'Unknown rule\(s\) enabled: foo'):
-            RulesetEngine(config, None, None, None)
+            RulesetEngine(config, None, None, None).start()
 
     def test_invalid_type(self):
         """ Test that correct error is shown if rule config option has wrong
@@ -836,7 +836,7 @@ higher_than: foo''')
         with self.assertRaisesRegex(
                 ValueError,
                 r"could not convert string to float: '?foo'?"):
-            RulesetEngine(config, None, None, None)
+            RulesetEngine(config, None, None, None).start()
 
     def test_disabled_config(self):
         """ Test that no error is shown if disabled rule has config. """
@@ -847,7 +847,7 @@ rule.1: known
 
 [cuckoo_score]
 higher_than: 4.0''')
-        RulesetEngine(config, None, None, None)
+        RulesetEngine(config, None, None, None).start()
 
 
 class MimetypeSample:  # pylint: disable=too-few-public-methods

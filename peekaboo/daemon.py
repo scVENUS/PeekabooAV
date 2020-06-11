@@ -60,6 +60,8 @@ class SignalHandler:
         signal.signal(signal.SIGINT, self.signal_handler)
         signal.signal(signal.SIGTERM, self.signal_handler)
 
+        self.shutdown_requested = False
+
     def register_listener(self, listener):
         """ Register a listener object which is expected to implement a very
         simple interface: Method shut_down() is called if SIGINT or SIGTERM
@@ -72,6 +74,7 @@ class SignalHandler:
         classes """
         if sig in [signal.SIGINT, signal.SIGTERM]:
             logger.debug("SIGINT/TERM")
+            self.shutdown_requested = True
 
             # these should take serious care about being called across threads
             for listener in self.listeners:
@@ -342,10 +345,11 @@ def run():
             worker_count=config.worker_count, ruleset_config=ruleset_config,
             db_con=db_con, analyzer_config=analyzer_config,
             cluster_duplicate_check_interval=cldup_check_interval)
+        sig_handler.register_listener(job_queue)
+        job_queue.start()
     except PeekabooConfigException as error:
         logging.critical(error)
         sys.exit(1)
-    sig_handler.register_listener(job_queue)
 
     # Factory producing almost identical samples providing them with global
     # config values and references to other objects they need, such as database
@@ -367,6 +371,10 @@ def run():
         job_queue.shut_down()
         job_queue.close_down()
         sys.exit(1)
+
+    # abort startup if shutdown was requested meanwhile
+    if sig_handler.shutdown_requested:
+        sys.exit(0)
 
     sig_handler.register_listener(server)
     SystemdNotifier().notify("READY=1")
