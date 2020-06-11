@@ -86,19 +86,13 @@ class JobQueue:
         # the other instances' cached results from the database
         self.cluster_duplicates = {}
 
-        # create a single ruleset engine for all workers, instantiates all the
-        # rules based on the ruleset configuration, may start up long-lived
-        # analyzer instances which are shared as well, is otherwise stateless
-        # to allow concurrent use by multiple worker threads
-        try:
-            self.ruleset_engine = RulesetEngine(
-                ruleset_config, self, db_con, analyzer_config)
-        except (KeyError, ValueError, PeekabooConfigException) as error:
-            raise PeekabooConfigException(
-                'Ruleset configuration error: %s' % error)
-        except PeekabooRulesetConfigError as error:
-            raise PeekabooConfigException(error)
+        self.ruleset_engine = RulesetEngine(
+            ruleset_config, self, db_con, analyzer_config)
 
+        # we start these here because they do no lengthy init and starting can
+        # not fail. We need this here to avoid races in startup vs. shutdown by
+        # signal to avoid continuing running in a half-inited/half-shutdown
+        # state.
         for wno in range(0, self.worker_count):
             logger.debug("Create Worker %d", wno)
             worker = Worker(wno, self, self.ruleset_engine, db_con)
@@ -117,6 +111,20 @@ class JobQueue:
             self.cluster_duplicate_handler.start()
         else:
             logger.debug("Disabling cluster duplicate handler thread.")
+
+    def start(self):
+        """ Start up the job queue including resource initialisation. """
+        # create a single ruleset engine for all workers, instantiates all the
+        # rules based on the ruleset configuration, may start up long-lived
+        # analyzer instances which are shared as well, is otherwise stateless
+        # to allow concurrent use by multiple worker threads
+        try:
+            self.ruleset_engine.start()
+        except (KeyError, ValueError, PeekabooConfigException) as error:
+            raise PeekabooConfigException(
+                'Ruleset configuration error: %s' % error)
+        except PeekabooRulesetConfigError as error:
+            raise PeekabooConfigException(error)
 
     def submit(self, sample, submitter):
         """
@@ -321,9 +329,10 @@ class JobQueue:
         """ Trigger a shutdown of the queue including the workers. """
         logger.info("Queue shutdown requested. Signalling workers.")
 
-        self.ruleset_engine.shut_down()
+        if self.ruleset_engine is not None:
+            self.ruleset_engine.shut_down()
 
-        if self.cluster_duplicate_handler:
+        if self.cluster_duplicate_handler is not None:
             self.cluster_duplicate_handler.shut_down()
 
         # tell all workers to shut down
@@ -363,9 +372,10 @@ class JobQueue:
         if len(self.workers) > 0:
             logger.error("Some workers refused to stop.")
 
-        if self.cluster_duplicate_handler:
+        if self.cluster_duplicate_handler is not None:
             self.cluster_duplicate_handler.join()
-        self.ruleset_engine.close_down()
+        if self.ruleset_engine is not None:
+            self.ruleset_engine.close_down()
 
 
 class ClusterDuplicateHandler(threading.Thread):

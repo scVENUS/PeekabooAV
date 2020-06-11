@@ -59,8 +59,9 @@ class RulesetEngine:
     ]
 
     def __init__(self, config, job_queue, db_con, analyzer_config):
-        """ Initialise the engine, validate its and the individual rules'
-        configuration.
+        """ Create the engine and store its config. Postpone lengthy
+        initialisation for later so that it can be registered quickly for
+        shutdown requests.
 
         @param config: ruleset configuration parser
         @param config: PeekabooConfigParser
@@ -72,6 +73,20 @@ class RulesetEngine:
         @type db_con: PeekabooDatabase
         @param analyzer_config: analyzer configuration
         @type analyzer_config: PeekabooAnalyzerConfig
+        """
+        self.config = config
+        self.job_queue = job_queue
+        self.db_con = db_con
+        self.analyzer_config = analyzer_config
+        self.cuckoo = None
+        self.rules = []
+
+        self.shutdown_requested = False
+
+    def start(self):
+        """ Initialise the engine, validate its and the individual rules'
+        configuration.
+
         @raises PeekabooRulesetConfigError: if configuration errors are found
         """
         # create a lookup table from rule name to class
@@ -80,7 +95,7 @@ class RulesetEngine:
             rule_classes[known_rule.rule_name] = known_rule
 
         try:
-            enabled_rules = config.getlist('rules', 'rule')
+            enabled_rules = self.config.getlist('rules', 'rule')
         except PeekabooConfigException as error:
             raise PeekabooRulesetConfigError(
                 'Ruleset configuration error: %s' % error)
@@ -104,16 +119,13 @@ class RulesetEngine:
         # python3.
         known_sections = ['rules']
         known_sections += known_rule_names
-        config.check_sections(known_sections)
-
-        self.cuckoo = None
+        self.config.check_sections(known_sections)
 
         # instantiate enabled rules and have them check their configuration,
         # user-defined rule order is preserved in enabled_rules and through
         # ordered append() in self.rules
-        self.rules = []
         for rule_name in enabled_rules:
-            rule = rule_classes[rule_name](config, db_con)
+            rule = rule_classes[rule_name](self.config, self.db_con)
 
             # check if the rule requires any common, long lived logic and
             # instantiate now
@@ -123,11 +135,11 @@ class RulesetEngine:
                         "Rule %s uses Cuckoo. Starting job tracker.", rule_name)
 
                     self.cuckoo = Cuckoo(
-                        job_queue, analyzer_config.cuckoo_url,
-                        analyzer_config.cuckoo_api_token,
-                        analyzer_config.cuckoo_poll_interval,
-                        analyzer_config.cuckoo_submit_original_filename,
-                        analyzer_config.cuckoo_maximum_job_age)
+                        self.job_queue, self.analyzer_config.cuckoo_url,
+                        self.analyzer_config.cuckoo_api_token,
+                        self.analyzer_config.cuckoo_poll_interval,
+                        self.analyzer_config.cuckoo_submit_original_filename,
+                        self.analyzer_config.cuckoo_maximum_job_age)
 
                     if not self.cuckoo.start_tracker():
                         raise PeekabooRulesetConfigError(
@@ -136,6 +148,16 @@ class RulesetEngine:
                 rule.set_cuckoo_job_tracker(self.cuckoo)
 
             self.rules.append(rule)
+
+            # abort startup if we've been asked to shut down meanwhile
+            if self.shutdown_requested:
+                break
+
+        # shut down what we've initialised if our startup was racing a shutdown
+        # request because these resources may not have been allocated yet when
+        # the shutdown request arrived.
+        if self.shutdown_requested:
+            self.shut_down_resources()
 
     def run(self, sample):
         """ Run all the rules in the ruleset against a given sample
@@ -169,11 +191,17 @@ class RulesetEngine:
 
         logger.info("Rules evaluated")
 
+    def shut_down_resources(self):
+        """ Shut down dynamically allocated resources such as job trackers.
+        """
+        if self.cuckoo is not None:
+            self.cuckoo.shut_down()
+
     def shut_down(self):
         """ Initiate asynchronous shutdown of the ruleset engine and dependent
         logic such as job trackers. """
-        if self.cuckoo is not None:
-            self.cuckoo.shut_down()
+        self.shutdown_requested = True
+        self.shut_down_resources()
 
     def close_down(self):
         """ Finalize ruleset engine shutdown synchronously. """
