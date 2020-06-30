@@ -23,6 +23,7 @@
 #                                                                             #
 ###############################################################################
 
+""" Interface to Cuckoo. """
 
 import datetime
 import os
@@ -238,7 +239,7 @@ class Cuckoo:
         @type job_id: int
 
         @returns: None """
-        logger.debug("Analysis done for task #%d" % job_id)
+        logger.debug("Analysis done for task #%d", job_id)
 
         sample = self.deregister_running_job(job_id)
         if sample is None:
@@ -275,14 +276,13 @@ class Cuckoo:
             self.job_queue.submit(sample, self.__class__)
 
     def submit(self, sample):
-        """ Submit a sample to Cuckoo.
+        """ Submit a sample to Cuckoo for analysis.
+        @param sample: Sample to submit.
+        @type sample: Sample
 
-        @param sample: The sample to submit
-        @type sample: Sample object
         @raises: CuckooSubmitFailedException if submission failed
-        @returns: cuckoo job id """
-        # no use submitting samples to Cuckoo if we cannot resubmit them into
-        # the job queue for continued processing.
+        @returns: ID of the submitted Cuckoo job.
+        """
         path = sample.submit_path
         filename = os.path.basename(path)
         # override with the original file name if available
@@ -299,7 +299,8 @@ class Cuckoo:
 
         try:
             response = self.session.post(
-                "%s/tasks/create/file" % self.url, headers=headers, files=files)
+                "%s/tasks/create/file" % self.url,
+                headers=headers, files=files)
         except requests.exceptions.RequestException as error:
             raise CuckooSubmitFailedException(
                 'Error creating Cuckoo task: %s' % error)
@@ -419,6 +420,10 @@ class CuckooReport:
 
     @property
     def raw(self):
+        """ Return the raw report structure.
+
+        @returns: dict of the report.
+        """
         return self.report
 
     @property
@@ -492,7 +497,8 @@ class CuckooReport:
         @returns: List of messages.
         """
         if self.errors:
-            logger.warning('Cuckoo produced %d error(s) during processing.' % len(self.errors))
+            logger.warning('Cuckoo produced %d error(s) during processing.',
+                           len(self.errors))
         try:
             return self.report['debug']['cuckoo']
         except KeyError:
