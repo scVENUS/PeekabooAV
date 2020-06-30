@@ -311,14 +311,21 @@ class Cuckoo:
                 'Invalid JSON in response when creating Cuckoo task: %s'
                 % error)
 
-        if "task_id" in json_resp:
-            task_id = json_resp["task_id"]
-            if task_id > 0:
-                self.register_running_job(task_id, sample)
-                return task_id
+        if "task_id" not in json_resp:
+            raise CuckooSubmitFailedException(
+                'No job ID present in API response')
 
-        raise CuckooSubmitFailedException(
-            'Unable to extract job ID from response %s' % json_resp)
+        task_id = json_resp["task_id"]
+        if not isinstance(task_id, int):
+            raise CuckooSubmitFailedException(
+                'Invalid data type for job ID in API response')
+
+        if task_id is None or task_id <= 0:
+            raise CuckooSubmitFailedException(
+                'Invalid value for job ID in API response')
+
+        self.register_running_job(task_id, sample)
+        return task_id
 
     def start_tracker(self):
         """ Start tracking running jobs in a separate thread. """
