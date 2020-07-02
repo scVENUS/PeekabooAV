@@ -191,10 +191,10 @@ class PeekabooStreamRequestHandler(socketserver.StreamRequestHandler):
         scan-file: requires the path of the directory / file to analyse
         in "full_name".
 
-        The maximum buffer size is 16 KiB, because JSON incurs some bloat.
+        The maximum buffer size is 512 KiB, because JSON incurs some bloat.
         """
         try:
-            client_input = self.request.recv(1024 * 16).rstrip()
+            client_input = self.request.recv(1024 * 512).rstrip()
         except IOError as ioerror:
             logger.error('Request receive failed: %s', ioerror)
             return None
