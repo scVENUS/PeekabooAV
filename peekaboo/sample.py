@@ -91,6 +91,7 @@ class Sample:
         self.__cuckoo_report = None
         self.__oletools_report = None
         self.__filetools_report = None
+        self.__knowntools_report = None
         self.__done = False
         self.__status_change = status_change
         self.__result = Result.unchecked
@@ -448,6 +449,11 @@ class Sample:
         return self.__filetools_report
 
     @property
+    def knowntools_report(self):
+        """ Returns the knowntools report """
+        return self.__knowntools_report
+
+    @property
     def submit_path(self):
         """ Returns the path to use for submission to Cuckoo """
         return self.__submit_path
@@ -480,6 +486,10 @@ class Sample:
     def register_filetools_report(self, report):
         """ Records a Filetools report for alter evaluation. """
         self.__filetools_report = report
+
+    def register_knowntools_report(self, report):
+        """ Records a Knowntools report for alter evaluation. """
+        self.__knowntools_report = report
 
     def cleanup(self):
         """ Clean up after the sample has been analysed, removing a potentially

@@ -39,6 +39,10 @@ latter three will terminate ruleset processing and use the result as final
 analysis result while the former will continue on with the next rule of the
 ruleset.
 
+Normally the result is a constant but it can also be a variable. It is crucial
+to proceed with caution when using a variable implication.
+
+
 It is a lot like Python itself.
 
 They can contain operators:
@@ -51,6 +55,7 @@ Rules can then be constructed like:
 
 .. code-block:: shell
 
+    expression.0  : knownreport.known -> knownreport.result
     expression.1  : sample.type_declared in {'text/plain', 'inode/x-empty', 'image/jpeg'} -> ignore
     expression.2  : sample.name_declared == 'smime.p7s'
                         and sample.type_declared in {
@@ -115,3 +120,11 @@ Attributes of filereport
     type_by_content
     type_by_name
     type_as_text
+
+Attributes of knownreport
+------------------------
+
+.. code-block:: shell
+
+    known
+    result

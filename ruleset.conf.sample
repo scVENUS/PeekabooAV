@@ -82,6 +82,7 @@ keyword.2 : AutoClose
 # enabled:
 #log_level : INFO
 
+#expression.0  : knownreport.known -> knownreport.result
 expression.1  : {sample.type_declared}|filereport.mime_types <= {
                     'text/plain', 'inode/x-empty'} -> ignore
 expression.2  : sample.name_declared == /smime.p7[mcs]/
