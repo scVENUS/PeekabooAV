@@ -197,6 +197,26 @@ class PeekabooDatabase:
             session.close()
         return sample_info
 
+    def analysis_journal_fetch_journal(self, sample):
+        """
+        Fetch information stored in the database about a given sample object.
+
+        @param sample: The sample object of which the information shall be
+                       fetched from the database.
+        @return: A sorted list of (analysis_time, result, reason) of the
+                 requested sample.
+        """
+        with self.__lock:
+            session = self.__session()
+            sample_journal = session.query(
+                SampleInfo.analysis_time, SampleInfo.result, SampleInfo.reason
+                ).filter_by(
+                    sha256sum=sample.sha256sum,
+                    file_extension=sample.file_extension
+                    ).order_by(SampleInfo.analysis_time).all()
+            session.close()
+        return sample_journal
+
     def mark_sample_in_flight(self, sample, instance_id=None, start_time=None):
         """
         Mark a sample as in flight, i.e. being worked on by an instance.

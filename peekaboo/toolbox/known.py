@@ -23,9 +23,10 @@
 #                                                                             #
 ###############################################################################
 
-from peekaboo.ruleset import Result
-
 import logging
+from datetime import datetime
+
+from peekaboo.ruleset import Result
 
 
 logger = logging.getLogger(__name__)
@@ -43,7 +44,7 @@ class Knowntools:
             return self.sample.knowntools_report
 
         ktreport = KnowntoolsReport(
-            self.db_con.sample_info_fetch(self.sample)
+            self.db_con.analysis_journal_fetch_journal(self.sample)
         )
 
         self.sample.register_knowntools_report(ktreport)
@@ -52,19 +53,63 @@ class Knowntools:
 
 class KnowntoolsReport:
     """ Represents a custom Knowntools report. """
-    def __init__(self, sample_info=None):
-        if sample_info is None:
-            sample_info = {}
-        self.sample_info = sample_info
+    def __init__(self, sample_journal=None):
+        if sample_journal is None:
+            sample_journal = []
+        self.sample_journal = sample_journal
 
     def __str__(self):
-        return "<KnowntoolsReport('%s'>" % self.report
+        return "<KnowntoolsReport('%s'>" % self.sample_journal
 
     @property
     def known(self):
-        return bool(self.sample_info)
+        """ Determines if there is a database entry for this sample """
+        return bool(self.sample_journal)
+
+    @property
+    def last_result(self):
+        """ Return the cached result """
+        if self.sample_journal:
+            return self.sample_journal[-1].result
+        return Result.unknown
 
     @property
     def result(self):
-        if self.sample_info:
-            return self.sample_info.result
+        """ Return the cached result """
+        return self.last_result
+
+    def worst(self):
+        """ Return the worst (result, reason) cached """
+        worst_result = Result.unchecked
+        worst_reason = ""
+        for _, result, reason in self.sample_journal:
+            if result > worst_result:
+                worst_result = result
+                worst_reason = reason
+        return (worst_result, worst_reason)
+
+    @property
+    def worst_result(self):
+        """ Return the worst result cached """
+        return self.worst()[0]
+
+    @property
+    def first(self):
+        """ Calculates the age in days since first record of this sample """
+        if self.sample_journal:
+            first = self.sample_journal[0].analysis_time
+            now = datetime.today()
+            difference = now - first
+            return difference.days
+        return 0
+
+    @property
+    def last(self):
+        """ Calculates the age in days since most recent record of this
+        sample """
+        if self.sample_journal:
+            last = self.sample_journal[-1].analysis_time
+            now = datetime.today()
+            difference = now - last
+            return difference.days
+        return 0

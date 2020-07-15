@@ -55,7 +55,7 @@ Rules can then be constructed like:
 
 .. code-block:: shell
 
-    expression.0  : knownreport.known -> knownreport.result
+    expression.0  : knownreport.known and knownreport.first < 14 -> knownreport.result
     expression.1  : sample.type_declared in {'text/plain', 'inode/x-empty', 'image/jpeg'} -> ignore
     expression.2  : sample.name_declared == 'smime.p7s'
                         and sample.type_declared in {
@@ -127,4 +127,11 @@ Attributes of knownreport
 .. code-block:: shell
 
     known
-    result
+    last_result
+    result (alias for last_result)
+    worst_result
+    first
+    last
+
+``first`` and ``last`` refer to the number of days since this sample was first
+encountered and its last occurrence.
