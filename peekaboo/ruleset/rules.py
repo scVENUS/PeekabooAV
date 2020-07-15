@@ -37,6 +37,7 @@ from peekaboo.sample import Sample
 from peekaboo.toolbox.cuckoo import CuckooReport
 from peekaboo.toolbox.ole import Oletools, OletoolsReport
 from peekaboo.toolbox.file import Filetools, FiletoolsReport
+from peekaboo.toolbox.known import Knowntools, KnowntoolsReport
 
 
 logger = logging.getLogger(__name__)
@@ -147,6 +148,13 @@ class Rule:
         @returns: FiletoolsReport
         """
         return Filetools(sample).get_report()
+
+    def get_knowntools_report(self, sample):
+        """ Get a Knowntools report on the sample.
+
+        @returns: KnowntoolsReport
+        """
+        return Knowntools(sample, self.db_con).get_report()
 
 
 class KnownRule(Rule):
@@ -531,6 +539,7 @@ class ExpressionRule(Rule):
                 'cuckooreport': CuckooReport(),
                 'olereport': OletoolsReport(),
                 'filereport': FiletoolsReport(),
+                'knownreport': KnowntoolsReport(),
             }
         }
 
@@ -593,6 +602,9 @@ class ExpressionRule(Rule):
                 elif identifier == "filereport":
                     logger.debug("Expression requests filetools report")
                     value = self.get_filetools_report(sample)
+                elif identifier == "knownreport":
+                    logger.debug("Expression requests knowntools report")
+                    value = self.get_knowntools_report(sample)
                 # elif here for other identifiers
                 else:
                     return self.result(

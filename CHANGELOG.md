@@ -7,6 +7,7 @@ See documentation for details.
 - New database schema version 8.
   Removes tables PeekabooMetadata and AnalysisJournal, and adds field
   analysis\_time to SampleInfo.
+- Generic rules can now make use of the new analyser `knownreport`
 
 ## 2.0
 
