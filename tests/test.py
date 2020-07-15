@@ -59,6 +59,7 @@ from peekaboo.ruleset.expressions import ExpressionParser, \
 from peekaboo.toolbox.cuckoo import CuckooReport
 from peekaboo.toolbox.ole import Oletools
 from peekaboo.toolbox.file import Filetools, FiletoolsReport
+from peekaboo.toolbox.known import Knowntools, KnowntoolsReport
 from peekaboo.db import PeekabooDatabase, PeekabooDatabaseError
 # pylint: enable=wrong-import-position
 
@@ -373,6 +374,7 @@ class TestDatabase(unittest.TestCase):
     def test_1_analysis_save(self):
         """ Test saving of analysis results. """
         self.db_con.analysis_save(self.sample)
+        self.db_con.analysis_save(self.sample)
 
     def test_2_sample_info_fetch(self):
         """ Test retrieval of analysis results. """
@@ -380,6 +382,17 @@ class TestDatabase(unittest.TestCase):
         self.assertEqual(sample_info.sha256sum, self.sample.sha256sum)
         self.assertEqual(sample_info.result, Result.failed)
         self.assertEqual(sample_info.reason, 'This is just a test case.')
+
+    def test_3_analysis_journal_fetch_journal(self):
+        """ Test retrieval of analysis results. """
+        journal = self.db_con.analysis_journal_fetch_journal(self.sample)
+        self.assertEqual(journal[0].result, Result.failed)
+        self.assertEqual(journal[0].reason, 'This is just a test case.')
+        self.assertIsNotNone(journal[0].analysis_time)
+        self.assertEqual(journal[1].result, Result.failed)
+        self.assertEqual(journal[1].reason, 'This is just a test case.')
+        self.assertIsNotNone(journal[1].analysis_time)
+        self.assertNotEqual(journal[0].analysis_time, journal[1].analysis_time)
 
     def test_5_in_flight_no_cluster(self):
         """ Test that marking of samples as in-flight on a non-cluster-enabled
@@ -1173,6 +1186,62 @@ unknown : baz'''
         rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.ignored)
+
+    def test_rule_expression_knowntools(self):
+        """ Test generic rule on knowntoolsreport. """
+        config = r'''[expressions]
+            expression.0  : sample.filename == "first.a" and knownreport.known -> bad
+            expression.1  : knownreport.known and knownreport.worst_result < unknown -> unknown
+            expression.2  : knownreport.known -> knownreport.worst_result
+            expression.3  : knownreport.known -> knownreport.last_result
+            expression.4  : knownreport.first == 0 and knownreport.last == 0 -> ignore
+        '''
+
+        test_db = os.path.abspath('./test.db')
+        conf = CreatingPeekabooConfig()
+        db_con = PeekabooDatabase('sqlite:///' + test_db,
+                                      instance_id=1,
+                                      stale_in_flight_threshold=10)
+        factory = CreatingSampleFactory(
+            cuckoo=None, base_dir=conf.sample_base_dir,
+            job_hash_regex=conf.job_hash_regex, keep_mail_data=False,
+            processing_info_dir=None)
+
+        sample = factory.create_sample('test.py', 'test')
+        result = RuleResult('Unittest',
+                            Result.failed,
+                            'This is just a test case.',
+                            further_analysis=False)
+        sample.add_rule_result(result)
+        db_con.analysis_save(sample)
+
+        rule = ExpressionRule(CreatingConfigParser(config), db_con)
+
+        sample = factory.create_sample('test.py', 'test')
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.failed)
+
+        sample = factory.create_sample('first.a', 'firsttest')
+        result = rule.evaluate(sample)
+        sample.add_rule_result(result)
+        db_con.analysis_save(sample)
+        self.assertEqual(result.result, Result.ignored)
+
+        sample = factory.create_sample('first.a', 'firsttest')
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.bad)
+
+        sample = factory.create_sample('second.b', 'secondtest')
+        result = rule.evaluate(sample)
+        sample.add_rule_result(result)
+        db_con.analysis_save(sample)
+        self.assertEqual(result.result, Result.ignored)
+
+        sample = factory.create_sample('second.b', 'secondtest')
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.ignored)
+
+        os.unlink(test_db)
 
     def test_rule_expressions_cuckooreport_context(self):
         """ Test generic rule cuckooreport context """
