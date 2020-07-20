@@ -127,3 +127,5 @@ Attribues of cortexreport
     VirusTotalQueryReport.level
     CuckooSandboxFileReport.signatures
     CuckooSandboxFileReport.malscore
+    CAPEv2FileReport.signatures
+    CAPEv2FileReport.malscore
