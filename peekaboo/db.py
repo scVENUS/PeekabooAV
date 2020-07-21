@@ -179,24 +179,6 @@ class PeekabooDatabase:
             finally:
                 session.close()
 
-    def sample_info_fetch(self, sample):
-        """
-        Fetch information stored in the database about a given sample object.
-
-        @param sample: The sample object of which the information shall be
-                       fetched from the database.
-        @return: A SampleInfo object containing the information stored in teh
-                 database about the sample.
-        """
-        with self.__lock:
-            session = self.__session()
-            sample_info = session.query(SampleInfo).filter_by(
-                sha256sum=sample.sha256sum,
-                file_extension=sample.file_extension).order_by(
-                    SampleInfo.analysis_time.desc()).first()
-            session.close()
-        return sample_info
-
     def analysis_journal_fetch_journal(self, sample):
         """
         Fetch information stored in the database about a given sample object.

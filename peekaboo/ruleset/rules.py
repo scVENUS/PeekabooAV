@@ -166,9 +166,10 @@ class KnownRule(Rule):
         """ Try to get information about the sample from the database. Return
         the old result and reason if found and advise the engine to stop
         processing. """
-        sample_info = self.db_con.sample_info_fetch(sample)
-        if sample_info:
-            return self.result(sample_info.result, sample_info.reason, False)
+        ktreport = self.get_knowntools_report(sample)
+        if ktreport.known:
+            result, reason = ktreport.worst()
+            return self.result(result, reason, False)
 
         return self.result(Result.unknown,
                            _("File is not yet known to the system"),
