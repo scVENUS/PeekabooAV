@@ -49,29 +49,6 @@ Base = declarative_base()
 ##############################################################################
 
 
-class PeekabooMetadata(Base):
-    """ Definition of the _meta table for Peekaboo. """
-    __tablename__ = '_meta'
-    peekaboo_version = Column(String(10), nullable=False,
-                              primary_key=True)
-    db_schema_version = Column(Integer, nullable=False,
-                               primary_key=True,
-                               autoincrement=False)
-    cuckoo_version = Column(String(10), nullable=False,
-                            primary_key=True)
-
-    def __str__(self):
-        return (
-            '<PeekabooMetadata(peekaboo_version="%s", db_schema_version="%s", '
-            'cuckoo_version="%s")>'
-            % (self.peekaboo_version,
-               self.db_schema_version,
-               self.cuckoo_version)
-        )
-
-    __repr__ = __str__
-
-
 class InFlightSample(Base):
     """
     Table tracking whether a specific sample is currently being analysed and by
@@ -171,9 +148,7 @@ class PeekabooDatabase:
         self.__lock = threading.RLock()
         self.instance_id = instance_id
         self.stale_in_flight_threshold = stale_in_flight_threshold
-        if not self._db_schema_exists():
-            self._init_db()
-            logger.debug('Database schema created.')
+        Base.metadata.create_all(self.__engine)
 
     def analysis_save(self, sample):
         """
@@ -409,46 +384,3 @@ class PeekabooDatabase:
         except SQLAlchemyError as error:
             raise PeekabooDatabaseError(
                 'Unable to drop all tables of the database: %s' % error)
-
-    def _db_schema_exists(self):
-        if not self.__engine.dialect.has_table(self.__engine, '_meta'):
-            return False
-
-        session = self.__session()
-        # get the first of potentially multiple metadata entries ordered by
-        # descending schema version to get the newest currently configured
-        # schema
-        meta = session.query(PeekabooMetadata).order_by(
-            PeekabooMetadata.db_schema_version.desc()).first()
-        if not meta:
-            return False
-
-        schema_version = meta.db_schema_version
-        session.close()
-        if schema_version < DB_SCHEMA_VERSION:
-            logger.info('Adding new database schema.')
-            return False
-
-        return True
-
-    def _init_db(self):
-        """
-        Initializes the Peekaboo database by creating tables and
-        writing meta information to the '_meta' table.
-        """
-        Base.metadata.create_all(self.__engine)
-        meta = PeekabooMetadata()
-        meta.peekaboo_version = __version__
-        meta.db_schema_version = DB_SCHEMA_VERSION
-        # TODO: Get Cuckoo version.
-        meta.cuckoo_version = '2.0'
-        session = self.__session()
-        session.add(meta)
-        try:
-            session.commit()
-        except SQLAlchemyError as error:
-            session.rollback()
-            raise PeekabooDatabaseError(
-                'Cannot initialize the database: %s' % error)
-        finally:
-            session.close()
