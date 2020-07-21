@@ -28,11 +28,11 @@ SQLAlchemy. """
 import threading
 import logging
 from datetime import datetime, timedelta
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, \
+from sqlalchemy import Column, Integer, String, Text, DateTime, \
         Enum, Index
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.engine import create_engine
-from sqlalchemy.orm import sessionmaker, scoped_session, relationship
+from sqlalchemy.orm import sessionmaker, scoped_session
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from peekaboo import __version__
 from peekaboo.ruleset import Result
@@ -141,40 +141,6 @@ class SampleInfo(Base):
     __repr__ = __str__
 
 
-class AnalysisJournal(Base):
-    """ Definition of the analysis_jobs table. """
-    __tablename__ = 'analysis_jobs_v%d' % DB_SCHEMA_VERSION
-
-    # Indices:
-    # - general considerations: We're not using this table at all currently.
-    #   All indexes are therefore currenly only futureproofing and admin or
-    #   scripting aids.
-    # - column: Speed up removal of old entries by analysis_time.
-    # - column: Index foreign key to speed up search and removal by sample id.
-
-    id = Column(Integer, primary_key=True)
-    job_hash = Column(String(255), nullable=False)
-    cuckoo_job_id = Column(Integer, nullable=False)
-    filename = Column(String(255), nullable=False)
-    analysis_time = Column(DateTime, nullable=False,
-                           index=True)
-    sample_id = Column(Integer, ForeignKey(SampleInfo.id),
-                       nullable=False, index=True)
-    sample = relationship('SampleInfo')
-
-    def __str__(self):
-        return (
-            '<AnalysisJournal(job_hash="%s", cuckoo_job_id="%s", '
-            'filename="%s", analysis_time="%s")>'
-            % (self.job_hash,
-               self.cuckoo_job_id,
-               self.filename,
-               self.analysis_time.strftime("%Y%m%dT%H%M%S"))
-        )
-
-    __repr__ = __str__
-
-
 #
 # End of database schema definition.
 ##############################################################################
@@ -215,24 +181,15 @@ class PeekabooDatabase:
 
         @param sample: The sample object for this analysis task.
         """
-        analysis = AnalysisJournal()
-        analysis.job_hash = sample.job_hash
-        analysis.cuckoo_job_id = sample.job_id
-        analysis.filename = sample.filename
-        analysis.analysis_time = datetime.now()
-        sample_info = self.sample_info_fetch(sample)
-        if sample_info is None:
-            sample_info = SampleInfo(
-                sha256sum=sample.sha256sum,
-                file_extension=sample.file_extension,
-                result=sample.result,
-                reason=sample.reason)
-
-        analysis.sample = sample_info
+        sample_info = SampleInfo(
+            sha256sum=sample.sha256sum,
+            file_extension=sample.file_extension,
+            result=sample.result,
+            reason=sample.reason)
 
         with self.__lock:
             session = self.__session()
-            session.add(analysis)
+            session.add(sample_info)
             try:
                 session.commit()
             except SQLAlchemyError as error:
