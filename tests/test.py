@@ -376,13 +376,6 @@ class TestDatabase(unittest.TestCase):
         self.db_con.analysis_save(self.sample)
         self.db_con.analysis_save(self.sample)
 
-    def test_2_sample_info_fetch(self):
-        """ Test retrieval of analysis results. """
-        sample_info = self.db_con.sample_info_fetch(self.sample)
-        self.assertEqual(sample_info.sha256sum, self.sample.sha256sum)
-        self.assertEqual(sample_info.result, Result.failed)
-        self.assertEqual(sample_info.reason, 'This is just a test case.')
-
     def test_3_analysis_journal_fetch_journal(self):
         """ Test retrieval of analysis results. """
         journal = self.db_con.analysis_journal_fetch_journal(self.sample)
