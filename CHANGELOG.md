@@ -4,6 +4,10 @@ See documentation for details.
 
 ## devel
 
+- New database schema version 8.
+  Removes tables PeekabooMetadata and AnalysisJournal, and adds field
+  analysis\_time to SampleInfo.
+
 ## 2.0
 
 - Embedded Cuckoo mode and python2 support are deprecated now and scheduled for
