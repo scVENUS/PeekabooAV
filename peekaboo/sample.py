@@ -87,7 +87,6 @@ class Sample:
         # A symlink that points to the actual file named
         # sha256sum.suffix
         self.__submit_path = None
-        self.__cuckoo_job_id = -1
         self.__cuckoo_failed = False
         self.__cuckoo_report = None
         self.__oletools_report = None
@@ -419,10 +418,6 @@ class Sample:
         return self.meta_info_type_declared
 
     @property
-    def job_id(self):
-        return self.__cuckoo_job_id
-
-    @property
     def file_size(self):
         """ Determine and cache sample file size
 
@@ -464,11 +459,11 @@ class Sample:
         @returns: cuckoo job id
         """
         logger.debug("Submitting %s to Cuckoo", self.__submit_path)
-        self.__cuckoo_job_id = self.__cuckoo.submit(self)
+        cuckoo_job_id = self.__cuckoo.submit(self)
         self.__internal_report.append(
             _('Sample %s successfully submitted to Cuckoo as job %d')
-            % (self, self.__cuckoo_job_id))
-        return self.__cuckoo_job_id
+            % (self, cuckoo_job_id))
+        return cuckoo_job_id
 
     def mark_cuckoo_failure(self):
         """ Records whether Cuckoo analysis failed. """
@@ -505,10 +500,9 @@ class Sample:
                          self.__wd, oserr)
 
     def __str__(self):
-        return ("<Sample(filename='%s', job_id='%d',"
+        return ("<Sample(filename='%s',"
                 " result='%s', sha256sum='%s')>"
                 % (self.__filename,
-                   self.__cuckoo_job_id,
                    self.__result,
                    self.sha256sum))
 
