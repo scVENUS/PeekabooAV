@@ -38,7 +38,7 @@ from peekaboo import __version__
 from peekaboo.ruleset import Result
 from peekaboo.exceptions import PeekabooDatabaseError
 
-DB_SCHEMA_VERSION = 7
+DB_SCHEMA_VERSION = 8
 
 logger = logging.getLogger(__name__)
 Base = declarative_base()
@@ -101,6 +101,8 @@ class SampleInfo(Base):
     id = Column(Integer, primary_key=True)
     sha256sum = Column(String(64), nullable=False)
     file_extension = Column(String(16), nullable=True)
+    analysis_time = Column(DateTime, nullable=False,
+                           index=True)
     result = Column(Enum(Result), nullable=False)
     reason = Column(Text, nullable=True)
 
@@ -110,10 +112,11 @@ class SampleInfo(Base):
 
     def __str__(self):
         return ('<SampleInfo(sample_sha256_hash="%s", file_extension="%s", '
-                'reason="%s")>'
+                'reason="%s", analysis_time="%s")>'
                 % (self.sha256sum,
                    self.file_extension,
-                   self.reason))
+                   self.reason,
+                   self.analysis_time.strftime("%Y%m%dT%H%M%S")))
 
     __repr__ = __str__
 
@@ -159,6 +162,7 @@ class PeekabooDatabase:
         sample_info = SampleInfo(
             sha256sum=sample.sha256sum,
             file_extension=sample.file_extension,
+            analysis_time=datetime.now(),
             result=sample.result,
             reason=sample.reason)
 
@@ -188,7 +192,8 @@ class PeekabooDatabase:
             session = self.__session()
             sample_info = session.query(SampleInfo).filter_by(
                 sha256sum=sample.sha256sum,
-                file_extension=sample.file_extension).first()
+                file_extension=sample.file_extension).order_by(
+                    SampleInfo.analysis_time.desc()).first()
             session.close()
         return sample_info
 
