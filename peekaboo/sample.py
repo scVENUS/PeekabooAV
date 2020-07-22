@@ -403,7 +403,26 @@ class Sample:
             filename = self.name_declared
 
         # extension or the empty string if none found
-        self.__file_extension = os.path.splitext(filename)[1][1:]
+        ext = os.path.splitext(filename)[1][1:]
+
+        # sanity checks, where splitext already promises:
+        # - ext is empty or
+        # - begins with a period and contains at most one period.
+        #   [and we already strippped that period]
+        # - Leading periods on the basename are ignored;
+        # We extend that to:
+        # - allow only ascii (no Unicode)
+        # - allow only printable characters (no control codes)
+        # - allow only alphanumeric characters and some symbols (arbitrarily
+        #   chosen based on file extension list in Wikipedia and personal
+        #   experience)
+        # indirectly by stripping what is allowed from the extension and
+        # checking that nothing remains.
+        if ext.strip(
+                string.ascii_letters + string.digits + string.punctuation):
+            return None
+
+        self.__file_extension = ext
         return self.__file_extension
 
     @property
