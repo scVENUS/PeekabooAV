@@ -665,6 +665,32 @@ class TestSample(unittest.TestCase):
                 'size': '212'})
         self.assertEqual(sample.file_extension, 'docx')
 
+    def test_sample_extension_multiple_dots(self):
+        """ Test file extension with name containing multiple dots. """
+        sample = self.factory.make_sample('junk..ext')
+        self.assertEqual(sample.file_extension, 'ext')
+
+    def test_sample_extension_filtering(self):
+        """ Test filtering of invalid file extensions. """
+        testcases = [
+            # extension, accepted
+            ['docx', True],
+            ['docx$', True],
+            ['docx~', True],
+            ['docx_', True],
+            ['foo1', True],
+            ['foo1%', True],
+            ['foo 1', False],
+            ['fü', False],
+        ]
+
+        for ext, accepted in testcases:
+            sample = self.factory.make_sample('junk.' + ext)
+            self.assertEqual(
+                sample.file_extension is not None,
+                accepted,
+                "File extension filtering for %s" % ext)
+
     @classmethod
     def tearDownClass(cls):
         """ Clean up after the tests. """
