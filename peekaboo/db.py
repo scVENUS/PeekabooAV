@@ -35,7 +35,8 @@ from sqlalchemy import Column, Integer, String, Text, DateTime, \
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.engine import create_engine
 from sqlalchemy.orm import sessionmaker, scoped_session
-from sqlalchemy.exc import SQLAlchemyError, IntegrityError, OperationalError
+from sqlalchemy.exc import SQLAlchemyError, IntegrityError, OperationalError, \
+        DBAPIError
 from peekaboo import __version__
 from peekaboo.ruleset import Result
 from peekaboo.exceptions import PeekabooDatabaseError
@@ -147,7 +148,7 @@ class PeekabooDatabase:
         """
         logging.getLogger('sqlalchemy.engine').setLevel(log_level)
 
-        self.__engine = create_engine(db_url, pool_recycle=1)
+        self.__engine = create_engine(db_url)
         session_factory = sessionmaker(bind=self.__engine)
         self.__session = scoped_session(session_factory)
         self.__lock = threading.RLock()
@@ -160,6 +161,7 @@ class PeekabooDatabase:
         # attempt 3: 10 * 2**(3) == 40-80msecs
         # attempt 4: 10 * 2**(4) == 80-160msecs
         self.deadlock_backoff_base = 10
+        self.connect_backoff_base = 100
 
         Base.metadata.create_all(self.__engine)
 
@@ -176,6 +178,11 @@ class PeekabooDatabase:
         if attempt >= self.retries:
             return -1
 
+        # only DBAPIError has connection_invalidated
+        if getattr(error, 'connection_invalidated', False):
+            logger.debug('Connection invalidated %s. Retrying.', action)
+            return attempt + 1
+
         # Access the original DBAPI exception anonymously.
         # We intentionally do some crude duck-typing here to avoid
         # imports of otherwise optional RDBMS modules. False-positive
@@ -186,6 +193,17 @@ class PeekabooDatabase:
             return -1
 
         args = error.orig.args
+
+        # (MySQLdb._exceptions.OperationalError) (2002, "Can't connect to local
+        # MySQL server through socket '/var/run/mysqld/mysqld.sock' (2)")
+        if (isinstance(args, tuple) and len(args) > 0 and args[0] in [2002]):
+            # sleep some millisecs
+            maxmsecs = self.connect_backoff_base * 2**attempt
+            backoff = random.randint(maxmsecs/2, maxmsecs)
+            logger.debug('Connection failed %s, backing off for %d '
+                         'milliseconds before retrying', action, backoff)
+            time.sleep(backoff / 1000)
+            return attempt + 1
 
         # (MySQLdb._exceptions.OperationalError) (1213, 'Deadlock
         # found when trying to get lock; try restarting transaction')
@@ -220,7 +238,8 @@ class PeekabooDatabase:
                 session.add(sample_info)
                 try:
                     session.commit()
-                except (OperationalError, SQLAlchemyError) as error:
+                except (OperationalError, DBAPIError,
+                        SQLAlchemyError) as error:
                     session.rollback()
 
                     attempt = self.was_transient_error(
@@ -301,7 +320,8 @@ class PeekabooDatabase:
                 session.rollback()
                 logger.debug('Sample %s is already in flight on another '
                              'instance', sha256sum)
-            except (OperationalError, SQLAlchemyError) as error:
+            except (OperationalError, DBAPIError,
+                    SQLAlchemyError) as error:
                 session.rollback()
 
                 attempt = self.was_transient_error(
@@ -351,7 +371,8 @@ class PeekabooDatabase:
                 # delete() is not queued and goes to the DB before commit()
                 cleared = query.delete()
                 session.commit()
-            except (OperationalError, SQLAlchemyError) as error:
+            except (OperationalError, DBAPIError,
+                    SQLAlchemyError) as error:
                 session.rollback()
 
                 attempt = self.was_transient_error(
@@ -418,7 +439,8 @@ class PeekabooDatabase:
                 # delete() is not queued and goes to the DB before commit()
                 query.delete()
                 session.commit()
-            except (OperationalError, SQLAlchemyError) as error:
+            except (OperationalError, DBAPIError,
+                    SQLAlchemyError) as error:
                 session.rollback()
 
                 attempt = self.was_transient_error(
@@ -473,7 +495,8 @@ class PeekabooDatabase:
                 if cleared > 0:
                     logger.warning(
                         '%d stale in-flight samples cleared.', cleared)
-            except (OperationalError, SQLAlchemyError) as error:
+            except (OperationalError, DBAPIError,
+                    SQLAlchemyError) as error:
                 session.rollback()
 
                 attempt = self.was_transient_error(
