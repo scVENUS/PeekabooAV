@@ -97,7 +97,6 @@ class JobQueue:
             logger.debug("Create Worker %d", wno)
             worker = Worker(wno, self, self.ruleset_engine, db_con)
             self.workers.append(worker)
-            worker.start()
 
         logger.info('Created %d Workers.', self.worker_count)
 
@@ -108,12 +107,17 @@ class JobQueue:
                 "interval %d.", cluster_duplicate_check_interval)
             self.cluster_duplicate_handler = ClusterDuplicateHandler(
                 self, cluster_duplicate_check_interval)
-            self.cluster_duplicate_handler.start()
         else:
             logger.debug("Disabling cluster duplicate handler thread.")
 
     def start(self):
         """ Start up the job queue including resource initialisation. """
+        for worker in self.workers:
+            worker.start()
+
+        if self.cluster_duplicate_handler:
+            self.cluster_duplicate_handler.start()
+
         # create a single ruleset engine for all workers, instantiates all the
         # rules based on the ruleset configuration, may start up long-lived
         # analyzer instances which are shared as well, is otherwise stateless
@@ -121,9 +125,13 @@ class JobQueue:
         try:
             self.ruleset_engine.start()
         except (KeyError, ValueError, PeekabooConfigException) as error:
+            self.shut_down()
+            self.close_down()
             raise PeekabooConfigException(
                 'Ruleset configuration error: %s' % error)
         except PeekabooRulesetConfigError as error:
+            self.shut_down()
+            self.close_down()
             raise PeekabooConfigException(error)
 
     def submit(self, sample, submitter):
