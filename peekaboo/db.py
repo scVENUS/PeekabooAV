@@ -161,9 +161,25 @@ class PeekabooDatabase:
         # attempt 3: 10 * 2**(3) == 40-80msecs
         # attempt 4: 10 * 2**(4) == 80-160msecs
         self.deadlock_backoff_base = 10
-        self.connect_backoff_base = 100
+        self.connect_backoff_base = 2000
 
-        Base.metadata.create_all(self.__engine)
+        with self.__lock:
+            attempt = 1
+            while attempt <= self.retries:
+                try:
+                    Base.metadata.create_all(self.__engine)
+                except (OperationalError, DBAPIError,
+                        SQLAlchemyError) as error:
+                    attempt = self.was_transient_error(
+                        error, attempt, 'create metadata')
+                    if attempt > 0:
+                        continue
+
+                    raise PeekabooDatabaseError(
+                        'Failed to create schema in database: %s' %
+                        error)
+
+                break
 
     def was_transient_error(self, error, attempt, action):
         """ Decide if an exception signals a transient error condition and
