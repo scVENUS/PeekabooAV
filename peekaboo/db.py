@@ -196,7 +196,7 @@ class PeekabooDatabase:
 
         # (MySQLdb._exceptions.OperationalError) (2002, "Can't connect to local
         # MySQL server through socket '/var/run/mysqld/mysqld.sock' (2)")
-        if (isinstance(args, tuple) and len(args) > 0 and args[0] in [2002]):
+        if (isinstance(args, tuple) and len(args) > 0 and args[0] in [2002, 2003]):
             # sleep some millisecs
             maxmsecs = self.connect_backoff_base * 2**attempt
             backoff = random.randint(maxmsecs/2, maxmsecs)
