@@ -26,6 +26,7 @@
 """ Interface to Cortex. """
 
 import datetime
+import http.cookiejar
 import logging
 import os
 import threading
@@ -347,6 +348,17 @@ class WhitelistRetry(urllib3.util.retry.Retry):
         return super().is_retry(method, status_code, has_retry_after)
 
 
+class NocookiesPolicy(http.cookiejar.DefaultCookiePolicy):
+    """ A cookie policy that denies to accept any cookies. """
+
+    # CookiePolicy as a base class is not enough. CookieJar makes assumptions
+    # about the expansive interface of DefaultCookiePolicy.
+
+    def set_ok(self, cookie, request):
+        """ No cookie will be accepted ever. """
+        return False
+
+
 class Cortex:
     """ Interfaces with a Cortex installation via its REST API. """
     def __init__(self, job_queue, url="http://localhost:9001", api_token="",
@@ -414,6 +426,13 @@ class Cortex:
         self.session = requests.sessions.Session()
         self.session.mount('http://', retry_adapter)
         self.session.mount('https://', retry_adapter)
+        # attach a cookie policy that refuses to learn any cookies from
+        # responses. This is because Cortex sometimes hands out CSRF tokens and
+        # even session cookies in response to our bearer-token-authenticated
+        # API requests which we don't need but have the potential to confuse
+        # Cortex on subsequent requests.
+        self.session.cookies = requests.cookies.RequestsCookieJar(
+            NocookiesPolicy())
 
         self.api = None
         self.tracker = None
