@@ -337,6 +337,11 @@ class TestDefaultAnalyzerConfig(unittest.TestCase):
         self.assertEqual(self.config.cuckoo_submit_original_filename, True)
         self.assertEqual(self.config.cuckoo_maximum_job_age, 900)
         self.assertEqual(self.config.cuckoo_api_token, '')
+        self.assertEqual(self.config.cortex_url, 'http://127.0.0.1:9001')
+        self.assertEqual(self.config.cortex_poll_interval, 5)
+        self.assertEqual(self.config.cortex_submit_original_filename, True)
+        self.assertEqual(self.config.cortex_maximum_job_age, 900)
+        self.assertEqual(self.config.cortex_api_token, '')
 
 
 class TestValidAnalyzerConfig(unittest.TestCase):
@@ -349,7 +354,14 @@ url: http://api:1111
 poll_interval: 51
 submit_original_filename: no
 maximum_job_age: 900
-api_token: tok''')
+api_token: tok
+
+[cortex]
+url: http://api:2222
+poll_interval: 57
+submit_original_filename: yes
+maximum_job_age: 905
+api_token: tok2''')
 
     def test_1_read_settings(self):
         """ Test reading of configuration settings from file """
@@ -358,6 +370,12 @@ api_token: tok''')
         self.assertEqual(self.config.cuckoo_submit_original_filename, False)
         self.assertEqual(self.config.cuckoo_maximum_job_age, 900)
         self.assertEqual(self.config.cuckoo_api_token, 'tok')
+
+        self.assertEqual(self.config.cortex_url, 'http://api:2222')
+        self.assertEqual(self.config.cortex_poll_interval, 57)
+        self.assertEqual(self.config.cortex_submit_original_filename, True)
+        self.assertEqual(self.config.cortex_maximum_job_age, 905)
+        self.assertEqual(self.config.cortex_api_token, 'tok2')
 
 
 class CreatingSampleFactory(SampleFactory):

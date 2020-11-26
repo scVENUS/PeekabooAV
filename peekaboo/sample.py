@@ -83,6 +83,8 @@ class Sample:
         self.__submit_path = None
         self.__cuckoo_failed = False
         self.__cuckoo_report = None
+        self.__cortex_failed = False
+        self.__cortex_report = None
         self.__oletools_report = None
         self.__filetools_report = None
         self.__knowntools_report = None
@@ -464,6 +466,16 @@ class Sample:
         return self.__cuckoo_report
 
     @property
+    def cortex_failed(self):
+        """ Returns whether a Cortex analysis failed. """
+        return self.__cortex_failed
+
+    @property
+    def cortex_report(self):
+        """ Returns the Cortex report. """
+        return self.__cortex_report
+
+    @property
     def oletools_report(self):
         """ Returns the oletools report """
         return self.__oletools_report
@@ -490,6 +502,14 @@ class Sample:
     def register_cuckoo_report(self, report):
         """ Records a Cuckoo report for later evaluation. """
         self.__cuckoo_report = report
+
+    def mark_cortex_failure(self):
+        """ Records whether Cortex analysis failed. """
+        self.__cortex_failed = True
+
+    def register_cortex_report(self, report):
+        """ Records a Cortex report for later evaluation. """
+        self.__cortex_report = report
 
     def register_oletools_report(self, report):
         """ Records a Oletools report for alter evaluation. """

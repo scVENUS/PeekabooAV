@@ -24,3 +24,28 @@
 # New installations create a bearer token by default and require it but upgraded
 # installations don't automatically get one.
 #api_token        :    <empty>
+
+# Cortex analyzer settings
+[cortex]
+# where to reach the Cortex REST API
+#url: http://127.0.0.1:9001
+
+# Token to authenticate to the Cortex REST API with.
+#api_token        :    <empty>
+
+# how long to wait inbetween checks of job status
+#poll_interval: 5
+
+# Submit samples with their original filenames if available. Enhances
+# authenticity of analysis environment but also leaks original filenames into
+# Cortex's database.
+#submit_original_filename : yes
+
+# Specify how long to track running Cortex jobs before giving up on them. This
+# does not actively cancel jobs. It's rather meant to handle cases where jobs
+# have for some reason been dropped by or got stuck within Cortex. This value
+# is unrelated to how long our client is willing to wait for a result because
+# even if it gives up on us we would normally want to learn and cache the job
+# result because the analysis was expensive and the sample might be presented
+# to us again.
+#maximum_job_age : 900
