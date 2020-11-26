@@ -62,6 +62,13 @@ class CortexReport():
             CuckooSandbox_File_Analysistools(self.sample).analyse()
         )
 
+    @property
+    def CAPEv2FileReport(self):
+        """ Triggers analysis and produces report on access """
+        return CAPEv2_File_AnalysisReport(
+            CAPEv2_File_Analysistools(self.sample).analyse()
+        )
+
 
 class Cortextools():
     """ Interfaces with a Cortex installation via its REST API. """
@@ -219,6 +226,53 @@ class CuckooSandbox_File_AnalysisReport():
     def signatures(self):
         """ Matched Cuckoo signatures. """
         return self.report.get('full', {}).get('Signatures', None)
+
+    @property
+    def malscore(self):
+        """ Malscore n of 10 (might be bigger). """
+        for t in self.taxonomies:
+            if t.get('predicate') == 'Malscore':
+                return float(t['value'])
+        return -1
+
+
+class CAPEv2_File_Analysistools(Cortextools):
+    """ Interfaces with Cortex Analyzer CAPESandbox_File_Analysis_Inet_0_1. """
+    def analyse(self):
+        """ Pass file to Cortex Analyzer and wait for report. """
+        if not self.sample:
+            return {}
+        job = self.api.analyzers.run_by_name(
+            'CAPESandbox_File_Analysis_Inet_0_1', {
+                'data': self.sample.file_path,
+                'dataType': 'file',
+                'tlp': 1,
+                'parameters': {
+                    'filename': self.sample.name_declared,
+                }
+            }, force=1)
+        report = "Waiting"
+        while report in ('Waiting', 'Running'):
+            logger.debug("State of CAPESandbox_File_Analysis report "
+                         "generation: %s", report)
+            report = self.api.jobs.get_report(job.id).report
+            time.sleep(5)
+        return report
+
+
+class CAPEv2_File_AnalysisReport():
+    """ Represents a Cortex CAPESandbox_File_Analysis_Inet_0_1 analysis JSON
+        report. """
+    def __init__(self, report=None):
+        if report is None:
+            report = {}
+        self.report = report
+        self.taxonomies = report.get("summary", {}).get("taxonomies", [{}])
+
+    @property
+    def signatures(self):
+        """ Matched CAPE signatures. """
+        return self.report.get('full', {}).get('signatures', None)
 
     @property
     def malscore(self):
