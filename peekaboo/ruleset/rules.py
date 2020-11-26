@@ -32,14 +32,14 @@ from peekaboo.ruleset import Result, RuleResult
 from peekaboo.ruleset.expressions import ExpressionParser, \
         IdentifierMissingException
 from peekaboo.exceptions import PeekabooAnalysisDeferred, \
-        CuckooSubmitFailedException, PeekabooRulesetConfigError
+        PeekabooRulesetConfigError
 from peekaboo.sample import Sample
-from peekaboo.toolbox.cuckoo import CuckooReport
+from peekaboo.toolbox.cuckoo import CuckooReport, CuckooSubmitFailedException
 from peekaboo.toolbox.ole import Oletools, OletoolsReport
 from peekaboo.toolbox.file import Filetools, FiletoolsReport
 from peekaboo.toolbox.known import Knowntools, KnowntoolsReport
-from peekaboo.toolbox.cortex import Cortextools, CortexReport
-
+from peekaboo.toolbox.cortex import CortexReport, \
+        CortexSubmitFailedException, CortexAnalyzerReportMissingException
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +50,7 @@ class Rule:
     connection) or helper functions. """
     rule_name = 'unimplemented'
     uses_cuckoo = False
+    uses_cortex = False
 
     def __init__(self, config, db_con):
         """ Initialize common configuration and resources.
@@ -63,6 +64,7 @@ class Rule:
         self.db_con = db_con
 
         self.cuckoo = None
+        self.cortex = None
 
         # initialise and validate configuration
         self.config_options = {}
@@ -131,6 +133,15 @@ class Rule:
         """
         self.cuckoo = cuckoo
 
+    def set_cortex_job_tracker(self, cortex):
+        """ Set the Cortex job tracker to use for submitting samples to Cortex
+        as well as tracking status.
+
+        @param cortex: the Cortex job tracker to use
+        @type cortex: Cortex
+        """
+        self.cortex = cortex
+
     def get_cuckoo_report(self, sample):
         """ Get the samples cuckoo_report or submit the sample for analysis by
             Cuckoo.
@@ -176,12 +187,50 @@ class Rule:
         """
         return Knowntools(sample, self.db_con).get_report()
 
-    def get_cortextools_report(self, sample):
-        """ Get a Cortextools report on the sample.
+    def get_cortex_report(self, sample):
+        """ Get the sample's Cortex report.
 
-        @returns: CortextoolsReport
+        @returns: CortexReport or None if a previous analysis attempt has
+                  already failed.
         """
-        return Cortextools(sample).get_report()
+        if sample.cortex_failed:
+            return None
+
+        report = sample.cortex_report
+        if report is None:
+            # here we synthesize the main CortexReport as a (mostly) empty
+            # proxy and attach it to the sample. Since the report consists of
+            # potentially multiple subreports of Cortex analyzers, the report
+            # may request submission to an actual analyzer through an
+            # exception when accessing certain properties.
+            report = CortexReport()
+            sample.register_cortex_report(report)
+
+        return report
+
+    def submit_to_cortex(self, sample, analyzer):
+        """ Submit the sample to an actual Cortex analyzer to augment the
+        report.
+
+        @param sample: The sample to submit to Cortex.
+        @type sample: Sample
+        @param analyzer: The Cortex analyzer to submit to.
+        @type analyzer: subclass of CortexAnalyzer
+        @returns: None if submit failed
+        @raises PeekabooAnalysisDeferred: if successfully submitted to abort
+                                          ruleset run until result has been
+                                          retrieved.
+        """
+        logger.debug("Submitting %s to Cortex", sample.submit_path)
+        try:
+            job_id = self.cortex.submit(sample, analyzer)
+        except CortexSubmitFailedException as failed:
+            logger.error("Submit to Cortex failed: %s", failed)
+            return None
+
+        logger.info('Sample submitted to Cortex. Job ID: %s. '
+                    'Sample: %s', job_id, sample)
+        raise PeekabooAnalysisDeferred()
 
 
 class KnownRule(Rule):
@@ -591,6 +640,10 @@ class ExpressionRule(Rule):
             # attempting anything illegal
             try:
                 parsed_expression.eval(context=context)
+            except CortexAnalyzerReportMissingException:
+                # This exception tells us that CortexReport knows the analyzer
+                # and wants a job submitted. So all is well.
+                pass
             except IdentifierMissingException as missing:
                 # our dummy context provides everything we would provide at
                 # runtime as well, so any missing identifier is an error at
@@ -623,6 +676,55 @@ class ExpressionRule(Rule):
         class variable with a dynamic determination. """
         return self.uses_identifier("cuckooreport")
 
+    @property
+    def uses_cortex(self):
+        """ Tells if any expression uses the Cortex report. Overrides base
+        class variable with a dynamic determination. """
+        return self.uses_identifier("cortexreport")
+
+    def resolve_identifier(self, identifier, context, sample):
+        """ Resolves a missing identifer into an object.
+
+        @param identifer: Name of identifer to resolve.
+        @type identifier: string
+        @returns: object or None if identifier is unknown.
+        """
+        if identifier == "cuckooreport":
+            logger.debug("Expression requests cuckoo report")
+            value = self.get_cuckoo_report(sample)
+            if value is None:
+                return self.result(
+                    Result.failed,
+                    _("Evaluation of expression couldn't get cuckoo "
+                      "report."),
+                    False)
+        elif identifier == "olereport":
+            logger.debug("Expression requests oletools report")
+            value = self.get_oletools_report(sample)
+        elif identifier == "filereport":
+            logger.debug("Expression requests filetools report")
+            value = self.get_filetools_report(sample)
+        elif identifier == "knownreport":
+            logger.debug("Expression requests knowntools report")
+            value = self.get_knowntools_report(sample)
+        elif identifier == "cortexreport":
+            logger.debug("Expression requests cortex report")
+            value = self.get_cortex_report(sample)
+            if value is None:
+                return self.result(
+                    Result.failed,
+                    _("Evaluation of expression couldn't get Cortex "
+                      "report."),
+                    False)
+        # elif here for other identifiers
+        else:
+            return self.result(
+                Result.failed,
+                _("Evaluation of expression uses undefined identifier."), False)
+
+        context['variables'][identifier] = value
+        return None
+
     def evaluate(self, sample):
         """ Match what rules report against our known result status names. """
         for ruleno, expression in enumerate(self.expressions):
@@ -632,42 +734,32 @@ class ExpressionRule(Rule):
             # retry until expression evaluation doesn't throw exceptions any
             # more
             while True:
+                identifier = None
+                cortex_analyzer = None
                 try:
                     result = expression.eval(context=context)
                     break
                 except IdentifierMissingException as missing:
                     identifier = missing.name
+                except CortexAnalyzerReportMissingException as missing:
+                    cortex_analyzer = missing.analyzer
 
-                if identifier == "cuckooreport":
-                    logger.debug("Expression requests cuckoo report")
-                    value = self.get_cuckoo_report(sample)
-                    if value is None:
-                        return self.result(
-                            Result.failed,
-                            _("Evaluation of expression couldn't get cuckoo "
-                              "report."),
-                            False)
-                elif identifier == "olereport":
-                    logger.debug("Expression requests oletools report")
-                    value = self.get_oletools_report(sample)
-                elif identifier == "filereport":
-                    logger.debug("Expression requests filetools report")
-                    value = self.get_filetools_report(sample)
-                elif identifier == "knownreport":
-                    logger.debug("Expression requests knowntools report")
-                    value = self.get_knowntools_report(sample)
-                elif identifier == "cortexreport":
-                    logger.debug("Expression requests cortextools report")
-                    value = self.get_cortextools_report(sample)
-                # elif here for other identifiers
-                else:
+                if identifier is not None:
+                    result = self.resolve_identifier(
+                        identifier, context, sample)
+                    if result is not None:
+                        return result
+
+                if cortex_analyzer is not None:
+                    self.submit_to_cortex(sample, cortex_analyzer)
+                    # submission either raises an exception or has failed, so
+                    # getting here is an error
                     return self.result(
                         Result.failed,
-                        _("Evaluation of expression uses undefined "
-                          "identifier."),
+                        _("Evaluation of expression failed to submit Cortex "
+                          "analysis."),
                         False)
 
-                context['variables'][identifier] = value
                 # beware: here we intentionally loop on through for retry
 
             # our implication returns None if expression did not match
