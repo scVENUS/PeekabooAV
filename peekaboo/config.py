@@ -456,6 +456,12 @@ class PeekabooAnalyzerConfig(PeekabooConfigParser):
         self.cuckoo_submit_original_filename = True
         self.cuckoo_maximum_job_age = 15*60
 
+        self.cortex_url = 'http://127.0.0.1:9001'
+        self.cortex_api_token = ''
+        self.cortex_poll_interval = 5
+        self.cortex_submit_original_filename = True
+        self.cortex_maximum_job_age = 15*60
+
         config_options = {
             'cuckoo_url': ['cuckoo', 'url'],
             'cuckoo_api_token': ['cuckoo', 'api_token'],
@@ -463,6 +469,13 @@ class PeekabooAnalyzerConfig(PeekabooConfigParser):
             'cuckoo_submit_original_filename': [
                 'cuckoo', 'submit_original_filename'],
             'cuckoo_maximum_job_age': ['cuckoo', 'maximum_job_age'],
+
+            'cortex_url': ['cortex', 'url'],
+            'cortex_api_token': ['cortex', 'api_token'],
+            'cortex_poll_interval': ['cortex', 'poll_interval'],
+            'cortex_submit_original_filename': [
+                'cortex', 'submit_original_filename'],
+            'cortex_maximum_job_age': ['cortex', 'maximum_job_age'],
         }
 
         # read configuration file. Note that we require a configuration file

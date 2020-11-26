@@ -63,8 +63,3 @@ class PeekabooAnalysisDeferred(PeekabooRulesetException):
     take into account that the ruleset will be rerun from the very beginning.
     """
     pass
-
-
-class CuckooSubmitFailedException(PeekabooException):
-    """ An exception raised if submitting a job to Cuckoo fails. """
-    pass

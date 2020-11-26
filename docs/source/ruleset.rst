@@ -141,7 +141,7 @@ Attribues of cortexreport
 
 .. code-block:: shell
 
-    File_InfoReport.full
+    FileInfoReport.full
     HybridAnalysisReport.full
     VirusTotalQueryReport.n_of_all
     VirusTotalQueryReport.level

@@ -84,7 +84,7 @@ keyword.2 : AutoClose
 
 #expression.0  : knownreport.known -> knownreport.result
 #expression.0  : knownreport.known and knownreport.first < 14 -> knownreport.result
-#expression.0  : cortexreport.File_InfoReport.full -> bad
+#expression.0  : cortexreport.FileInfoReport.full -> bad
 expression.1  : {sample.type_declared}|filereport.mime_types <= {
                     'text/plain', 'inode/x-empty'} -> ignore
 expression.2  : sample.name_declared == /smime.p7[mcs]/
