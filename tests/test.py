@@ -242,7 +242,7 @@ config           :    /rules/1
 
 [logging]
 log_level        :    DEBUG
-log_format       :    format%%foo1
+log_format       :    format%%(foo1)s
 
 [db]
 url              :    sqlite:////peekaboo.db1
@@ -280,7 +280,7 @@ duplicate_check_interval: 61
         self.assertEqual(self.config.processing_info_dir, '/var/3')
         self.assertEqual(self.config.ruleset_config, '/rules/1')
         self.assertEqual(self.config.log_level, logging.DEBUG)
-        self.assertEqual(self.config.log_format, 'format%foo1')
+        self.assertEqual(self.config.log_format, 'format%(foo1)s')
         self.assertEqual(self.config.db_url, 'sqlite:////peekaboo.db1')
         self.assertEqual(self.config.cuckoo_mode, 'api1')
         self.assertEqual(self.config.cuckoo_exec, '/cuckoo/1')
