@@ -682,6 +682,9 @@ class TestSample(unittest.TestCase):
             ['foo1%', True],
             ['foo 1', False],
             ['fü', False],
+            ['foo&resize=600,510', False],
+            ['foo;param=5', False],
+            ['foo?query=value', False],
         ]
 
         for ext, accepted in testcases:

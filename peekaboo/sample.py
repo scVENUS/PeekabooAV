@@ -416,10 +416,22 @@ class Sample:
         # - allow only alphanumeric characters and some symbols (arbitrarily
         #   chosen based on file extension list in Wikipedia and personal
         #   experience)
-        # indirectly by stripping what is allowed from the extension and
-        # checking that nothing remains.
-        if ext.strip(
-                string.ascii_letters + string.digits + string.punctuation):
+        allowed_characters = string.ascii_letters + string.digits
+
+        # we're seeing attachments whose declared filenames include what seems
+        # to be meant as query strings (e.g. foo.jpg?resize=600,510). Since
+        # there are no file extensions we know of containing those characters,
+        # we do not allow them. Since we cannot find any document stating that
+        # the name parameter of header Content-Type can contain URLs/URIs,
+        # we're not even attempting to go down the rabbit hole of parsing it as
+        # such to avoid the inevitable fallout from it. Instead we rather not
+        # extract any extension at all.
+        allowed_characters += string.punctuation.translate(
+                str.maketrans('', '', '?;&'))
+
+        # test works indirectly by stripping what is allowed from beginning and
+        # end of the extension and checking that nothing remains.
+        if ext.strip(allowed_characters):
             return None
 
         self.__file_extension = ext
