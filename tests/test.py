@@ -685,7 +685,10 @@ class TestOletools(CompatibleTestCase):
         cases = [
             # file name, , vba code, , detected autoexec, , detected suspicious
             #     , has macros, , has autoexec, , is suspicious,
-            ['blank.doc', False, '', False, '[]', False, '[]'],
+            ['blank.doc', False, r'^$', False, r'^\[\]$', False, r'^\[\]$'],
+            ['CheckVM.xls', True, r'^Private Sub Workbook_Open\(\)',
+                True, r'''^\[.*\('Workbook_Open', 'Runs when''',
+                True, r'''^\[.*\('GetObject', 'May get an'''],
         ]
         for file_name, expected_has_office_macros, expected_vba_code, \
                 expected_has_autoexec, expected_detected_autoexec, \
@@ -695,19 +698,19 @@ class TestOletools(CompatibleTestCase):
             self.assertEqual(
                 report.has_office_macros, expected_has_office_macros,
                 "Oletools has_office_macros: %s" % file_name)
-            self.assertEqual(
+            self.assertRegex(
                 report.vba_code, expected_vba_code,
                 "Oletools expected_vba_code: %s" % file_name)
             self.assertEqual(
                 report.has_autoexec, expected_has_autoexec,
                 "Oletools has_autoexec: %s" % file_name)
-            self.assertEqual(
+            self.assertRegex(
                 report.detected_autoexec, expected_detected_autoexec,
                 "Oletools detected_autoexec: %s" % file_name)
             self.assertEqual(
                 report.is_suspicious, expected_is_suspicious,
                 "Oletools is_suspicious: %s" % file_name)
-            self.assertEqual(
+            self.assertRegex(
                 report.detected_suspicious, expected_detected_suspicious,
                 "Oletools detected_autoexec: %s" % file_name)
 

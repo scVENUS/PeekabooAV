@@ -74,11 +74,11 @@ class Oletools(object):
                 for (_, _, _, c) in vb_code:
                     autoexec = detect_autoexec(c)
                     if len(autoexec) >= 1:
-                        report['autoexec'].append(autoexec[0])
+                        report['autoexec'].extend(autoexec)
 
                     suspicious = detect_suspicious(c)
                     if len(suspicious) >= 1:
-                        report['suspicious'].append(suspicious[0])
+                        report['suspicious'].extend(suspicious)
 
             vbaparser.close()
         except IOError:
