@@ -57,6 +57,18 @@ class CortexAnalyzerReportMissingException(PeekabooException):
 class CortexAnalyzerReport:
     """ Cortex analyzer report base class. """
 
+    @classmethod
+    def get_element_from_list_of_dicts(cls, list_, ident_key, ident_value, default={}):
+        #pylint: disable=dangerous-default-value
+        """ Search a list of dicts for an element with a matching value for an
+            identifying key """
+        element = [dictionary for dictionary in list_
+            if dictionary.get(ident_key) == ident_value
+        ]
+        if len(element) != 1:
+            return default
+        return element[0]
+
 
 class CortexAnalyzer:
     """ Cortex analyzer base class. """
@@ -142,18 +154,21 @@ class VirusTotalQueryReport(CortexAnalyzerReport):
     """ Represents a Cortex VirusTotal_GetReport_3_0 analysis JSON report. """
     def __init__(self, report):
         self.report = report
-        self.taxonomies = report.get("summary", {}).get("taxonomies", [{}])[0]
+        self.taxonomies_vt = self.get_element_from_list_of_dicts(
+                report.get('summary', {}).get('taxonomies'),
+                'namespace', 'VT', {}
+            )
 
     @property
     def n_of_all(self):
         """ n of all Virusscanners at VirusTotal have rated this file as
             malicious. """
-        return int(self.taxonomies.get('value', '-1/0').split('/')[0])
+        return int(self.taxonomies_vt.get('value', '-1/0').split('/')[0])
 
     @property
     def level(self):
         """ safe, suspicious, malicious """
-        return self.taxonomies.get('level', None)
+        return self.taxonomies_vt.get('level', None)
 
 
 class VirusTotalQuery(CortexHashAnalyzer):
