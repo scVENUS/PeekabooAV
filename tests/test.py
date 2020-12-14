@@ -62,6 +62,7 @@ from peekaboo.toolbox.ole import Oletools
 from peekaboo.toolbox.file import Filetools, FiletoolsReport
 from peekaboo.toolbox.known import Knowntools, KnowntoolsReport
 from peekaboo.db import PeekabooDatabase, PeekabooDatabaseError
+from peekaboo.toolbox.cortex import CortexReport, VirusTotalQuery
 # pylint: enable=wrong-import-position
 
 
@@ -1355,6 +1356,65 @@ unknown : baz'''
         rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
+
+    def test_rule_expressions_cortexreport_virustotalqueryreport_context(self):
+        """ Test generic rule cortexreport.VirusTotalQueryReport context """
+        config = '''[expressions]
+            expression.5  : cortexreport.VirusTotalQueryReport.n_of_all > 0
+                or cortexreport.VirusTotalQueryReport.level != 'safe'
+                ->  bad
+        '''
+        rule = ExpressionRule(CreatingConfigParser(config), None)
+
+        factory = CreatingSampleFactory(
+            base_dir=None, job_hash_regex=None,
+            keep_mail_data=False, processing_info_dir=None)
+
+        sample = factory.make_sample(os.path.join(
+            self.office_data_dir, 'blank.doc'))
+
+        tax = {
+                "level": "malicious",
+                "namespace": "VT",
+                "predicate": "GetReport",
+                "value": "37/68"
+            }
+        report = {
+            "summary": {
+                "taxonomies": [
+                tax
+                ]
+            },
+            "success": True,
+            "artifacts": [],
+            "operations": []
+        }
+        cortexreport = CortexReport()
+        cortexreport.register_report(VirusTotalQuery, report)
+
+        sample.register_cortex_report(cortexreport)
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.bad)
+
+        tax["level"] = "safe"
+        tax["value"] = "0/86"
+        report["summary"]["taxonomies"].append(tax)
+        cortexreport.register_report(VirusTotalQuery, report)
+        sample.register_cortex_report(cortexreport)
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.bad)
+
+        report["summary"]["taxonomies"].pop(0)
+        cortexreport.register_report(VirusTotalQuery, report)
+        sample.register_cortex_report(cortexreport)
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.unknown)
+
+        report["summary"]["taxonomies"][0]["value"] = "NAN"
+        cortexreport.register_report(VirusTotalQuery, report)
+        sample.register_cortex_report(cortexreport)
+        with self.assertRaises(ValueError):
+            result = rule.evaluate(sample)
 
     def test_rule_expressions_olereport_context(self):
         """ Test generic rule olereport context """
