@@ -142,7 +142,10 @@ class VirusTotalQueryReport(CortexAnalyzerReport):
     """ Represents a Cortex VirusTotal_GetReport_3_0 analysis JSON report. """
     def __init__(self, report):
         self.report = report
-        self.taxonomies = report.get("summary", {}).get("taxonomies", [{}])[0]
+        self.taxonomies = {}
+        for tax in report.get("summary", {}).get("taxonomies", []):
+            if tax.get('namespace') == 'VT':
+                self.taxonomies = tax
 
     @property
     def n_of_all(self):
