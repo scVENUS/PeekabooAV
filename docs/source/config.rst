@@ -143,6 +143,91 @@ Cuckoo
 ------
 Please refer to the Cuckoo documentation available at https://cuckoo.sh/docs/index.html.
 
+Cortex
+------
+
+Extensive documentation on setup of Cortex is available at
+https://github.com/TheHive-Project/CortexDocs.
+
+We assume that Cortex is installed in a separate virtual machine or container
+and accessible via its REST API.
+The following paragraphs give a short reference how to set up Cortex for use
+with Peekaboo and CAPEv2 backend analyzer.
+We show ``curl`` commands for configuring Cortex via the REST API.
+The same objective can be achieved interactively as well.
+
+When starting out with a freshly installed Cortex VM or container,
+it wants to initialize its database.
+This is shown as a message upon first connect using a web browser
+and can be triggered by pressing the respective button.
+Using curl this can be triggered like so, assuming the host name is ``cortex``
+and TLS is deployed:
+
+.. code-block:: shell
+
+   $ curl -XPOST -H 'Content-Type: application/json' https://cortex:9001/api/maintenance/migrate -d '{}'
+
+After that a superadmin needs to be created:
+
+.. code-block:: shell
+
+   $ curl -XPOST -H 'Content-Type: application/json' https://cortex:9001/api/user \
+      -d '{"login":"admin","name":"admin","password":secret:here,"roles":["superadmin"],"organization":"cortex"}'
+
+There's an intentional syntax error in the previous command to replace with an
+actual password.
+This solves the chicken-and-egg problem of having no users in a freshly
+initialized database by not requiring any authentication.
+So the time window up to this step should be kept as short as possible.
+From then on, the superadmin and their password can be used to access Cortex
+securely.
+
+Now an organization called e.g. ``peekaboo`` can be created, an organization
+admin user created and an api key generated and retrieved for the purposes of
+further configuration:
+
+.. code-block:: shell
+
+   $ curl -XPOST -u admin -H 'Content-Type: application/json' https://cortex:9001/api/organization \
+      -d '{ "name": "peekaboo", "description": "Peekaboo organization", "status": "Active"}'
+   Enter host password for user 'admin': <password configured above>
+   $ curl -XPOST -u admin -H 'Content-Type: application/json' https://cortex:9001/api/user \
+      -d '{ "name": "Peekaboo org Admin", "roles": ["read","analyze","orgadmin"], "organization": "peekaboo", "login": "peekaboo-admin" }'
+   Enter host password for user 'admin': <password configured above>
+   $ ORG_ADMIN_KEY=$(curl -s -XPOST -u admin -H 'Content-Type: application/json' \
+      https://cortex:9001/api/user/peekaboo-admin/key/renew)
+   Enter host password for user 'admin': <password configured above>
+
+From now on, further curl requests can use the API key from this shell.
+Beware that it becomes visible in the process arguments during execution.
+So do this on a secure machine or give the user a password instead and manually
+enter that.
+
+Now we're ready to create a Peekaboo analyzer user and retrieve their API key:
+
+.. code-block:: shell
+
+   $ curl -XPOST -H "Authorization: Bearer $ORG_ADMIN_KEY" -H 'Content-Type: application/json' \
+      https://cortex:9001/api/user -d '{ "name": "Peekaboo", "roles": ["read","analyze"], "organization": "peekaboo", "login": "peekaboo-analyze" }'
+   $ curl -XPOST -H "Authorization: Bearer $ORG_ADMIN_KEY" -H 'Content-Type: application/json' \
+      https://cortex:9001/api/user/peekaboo-analyze/key/renew
+
+Place the API key in Peekaboo's ``analyzer.conf`` in the ``api_token`` option of
+section ``cortex`` so that Peekaboo can authenticate requests to the API.
+
+Finally, we can configure Cortex analyzers using curl as well.
+The following is an example of configuring CAPEv2 as a Cortex analyzer:
+
+.. code-block:: shell
+
+   $ curl -XPOST -H "Authorization: Bearer $ORG_ADMIN_KEY" -H 'Content-Type: application/json' \
+      https://cortex:9001/api/organization/analyzer/CAPE_File_Analysis_0_2 \
+      -d '{"name": "CAPE_File_Analysis_0_2", "configuration": {"url": "http://cape:8000/api"}}'
+
+This particular analyzer is not upstream as of this writing.
+But the principle is the same for all analyzers.
+Additional configuration options can be added as necessary.
+
 AMaViSd
 -------
 First, install the ``10-ask_peekaboo`` plugin as
