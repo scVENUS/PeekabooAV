@@ -114,7 +114,17 @@ class EvalString(EvalBase):
 class OperatorRegex(object):
     """ A class implementing operators on regular expressions. """
     def __init__(self, string):
-        self.regex = re.compile(string)
+        # We use re.search to implement the membership operator (in) in the
+        # sense of "matches anywhere in the string". We can use the regex
+        # as given for that.
+        self.membership_regex = re.compile(string)
+        # For equality matches we use re.match which already anchors the
+        # matching at the start of the operand but does not require a match all
+        # up until the end of it. So we need to add an explicit end-of-line anchor.
+        self.equality_regex = re.compile("%s$" % string)
+        # NOTE: Take the multiline semantics of re.search vs. re.match into
+        # account when looking to change this (although we're not using
+        # multiline mode as of now).
 
     @staticmethod
     def compare_op_impl(function, other):
@@ -134,18 +144,21 @@ class OperatorRegex(object):
 
     def __eq__(self, other):
         """ Implement equality using re.match """
-        logger.debug("Regular expression match: %s == %s", self.regex, other)
-        return self.compare_op_impl(self.regex.match, other)
+        logger.debug("Regular expression match: %s == %s",
+            self.equality_regex, other)
+        return self.compare_op_impl(self.equality_regex.match, other)
 
     def __ne__(self, other):
         """ Implement inequality using re.match """
-        logger.debug("Regular expression match: %s != %s", self.regex, other)
-        return not self.compare_op_impl(self.regex.match, other)
+        logger.debug("Regular expression match: %s != %s",
+            self.equality_regex, other)
+        return not self.compare_op_impl(self.equality_regex.match, other)
 
     def __contains__(self, other):
         """ Implement membership using re.search """
-        logger.debug("Regular expression search: %s in %s", self.regex, other)
-        return self.compare_op_impl(self.regex.search, other)
+        logger.debug("Regular expression search: %s in %s",
+            self.membership_regex, other)
+        return self.compare_op_impl(self.membership_regex.search, other)
 
 
 class EvalRegex(EvalBase):

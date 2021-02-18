@@ -1097,6 +1097,11 @@ unknown : baz'''
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
+        part["name_declared"] = "smime.p7sm"
+        sample = factory.make_sample('', metainfo=part)
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.unknown)
+
         part["name_declared"] = "file"
         sample = factory.make_sample('', metainfo=part)
         result = rule.evaluate(sample)
@@ -1552,19 +1557,30 @@ class TestExpressionParser(CompatibleTestCase):
             ["'foo' == 'bar'", False],
             ["'foo' == 'foo'", True],
             ["'foo' in 'bar'", False],
-            # re.search()
+            # re.search() for "match anywhere in operand"
             ["'foo' in 'foobar'", True],
             ["/foo/ in 'afoobar'", True],
-            # re.match() is implicit /^<pattern>/
+            # re.match() is implicit /^<pattern>/. We add $ at the end to have
+            # "match from beginning to end"
             ["/foo/ == 'afoobar'", False],
-            ["/foo/ == 'foobar'", True],
-            ["/foo/ != 'foobar'", False],
+            ["/foo/ == 'foo'", True],
+            ["/foo/ == 'foobar'", False],
+            ["/foo/ == 'fo'", False],
+            ["/foo/ == 'foob'", False],
+            ["/foo/ == 'fobar'", False],
+            ["/foo/ != 'afoobar'", True],
+            ["/foo/ != 'foo'", False],
+            ["/foo/ != 'foobar'", True],
+            ["/foo/ != 'fo'", True],
+            ["/foo/ != 'foob'", True],
             ["/foo/ != 'fobar'", True],
             ["/[fb][oa][or]/ in 'foo'", True],
             ["/[fb][oa][or]/ in 'bar'", True],
             ["/[fb][oa][or]/ in 'snafu'", False],
             ["/[fb][oa][or]/ in ['afoob', 'snafu']", True],
             ["/[fb][oa][or]/ not in ['afoob', 'snafu']", False],
+            ["/[fb][oa][or]/ == ['foo', 'snafu']", True],
+            ["/[fb][oa][or]/ == ['foob', 'snafu']", False],
             ["/[fb][oa][or]/ == ['afoob', 'snafu']", False],
             ["/[fb][oa][or]/ != ['afoob', 'snafu']", True],
             ["[/foo/, /bar/] in ['snafu', 'fuba']", False],
