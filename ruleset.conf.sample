@@ -72,6 +72,7 @@ greylist.33 : application/vnd.ms-powerpoint
 greylist.34 : application/vnd.ms-excel.template.macroEnabled.12
 greylist.35 : application/vnd.ms-excel
 greylist.36 : application/msword
+greylist.37 : application/CDFV2-unknown
 
 [office_macro_with_suspicious_keyword]
 keyword.1 : AutoOpen
