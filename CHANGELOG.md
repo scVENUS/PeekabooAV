@@ -4,6 +4,8 @@ See documentation for details.
 
 ## devel
 
+- Breaking change: Equality operators in expressions using regexes do now need
+  to match the whole string up to the end.
 - New database schema version 8.
   Removes tables PeekabooMetadata and AnalysisJournal, and adds field
   analysis\_time to SampleInfo.
