@@ -161,9 +161,25 @@ class PeekabooDatabase:
         # attempt 3: 10 * 2**(3) == 40-80msecs
         # attempt 4: 10 * 2**(4) == 80-160msecs
         self.deadlock_backoff_base = 10
-        self.connect_backoff_base = 100
+        self.connect_backoff_base = 2000
 
-        Base.metadata.create_all(self.__engine)
+        with self.__lock:
+            attempt = 1
+            while attempt <= self.retries:
+                try:
+                    Base.metadata.create_all(self.__engine)
+                except (OperationalError, DBAPIError,
+                        SQLAlchemyError) as error:
+                    attempt = self.was_transient_error(
+                        error, attempt, 'create metadata')
+                    if attempt > 0:
+                        continue
+
+                    raise PeekabooDatabaseError(
+                        'Failed to create schema in database: %s' %
+                        error)
+
+                break
 
     def was_transient_error(self, error, attempt, action):
         """ Decide if an exception signals a transient error condition and
@@ -196,7 +212,7 @@ class PeekabooDatabase:
 
         # (MySQLdb._exceptions.OperationalError) (2002, "Can't connect to local
         # MySQL server through socket '/var/run/mysqld/mysqld.sock' (2)")
-        if (isinstance(args, tuple) and len(args) > 0 and args[0] in [2002]):
+        if (isinstance(args, tuple) and len(args) > 0 and args[0] in [2002, 2003]):
             # sleep some millisecs
             maxmsecs = self.connect_backoff_base * 2**attempt
             backoff = random.randint(maxmsecs/2, maxmsecs)

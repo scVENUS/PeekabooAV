@@ -33,10 +33,15 @@ import threading
 import requests
 import urllib3.util.retry
 
-from peekaboo.exceptions import CuckooSubmitFailedException
+from peekaboo.exceptions import PeekabooException
 
 
 logger = logging.getLogger(__name__)
+
+
+class CuckooSubmitFailedException(PeekabooException):
+    """ An exception raised if submitting a job to Cuckoo fails. """
+    pass
 
 
 class CuckooJob:

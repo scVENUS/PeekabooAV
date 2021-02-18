@@ -93,6 +93,7 @@ setup(
             "CHANGELOG.md",
             "peekaboo.conf.sample",
             "ruleset.conf.sample",
+            "analyzers.conf.sample",
         ]),
         ("share/doc/peekaboo/systemd", [
             "systemd/peekaboo.service",

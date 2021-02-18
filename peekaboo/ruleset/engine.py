@@ -28,6 +28,7 @@ import logging
 from peekaboo.ruleset import Result, RuleResult
 from peekaboo.ruleset.rules import *
 from peekaboo.toolbox.cuckoo import Cuckoo
+from peekaboo.toolbox.cortex import Cortex
 from peekaboo.toolbox.peekabooyar import ContainsPeekabooYarRule
 from peekaboo.exceptions import PeekabooAnalysisDeferred, \
         PeekabooConfigException, PeekabooRulesetConfigError
@@ -79,6 +80,7 @@ class RulesetEngine:
         self.db_con = db_con
         self.analyzer_config = analyzer_config
         self.cuckoo = None
+        self.cortex = None
         self.rules = []
 
         self.shutdown_requested = False
@@ -147,6 +149,25 @@ class RulesetEngine:
 
                 rule.set_cuckoo_job_tracker(self.cuckoo)
 
+            if rule.uses_cortex:
+                if self.cortex is None:
+                    logger.debug(
+                        "Rule %s uses Cortex. Starting job tracker.", rule_name)
+
+                    self.cortex = Cortex(
+                        self.job_queue,
+                        self.analyzer_config.cortex_url,
+                        self.analyzer_config.cortex_api_token,
+                        self.analyzer_config.cortex_poll_interval,
+                        self.analyzer_config.cortex_submit_original_filename,
+                        self.analyzer_config.cortex_maximum_job_age)
+
+                    if not self.cortex.start_tracker():
+                        raise PeekabooRulesetConfigError(
+                            "Failure to initialize Cortex job tracker")
+
+                rule.set_cortex_job_tracker(self.cortex)
+
             self.rules.append(rule)
 
             # abort startup if we've been asked to shut down meanwhile
@@ -197,6 +218,9 @@ class RulesetEngine:
         if self.cuckoo is not None:
             self.cuckoo.shut_down()
 
+        if self.cortex is not None:
+            self.cortex.shut_down()
+
     def shut_down(self):
         """ Initiate asynchronous shutdown of the ruleset engine and dependent
         logic such as job trackers. """
@@ -207,3 +231,6 @@ class RulesetEngine:
         """ Finalize ruleset engine shutdown synchronously. """
         if self.cuckoo is not None:
             self.cuckoo.close_down()
+
+        if self.cortex is not None:
+            self.cortex.close_down()
