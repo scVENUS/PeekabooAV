@@ -2,7 +2,11 @@
 
 See documentation for details.
 
-## devel
+## 2.0.1
+
+- Breaking change / security content: Equality operators in expressions using
+  regexes do now need to match the whole string up to the end.
+- Fix cluster duplicate handler dying (#160)
 
 ## 2.0
 
