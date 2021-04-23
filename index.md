@@ -6,28 +6,37 @@
 * It is able to detect: malware by its behavior, exploitation of zero days, and targeted attacks
 
 
-Third PeekabooAV Workshop and Developers Meeting
-------------------------------------------------
+PeekabooAV Workshop and Developers Meeting
+------------------------------------------
 
-Our third Workshop and Developers Meeting will take place **04.12.2019 in Tübingen**, Hagellocher Weg 73.
+Every now and then we host the Workshop and Developers Meeting at our headquarters **in Tübingen**, Hagellocher Weg 73, Germany.
 
-We will start at 🕘 9 o'clock with an introduction by Felix Bauer, there will be an opportunity for our users to present,
+We then start at 🕘 9 o'clock with an introduction by Felix Bauer, there then is the opportunity for our users to present,
 time to get to know the new features for the upcoming version, time for discussion, coffee and snacks.
 
-Please let us know you are coming and if you can share your experience with Peekaboo. 
-The event will be organised by Felix (felix@peekabooav.de)
+Please let us know if you are interested and we will keep you updated on upcomming events. We are always keen to hear from
+our users and interested to their experience with Peekaboo. 
+The events are organised and held by Felix (felix@peekabooav.de)
 
 
 We can offer
 ------------
-* Support for peekaboo
+
+* Support for Peekaboo
+* Trainings
 * Development of features
 * Setup of PeekabooAV system in your infrastructure
 * Help with anything related
+* ...
+
 
 Please get in touch
 -------------------
+
 * **Felix Bauer** - *Security Analyst and Project Leader* - [@Jack28](https://github.com/Jack28)
 * **Michael Weiser** - *Developer* - [@michaelweiser](https://github.com/michaelweiser)
 
-For news and announcements follow us on twitter [@peekabooAV](https://twitter.com/peekabooav).
+
+Please also have a look at our [repository on Github](https://github.com/scVENUS/peekabooAV), our
+[wiki on Github](https://github.com/scVENUS/PeekabooAV/wiki) as well as the
+[news, updates and related pointers on Twitter @peekabooav](https://twitter.com/peekabooav).
