@@ -33,6 +33,9 @@ We can offer
 Please get in touch
 -------------------
 
+For personal inquiries contact Felix and Michael directly. If you have general questions about the project, offers,
+future plans, presentations ... write to (info@peekabooav.de) and for security related topics contact (security@peekabooav.de).
+
 * **Felix Bauer** - *Security Analyst and Project Leader* - [@Jack28](https://github.com/Jack28)
 * **Michael Weiser** - *Developer* - [@michaelweiser](https://github.com/michaelweiser)
 
