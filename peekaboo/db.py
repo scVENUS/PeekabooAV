@@ -28,6 +28,7 @@ SQLAlchemy. """
 import threading
 import logging
 from datetime import datetime, timedelta
+import sqlalchemy
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, \
         Enum, Index
 from sqlalchemy.ext.declarative import declarative_base
@@ -454,7 +455,8 @@ class PeekabooDatabase(object):
                 'Unable to drop all tables of the database: %s' % error)
 
     def _db_schema_exists(self):
-        if not self.__engine.dialect.has_table(self.__engine, '_meta'):
+        insp = sqlalchemy.inspect(self.__engine)
+        if not insp.has_table('_meta'):
             return False
 
         session = self.__session()
