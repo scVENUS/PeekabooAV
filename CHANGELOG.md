@@ -2,6 +2,10 @@
 
 See documentation for details.
 
+## 2.0.2
+
+- Fix sqlalchemy.exc.ArgumentError
+
 ## 2.0.1
 
 - Breaking change / security content: Equality operators in expressions using
