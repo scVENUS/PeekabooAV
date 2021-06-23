@@ -56,6 +56,8 @@ class CortexAnalyzerReportMissingException(PeekabooException):
 
 class CortexAnalyzerReport:
     """ Cortex analyzer report base class. """
+    def __init__(self, report):
+        self.report = report
 
     @classmethod
     def get_element_from_list_of_dicts(cls, list_, ident_key, ident_value, default={}):
@@ -68,6 +70,36 @@ class CortexAnalyzerReport:
         if len(element) != 1:
             return default
         return element[0]
+
+    @classmethod
+    def get_filtered_elements_from_list_of_dicts(
+            cls, dictionary, ident_key, ident_value, filter_key, filter_data_type):
+        """ Search a list of dicts for elements with a matching value for an
+            identifying key and filter on filter_key with filter_data_type """
+        elements = [artifact['data'] for artifact in dictionary
+            if artifact.get(ident_key) == ident_value and
+                filter_key in artifact and
+                isinstance(artifact[filter_key], filter_data_type)
+        ]
+        return elements
+
+    @property
+    def domain_artifacts(self):
+        """ Returns a list of domain artifacts. """
+        return self.get_filtered_elements_from_list_of_dicts(
+                self.report.get('artifacts', []), 'dataType', 'domain', 'data', str)
+
+    @property
+    def hash_artifacts(self):
+        """ Returns a list of hash artifacts. """
+        return self.get_filtered_elements_from_list_of_dicts(
+                self.report.get('artifacts', []), 'dataType', 'hash', 'data', str)
+
+    @property
+    def ip_artifacts(self):
+        """ Returns a list of ip artifacts. """
+        return self.get_filtered_elements_from_list_of_dicts(
+                self.report.get('artifacts', []), 'dataType', 'ip', 'data', str)
 
 
 class CortexAnalyzer:
@@ -117,13 +149,57 @@ class CortexHashAnalyzer(CortexAnalyzer):
 
 class FileInfoAnalyzerReport(CortexAnalyzerReport):
     """ Represents a Cortex FileInfo_7_0 analysis JSON report. """
-    def __init__(self, report):
-        self.report = report
+    def get_basic_properties(self):
+        """ Extract the 'Basic properties' element from the report. """
+        return self.get_element_from_list_of_dicts(
+                self.report.get('full', []).get('results', {}),
+                'submodule_name', 'Basic properties')
+
+    def get_hashes(self):
+        """ Extract the 'Hashes' from the 'Basic properties'. """
+        basic_properties = self.get_basic_properties().get('results', [])
+        return self.get_element_from_list_of_dicts(
+                basic_properties, 'submodule_section_header', 'Hashes').get(
+                    'submodule_section_content', {})
 
     @property
-    def full(self):
-        """ Return the full report. """
-        return self.report.get('full', None)
+    def sha256sum(self):
+        """ Return the sha256 sum. """
+        hashes = self.get_hashes()
+        sha256sum = hashes.get('sha256')
+        if not isinstance(sha256sum, str):
+            raise TypeError('sha256 sum is expected to be a string')
+        if len(sha256sum) != 64:
+            raise TypeError('sha256 sum string is expected '
+                            'to be 64 characters long')
+
+        return sha256sum
+
+    @property
+    def md5sum(self):
+        """ Return the md5 sum. """
+        hashes = self.get_hashes()
+        md5sum = hashes.get('md5')
+        if not isinstance(md5sum, str):
+            raise TypeError('md5 sum is expected to be a string')
+        if len(md5sum) != 32:
+            raise TypeError('md5 sum string is expected to be 32 characters long')
+
+        return md5sum
+
+    @property
+    def ssdeepsum(self):
+        """ Return the ssdeep sum. """
+        # TODO: think about if we want to compare ssdeep hashes
+        hashes = self.get_hashes()
+        ssdeepsum = hashes.get('ssdeep')
+        if not isinstance(ssdeepsum, str):
+            raise TypeError('ssdeep sum is expected to be a string')
+        if len(ssdeepsum) > 148:
+            raise TypeError('ssdeep sum string is expected to '
+                            'be less or equal to 148 characters long')
+
+        return ssdeepsum
 
 
 class FileInfoAnalyzer(CortexFileAnalyzer):
@@ -135,9 +211,6 @@ class FileInfoAnalyzer(CortexFileAnalyzer):
 class HybridAnalysisReport(CortexAnalyzerReport):
     """ Represents a Cortex HybridAnalysis_GetReport_1_0 analysis JSON
         report. """
-    def __init__(self, report):
-        self.report = report
-
     @property
     def full(self):
         """ Return the full report. """
@@ -153,7 +226,7 @@ class HybridAnalysis(CortexFileAnalyzer):
 class VirusTotalQueryReport(CortexAnalyzerReport):
     """ Represents a Cortex VirusTotal_GetReport_3_0 analysis JSON report. """
     def __init__(self, report):
-        self.report = report
+        super().__init__(report)
         self.taxonomies_vt = self.get_element_from_list_of_dicts(
                 report.get('summary', {}).get('taxonomies'),
                 'namespace', 'VT', {}
@@ -181,7 +254,7 @@ class CuckooSandboxFileAnalysisReport(CortexAnalyzerReport):
     """ Represents a Cortex CuckooSandbox_File_Analysis_Inet_1_2 analysis JSON
         report. """
     def __init__(self, report):
-        self.report = report
+        super().__init__(report)
         self.taxonomies = report.get("summary", {}).get("taxonomies", [{}])
 
     @property
@@ -209,7 +282,7 @@ class CAPEv2FileAnalysisReport(CortexAnalyzerReport):
     """ Represents a Cortex CAPESandbox_File_Analysis_Inet_0_1 analysis JSON
         report. """
     def __init__(self, report):
-        self.report = report
+        super().__init__(report)
         self.taxonomies = report.get("summary", {}).get("taxonomies", [{}])
 
     @property
@@ -525,6 +598,10 @@ class Cortex:
             logger.error('Retrieval of report from Cortex failed: %s', error)
             # mark analysis as failed if we could not get the report e.g.
             # because it was corrupted or the API connection failed.
+            job.sample.mark_cortex_failure()
+        except TypeError as error:
+            logger.warning('Report returned from Cortex conainted '
+                           'invalid data: %s', error)
             job.sample.mark_cortex_failure()
 
         self.job_queue.submit(job.sample, self.__class__)

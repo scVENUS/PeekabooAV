@@ -16,6 +16,10 @@ See documentation for details.
   security reasons. Reduces the amount of information available in Peekaboo
   processing failure dumps as well. URL to access original report via Cuckoo API
   is provided instead.
+- The CortexAnalyser or more precisely every CortexAnalyser can now access
+  domain, hash, and ip artifacts from within the Generic rules.
+- FileInfoAnalyzerReport has new attibutes md5sum, sha256sum, and ssdeepsum
+  (now don't get to excited, ssdeep hashes can only be used as strings)
 
 ## 2.0
 
