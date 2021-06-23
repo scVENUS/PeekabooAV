@@ -140,7 +140,9 @@ Attribues of cortexreport
 
 .. code-block:: shell
 
-    FileInfoReport.full
+    FileInfoReport.sha256sum
+    FileInfoReport.md5sum
+    FileInfoReport.ssdeepsum
     HybridAnalysisReport.full
     VirusTotalQueryReport.n_of_all
     VirusTotalQueryReport.level
@@ -148,3 +150,11 @@ Attribues of cortexreport
     CuckooSandboxFileReport.malscore
     CAPEv2FileReport.signatures
     CAPEv2FileReport.malscore
+
+and every cortexreport has these artifacts
+
+.. code-block:: shell
+
+    .domain_artifacts
+    .hash_artifacts
+    .ip_artifacts

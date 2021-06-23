@@ -63,7 +63,8 @@ from peekaboo.toolbox.ole import Oletools
 from peekaboo.toolbox.file import Filetools, FiletoolsReport
 from peekaboo.toolbox.known import Knowntools, KnowntoolsReport
 from peekaboo.db import PeekabooDatabase, PeekabooDatabaseError
-from peekaboo.toolbox.cortex import CortexReport, VirusTotalQuery
+from peekaboo.toolbox.cortex import CortexReport, VirusTotalQuery, \
+        FileInfoAnalyzer
 # pylint: enable=wrong-import-position
 
 
@@ -1484,6 +1485,80 @@ unknown : baz'''
         rule = ExpressionRule(CreatingConfigParser(config), None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
+
+    def test_rule_expressions_cortexreport_fileinfoanalyzerreport_context(self):
+        """ Test generic rule cortexreport.FileInfoAnalyzerReport context """
+        config = '''[expressions]
+                expression.2  : cortexreport.FileInfoReport.md5sum == '78576e618aff135f320601e49bd8fe7e' -> good
+                expression.4  : '.day.um' in cortexreport.FileInfoReport.domain_artifacts -> unknown
+                expression.6  : '8.8.8.8' in cortexreport.FileInfoReport.ip_artifacts -> bad
+        '''
+        rule = ExpressionRule(CreatingConfigParser(config), None)
+
+        factory = CreatingSampleFactory(
+            base_dir=None, job_hash_regex=None,
+            keep_mail_data=False, processing_info_dir=None)
+
+        sample = factory.make_sample(os.path.join(
+            self.office_data_dir, 'blank.doc'))
+
+        report = {
+            "summary": {},
+            "full": {
+                "results": [{
+                    "submodule_name": "Basic properties",
+                    "results": [
+                        {
+                            "submodule_section_header": "Hashes",
+                            "submodule_section_content": {
+                                "md5": "78576e618aff135f320601e49bd8fe7e",
+                            }
+                        },
+                    ]
+                }]
+            },
+            "success": False,
+            "artifacts": [],
+        }
+
+        artifact = {
+            "data": "8.8.8.8",
+            "dataType": "ip",
+        }
+
+        cortexreport = CortexReport()
+        cortexreport.register_report(FileInfoAnalyzer, report)
+        sample.register_cortex_report(cortexreport)
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.good)
+
+        report["full"]["results"][0]["results"][0]["submodule_section_content"]["md5"] = "A"*32
+        report["artifacts"] = [artifact]
+        cortexreport = CortexReport()
+        cortexreport.register_report(FileInfoAnalyzer, report)
+        sample.register_cortex_report(cortexreport)
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.bad)
+
+        artifact = {
+            "data": "oh.my.day.um",
+            "dataType": "domain",
+        }
+
+        report["artifacts"] = [artifact]
+        cortexreport = CortexReport()
+        cortexreport.register_report(FileInfoAnalyzer, report)
+        sample.register_cortex_report(cortexreport)
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.unknown)
+
+        report["full"]["results"][0]["results"][0]["submodule_section_content"]["md5"] = ""
+        cortexreport = CortexReport()
+        cortexreport.register_report(FileInfoAnalyzer, report)
+        sample.register_cortex_report(cortexreport)
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.unknown)
+
 
     def test_rule_expressions_cortexreport_virustotalqueryreport_context(self):
         """ Test generic rule cortexreport.VirusTotalQueryReport context """
