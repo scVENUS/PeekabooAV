@@ -464,10 +464,9 @@ class CuckooEvilSigRule(CuckooRule):
         sample as bad. """
         # look through matched signatures
         sigs = []
-        for descr in report.signatures:
-            logger.debug("Signature from cuckoo report: %s",
-                         descr['description'])
-            sigs.append(descr['description'])
+        for descr in report.signature_descriptions:
+            logger.debug("Signature from cuckoo report: %s", descr)
+            sigs.append(descr)
 
         # check if there is a "bad" signatures and return bad
         matched_bad_sigs = []

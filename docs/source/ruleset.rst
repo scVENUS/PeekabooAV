@@ -94,7 +94,6 @@ Attributes of cuckooreport
 .. code-block:: shell
 
     requested_domains
-    signatures
     signature_descriptions
     score
     errors

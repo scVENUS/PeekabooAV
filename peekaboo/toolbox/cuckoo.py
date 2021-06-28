@@ -444,16 +444,6 @@ class CuckooReport:
             return []
 
     @property
-    def signatures(self):
-        """
-        Gets the triggered signatures from the Cuckoo report.
-
-        @returns: The triggered signatures from the Cuckoo report or None of
-                  there was an error parsing the Cuckoo report.
-        """
-        return self.report.get('signatures', [])
-
-    @property
     def signature_descriptions(self):
         """
         Gets the description of triggered Cuckoo signatures from report.
@@ -463,7 +453,7 @@ class CuckooReport:
                   Cuckoo report.
         """
         descriptions = []
-        for sig in self.signatures:
+        for sig in self.report.get('signatures', []):
             descriptions.append(sig['description'])
         return descriptions
 
