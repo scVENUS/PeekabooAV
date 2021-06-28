@@ -566,14 +566,14 @@ class CuckooAnalysisFailedRule(CuckooRule):
         failure_reason = _("Behavioral analysis by Cuckoo has produced "
                            "an error and did not finish successfully")
 
-        for entry in report.cuckoo_server_messages:
+        for entry in report.server_messages:
             for failure in self.failure_matches:
                 if failure in entry:
                     logger.debug('Failure indicator "%s" found in Cuckoo '
                                  'messages', failure)
                     return self.result(Result.failed, failure_reason, False)
 
-        for entry in report.cuckoo_server_messages:
+        for entry in report.server_messages:
             for success in self.success_matches:
                 if success in entry:
                     logger.debug('Success indicator "%s" found in Cuckoo '
