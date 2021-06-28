@@ -494,7 +494,7 @@ class CuckooReport:
             return []
 
     @property
-    def cuckoo_server_messages(self):
+    def server_messages(self):
         """
         Messages logged by the Cuckoo server (as opposed to those logged by the
         agent inside the analysis VM).

@@ -98,7 +98,7 @@ Attributes of cuckooreport
     signature_descriptions
     score
     errors
-    cuckoo_server_messages
+    server_messages
 
 Attributes of olereport
 -----------------------
