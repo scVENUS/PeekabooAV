@@ -12,6 +12,9 @@ See documentation for details.
 - Generic rules can now make use of the new analyser `knownreport`
 - Introduce cortexreport toolbox analyser to connect to Cortex by TheHive.
   There already are a few sub analysers that can be used.
+- Reduce amount of data copied from Cuckoo reports for memory efficiency and
+  security reasons. Reduces the amount of information available in Peekaboo
+  processing failure dumps as well.
 
 ## 2.0
 

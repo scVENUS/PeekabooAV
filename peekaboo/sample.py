@@ -358,7 +358,7 @@ class Sample:
                                          filename + '_cuckoo_report.json')
             try:
                 with open(cuckoo_report, 'wb+') as cr_json_file:
-                    cr_json = json.dumps(self.__cuckoo_report.raw,
+                    cr_json = json.dumps(self.__cuckoo_report.dump,
                                          indent=1, ensure_ascii=True)
                     cr_json_file.write(cr_json.encode('ascii'))
             except (OSError, IOError) as error:

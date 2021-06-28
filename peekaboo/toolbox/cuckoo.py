@@ -258,8 +258,13 @@ class Cuckoo:
             # because it was corrupted or the API connection failed.
             sample.mark_cuckoo_failure()
         else:
-            reportobj = CuckooReport(report)
-            sample.register_cuckoo_report(reportobj)
+            try:
+                reportobj = CuckooReport(report)
+                sample.register_cuckoo_report(reportobj)
+            except (KeyError, ValueError, TypeError) as err:
+                logger.warning('Report returned from Cuckoo contained '
+                               'invalid data: %s', err)
+                sample.mark_cuckoo_failure()
 
         self.job_queue.submit(sample, self.__class__)
         return None
@@ -421,15 +426,104 @@ class CuckooReport:
         """
         if report is None:
             report = {}
-        self.report = report
+
+        if not isinstance(report, dict):
+            raise TypeError('report is expected to be a dict')
+
+        network = report.get('network', {})
+        if not isinstance(network, dict):
+            raise TypeError('network requests are expected to be a dict')
+
+        dns = network.get('dns', [])
+        if not isinstance(dns, (list, tuple)):
+            raise TypeError('dns requests are expected to be a list or tuple')
+
+        self._requested_domains = []
+        for domain in dns:
+            if not isinstance(domain, dict):
+                raise TypeError('domains are expected to be dicts')
+            if 'request' not in domain:
+                raise KeyError('dns request missing from dns report element')
+            if not isinstance(domain['request'], str):
+                raise TypeError('dns request is expected to be a string')
+
+            self._requested_domains.append(domain['request'])
+
+        sigs = report.get('signatures', [])
+        if not isinstance(sigs, (list, tuple)):
+            raise TypeError('signatures are expected to be a list or tuple')
+
+        self._signature_descriptions = []
+        for sig in sigs:
+            if not isinstance(sig, dict):
+                raise TypeError('signatures are expected to be dicts')
+            if 'description' not in sig:
+                raise KeyError(
+                    'signatures are expected to contain a description')
+            if not isinstance(sig['description'], str):
+                raise TypeError(
+                    'signature descriptions are expected to be strings')
+
+            self._signature_descriptions.append(sig['description'])
+
+        info = report.get('info', {})
+        if not isinstance(info, dict):
+            raise TypeError('info is expected to be a dict')
+
+        self._score = info.get('score', 0.0)
+        if not isinstance(self._score, (int, float)):
+            raise TypeError('score is expected to be a number')
+
+        debug = report.get('debug', {})
+        if not isinstance(debug, dict):
+            raise TypeError('debug is expected to be a dict')
+
+        errors = debug.get('errors', [])
+        if not isinstance(errors, (list, tuple)):
+            raise TypeError(
+                'error message list is expected to be list or tuple')
+
+        self._errors = []
+        for error in errors:
+            if not isinstance(error, str):
+                raise TypeError('error messages are expected to be strings')
+
+            self._errors.append(error)
+
+        messages = debug.get('cuckoo', [])
+        if not isinstance(messages, (list, tuple)):
+            raise TypeError(
+                'server message list is expected to be list or tuple')
+
+        self._server_messages = []
+        for message in messages:
+            if not isinstance(message, str):
+                raise TypeError('server messages are expected to be strings')
+
+            self._server_messages.append(message)
 
     @property
-    def raw(self):
-        """ Return the raw report structure.
+    def dump(self):
+        """ Return the a dump of the report in a defined structure similar to
+        the original Cuckoo report dict.
 
-        @returns: dict of the report.
+        @returns: dict containiing all the information we have.
         """
-        return self.report
+        return {
+            "info": {
+                "score": self.score,
+            },
+            "network": {
+                "dns": [
+                    {"request": domain} for domain in self.requested_domains],
+            },
+            "signatures": [
+                {"description": desc} for desc in self.signature_descriptions],
+            "debug": {
+                "errors": self.errors,
+                "cuckoo": self.server_messages,
+            },
+        }
 
     @property
     def requested_domains(self):
@@ -438,10 +532,7 @@ class CuckooReport:
 
         @returns: The requested domains from the Cuckoo report.
         """
-        try:
-            return [d['request'] for d in self.report['network']['dns']]
-        except KeyError:
-            return []
+        return self._requested_domains
 
     @property
     def signature_descriptions(self):
@@ -449,39 +540,27 @@ class CuckooReport:
         Gets the description of triggered Cuckoo signatures from report.
 
         @returns: The description of triggered signatures from the Cuckoo
-                  report or empty list if there was an error parsing the
-                  Cuckoo report.
+                  report.
         """
-        descriptions = []
-        for sig in self.report.get('signatures', []):
-            descriptions.append(sig['description'])
-        return descriptions
+        return self._signature_descriptions
 
     @property
     def score(self):
         """
         Gets the score from the Cuckoo report.
 
-        @returns: The score from the Cuckoo report or None of there was an
-                  error parsing the Cuckoo report.
+        @returns: The score from the Cuckoo report.
         """
-        try:
-            return self.report['info']['score']
-        except KeyError:
-            return 0.0
+        return self._score
 
     @property
     def errors(self):
         """
         Errors occurred during Cuckoo analysis.
 
-        @returns: The errors occurred during Cuckoo analysis or None of there
-                  was an error parsing the Cuckoo report.
+        @returns: The errors occurred during Cuckoo analysis.
         """
-        try:
-            return self.report['debug']['errors']
-        except KeyError:
-            return []
+        return self._errors
 
     @property
     def server_messages(self):
@@ -491,7 +570,4 @@ class CuckooReport:
 
         @returns: List of messages.
         """
-        try:
-            return self.report['debug']['cuckoo']
-        except KeyError:
-            return []
+        return self._server_messages
