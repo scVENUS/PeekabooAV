@@ -856,6 +856,87 @@ class TestFiletools(unittest.TestCase):
         self.assertIs(report, new_report)
 
 
+class TestCuckoo(unittest.TestCase):
+    """ Unittests for the Cuckoo analyzer. """
+    def test_report(self):
+        """ Test that the report is accepted and correct values returned by the
+        properties. """
+        report = {
+            "network": {
+                "dns": [
+                    {"request": "dom1"},
+                    {"request": "dom2"},
+                ]
+            },
+            "signatures": [
+                {"description": "desc1"},
+                {"description": "desc2"}
+            ],
+            "info": {
+                "score": 1.1,
+            },
+            "debug": {
+                "errors": ["error1", "error2"],
+                "cuckoo": ["msg1", "msg2"],
+            }
+        }
+        cuckooreport = CuckooReport(report)
+        self.assertEqual(cuckooreport.requested_domains[0], "dom1")
+        self.assertEqual(cuckooreport.requested_domains[1], "dom2")
+        self.assertEqual(cuckooreport.signature_descriptions[0], "desc1")
+        self.assertEqual(cuckooreport.signature_descriptions[1], "desc2")
+        self.assertEqual(cuckooreport.score, 1.1)
+        self.assertEqual(cuckooreport.errors[0], "error1")
+        self.assertEqual(cuckooreport.errors[1], "error2")
+        self.assertEqual(cuckooreport.server_messages[0], "msg1")
+        self.assertEqual(cuckooreport.server_messages[1], "msg2")
+        # assumes above report is a minimal report
+        self.assertEqual(cuckooreport.dump, report)
+
+    def test_invalid_report(self):
+        """ Test that invalid report values are rejected. """
+        with self.assertRaisesRegex(TypeError, r'report.*dict'):
+            CuckooReport([])
+
+        with self.assertRaisesRegex(TypeError, r'network.*dict'):
+            CuckooReport({"network": []})
+        with self.assertRaisesRegex(TypeError, r'dns.*list or tuple'):
+            CuckooReport({"network": {"dns": {}}})
+        with self.assertRaisesRegex(TypeError, r'domains.*dicts'):
+            CuckooReport({"network": {"dns": [[]]}})
+        with self.assertRaisesRegex(KeyError, r'dns.*missing.*element'):
+            CuckooReport({"network": {"dns": [{"not-request": 1}]}})
+        with self.assertRaisesRegex(TypeError, r'dns.*string'):
+            CuckooReport({"network": {"dns": [{"request": 1}]}})
+
+        with self.assertRaisesRegex(TypeError, r'signatures.*list or tuple'):
+            CuckooReport({"signatures": {}})
+        with self.assertRaisesRegex(TypeError, r'signatures.*dicts'):
+            CuckooReport({"signatures": [1]})
+        with self.assertRaisesRegex(KeyError, r'signatures.*description'):
+            CuckooReport({"signatures": [{"not-description": 1}]})
+        with self.assertRaisesRegex(TypeError, r'signature.*strings'):
+            CuckooReport({"signatures": [{"description": 1}]})
+
+        with self.assertRaisesRegex(TypeError, r'info.*dict'):
+            CuckooReport({"info": 1})
+        with self.assertRaisesRegex(TypeError, r'score.*number'):
+            CuckooReport({"info": {"score": "onepointtwo"}})
+
+        with self.assertRaisesRegex(TypeError, r'debug.*dict'):
+            CuckooReport({"debug": 1})
+        with self.assertRaisesRegex(TypeError, r'error message.*list or tuple'):
+            CuckooReport({"debug": {"errors": {}}})
+        with self.assertRaisesRegex(TypeError, r'error messages.*strings'):
+            CuckooReport({"debug": {"errors": [1]}})
+
+        with self.assertRaisesRegex(
+                TypeError, r'server message.*list or tuple'):
+            CuckooReport({"debug": {"cuckoo": {}}})
+        with self.assertRaisesRegex(TypeError, r'server messages.*strings'):
+            CuckooReport({"debug": {"cuckoo": [1]}})
+
+
 class TestRulesetEngine(unittest.TestCase):
     """ Unittests for the Ruleset Engine. """
     def test_no_rules_configured(self):
@@ -1834,6 +1915,7 @@ def main():
     suite.addTest(unittest.makeSuite(TestDatabase))
     suite.addTest(unittest.makeSuite(TestOletools))
     suite.addTest(unittest.makeSuite(TestFiletools))
+    suite.addTest(unittest.makeSuite(TestCuckoo))
     suite.addTest(unittest.makeSuite(TestRulesetEngine))
     suite.addTest(unittest.makeSuite(TestRules))
     suite.addTest(unittest.makeSuite(TestExpressionParser))
