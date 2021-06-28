@@ -501,9 +501,6 @@ class CuckooReport:
 
         @returns: List of messages.
         """
-        if self.errors:
-            logger.warning('Cuckoo produced %d error(s) during processing.',
-                           len(self.errors))
         try:
             return self.report['debug']['cuckoo']
         except KeyError:
