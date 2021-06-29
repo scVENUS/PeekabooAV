@@ -880,7 +880,7 @@ class TestCuckoo(unittest.TestCase):
                 "cuckoo": ["msg1", "msg2"],
             }
         }
-        cuckooreport = CuckooReport(report)
+        cuckooreport = CuckooReport(report, "some://where")
         self.assertEqual(cuckooreport.requested_domains[0], "dom1")
         self.assertEqual(cuckooreport.requested_domains[1], "dom2")
         self.assertEqual(cuckooreport.signature_descriptions[0], "desc1")
@@ -890,8 +890,13 @@ class TestCuckoo(unittest.TestCase):
         self.assertEqual(cuckooreport.errors[1], "error2")
         self.assertEqual(cuckooreport.server_messages[0], "msg1")
         self.assertEqual(cuckooreport.server_messages[1], "msg2")
+        self.assertEqual(cuckooreport.url, "some://where")
+
         # assumes above report is a minimal report
-        self.assertEqual(cuckooreport.dump, report)
+        expected_dump = report.copy()
+        expected_dump.update(
+            {"x-peekaboo": {"origin-url": cuckooreport.url}})
+        self.assertEqual(cuckooreport.dump, expected_dump)
 
     def test_invalid_report(self):
         """ Test that invalid report values are rejected. """

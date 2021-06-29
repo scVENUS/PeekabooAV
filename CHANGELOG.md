@@ -14,7 +14,8 @@ See documentation for details.
   There already are a few sub analysers that can be used.
 - Reduce amount of data copied from Cuckoo reports for memory efficiency and
   security reasons. Reduces the amount of information available in Peekaboo
-  processing failure dumps as well.
+  processing failure dumps as well. URL to access original report via Cuckoo API
+  is provided instead.
 
 ## 2.0
 
