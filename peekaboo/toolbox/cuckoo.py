@@ -166,8 +166,19 @@ class Cuckoo:
 
         self.tracker = None
 
+    def request_url(self, path):
+        """ Return the full request URL for a given path based on the
+        configured base URL of the Cuckoo API.
+
+        @param path: resource path relative to the API base URL
+        @type path: string
+
+        @returns: string representing URL
+        """
+        return "%s/%s" % (self.url, path)
+
     def __get(self, path):
-        request_url = "%s/%s" % (self.url, path)
+        request_url = self.request_url(path)
         logger.debug("Getting %s", request_url)
         headers = {"Authorization": "Bearer %s" % self.api_token}
 
@@ -252,14 +263,15 @@ class Cuckoo:
             return None
 
         logger.debug('Requesting Cuckoo report for sample %s', sample)
-        report = self.__get("tasks/report/%d" % job_id)
+        report_path = "tasks/report/%d" % job_id
+        report = self.__get(report_path)
         if report is None:
             # mark analysis as failed if we could not get the report e.g.
             # because it was corrupted or the API connection failed.
             sample.mark_cuckoo_failure()
         else:
             try:
-                reportobj = CuckooReport(report)
+                reportobj = CuckooReport(report, self.request_url(report_path))
                 sample.register_cuckoo_report(reportobj)
             except (KeyError, ValueError, TypeError) as err:
                 logger.warning('Report returned from Cuckoo contained '
@@ -420,10 +432,15 @@ class Cuckoo:
 
 class CuckooReport:
     """ Represents a Cuckoo analysis JSON report. """
-    def __init__(self, report=None):
+    def __init__(self, report=None, url=None):
         """
         @param report: hash with report data from Cuckoo
+        @type report: dict
+        @param url: URL where the report was retrieved from
+        @type url: string
         """
+        self._url = url
+
         if report is None:
             report = {}
 
@@ -510,6 +527,9 @@ class CuckooReport:
         @returns: dict containiing all the information we have.
         """
         return {
+            "x-peekaboo": {
+                "origin-url": self.url,
+            },
             "info": {
                 "score": self.score,
             },
@@ -571,3 +591,12 @@ class CuckooReport:
         @returns: List of messages.
         """
         return self._server_messages
+
+    @property
+    def url(self):
+        """ Return a URL where the full Cuckoo report this object is based on
+        can be retrieved (again).
+
+        @returns: string representing the URL.
+        """
+        return self._url
