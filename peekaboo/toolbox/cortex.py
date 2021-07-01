@@ -57,7 +57,18 @@ class CortexAnalyzerReportMissingException(PeekabooException):
 class CortexAnalyzerReport:
     """ Cortex analyzer report base class. """
     def __init__(self, report):
-        self.report = report
+        if report is None:
+            self.report = {}
+
+        if not isinstance(report, dict):
+            raise TypeError('report is expected to be a dict')
+
+        self._domain_artifacts = self.get_filtered_elements_from_list_of_dicts(
+                report.get('artifacts', []), 'dataType', 'domain', 'data', str)
+        self._hash_artifacts = self.get_filtered_elements_from_list_of_dicts(
+                report.get('artifacts', []), 'dataType', 'hash', 'data', str)
+        self._ip_artifacts = self.get_filtered_elements_from_list_of_dicts(
+                report.get('artifacts', []), 'dataType', 'ip', 'data', str)
 
     @classmethod
     def get_element_from_list_of_dicts(cls, list_, ident_key, ident_value, default={}):
@@ -86,20 +97,17 @@ class CortexAnalyzerReport:
     @property
     def domain_artifacts(self):
         """ Returns a list of domain artifacts. """
-        return self.get_filtered_elements_from_list_of_dicts(
-                self.report.get('artifacts', []), 'dataType', 'domain', 'data', str)
+        return self._domain_artifacts
 
     @property
     def hash_artifacts(self):
         """ Returns a list of hash artifacts. """
-        return self.get_filtered_elements_from_list_of_dicts(
-                self.report.get('artifacts', []), 'dataType', 'hash', 'data', str)
+        return self._hash_artifacts
 
     @property
     def ip_artifacts(self):
         """ Returns a list of ip artifacts. """
-        return self.get_filtered_elements_from_list_of_dicts(
-                self.report.get('artifacts', []), 'dataType', 'ip', 'data', str)
+        return self._ip_artifacts
 
 
 class CortexAnalyzer:
@@ -149,57 +157,57 @@ class CortexHashAnalyzer(CortexAnalyzer):
 
 class FileInfoAnalyzerReport(CortexAnalyzerReport):
     """ Represents a Cortex FileInfo_7_0 analysis JSON report. """
-    def get_basic_properties(self):
-        """ Extract the 'Basic properties' element from the report. """
-        return self.get_element_from_list_of_dicts(
-                self.report.get('full', []).get('results', {}),
-                'submodule_name', 'Basic properties')
 
-    def get_hashes(self):
-        """ Extract the 'Hashes' from the 'Basic properties'. """
-        basic_properties = self.get_basic_properties().get('results', [])
-        return self.get_element_from_list_of_dicts(
+    def __init__(self, report=None):
+        """
+        @param report: hash with report data from Cortex FileInfo Analyzer
+        """
+        super().__init__(report)
+
+        basic_properties = self.get_element_from_list_of_dicts(
+                report.get('full', []).get('results', {}),
+                'submodule_name', 'Basic properties').get('results', [])
+        self._hashes = self.get_element_from_list_of_dicts(
                 basic_properties, 'submodule_section_header', 'Hashes').get(
                     'submodule_section_content', {})
+        if not isinstance(self._hashes, dict):
+            raise TypeError('hashes are expected to be a dict')
 
-    @property
-    def sha256sum(self):
-        """ Return the sha256 sum. """
-        hashes = self.get_hashes()
-        sha256sum = hashes.get('sha256')
+        sha256sum = self._hashes.get('sha256', '')
         if not isinstance(sha256sum, str):
             raise TypeError('sha256 sum is expected to be a string')
         if len(sha256sum) != 64:
             raise TypeError('sha256 sum string is expected '
                             'to be 64 characters long')
 
-        return sha256sum
-
-    @property
-    def md5sum(self):
-        """ Return the md5 sum. """
-        hashes = self.get_hashes()
-        md5sum = hashes.get('md5')
+        md5sum = self._hashes.get('md5', '')
         if not isinstance(md5sum, str):
             raise TypeError('md5 sum is expected to be a string')
         if len(md5sum) != 32:
             raise TypeError('md5 sum string is expected to be 32 characters long')
 
-        return md5sum
-
-    @property
-    def ssdeepsum(self):
-        """ Return the ssdeep sum. """
-        # TODO: think about if we want to compare ssdeep hashes
-        hashes = self.get_hashes()
-        ssdeepsum = hashes.get('ssdeep')
+        ssdeepsum = self._hashes.get('ssdeep', '')
         if not isinstance(ssdeepsum, str):
             raise TypeError('ssdeep sum is expected to be a string')
         if len(ssdeepsum) > 148:
             raise TypeError('ssdeep sum string is expected to '
                             'be less or equal to 148 characters long')
 
-        return ssdeepsum
+    @property
+    def sha256sum(self):
+        """ Return the sha256 sum. """
+        return self._hashes.get('sha256')
+
+    @property
+    def md5sum(self):
+        """ Return the md5 sum. """
+        return self._hashes.get('md5')
+
+    @property
+    def ssdeepsum(self):
+        """ Return the ssdeep sum. """
+        # TODO: think about if we want to compare ssdeep hashes
+        return self._hashes.get('ssdeep')
 
 
 class FileInfoAnalyzer(CortexFileAnalyzer):
