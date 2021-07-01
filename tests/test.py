@@ -1512,6 +1512,7 @@ unknown : baz'''
                             "submodule_section_header": "Hashes",
                             "submodule_section_content": {
                                 "md5": "78576e618aff135f320601e49bd8fe7e",
+                                "sha256": "A"*64,
                             }
                         },
                     ]
@@ -1554,11 +1555,8 @@ unknown : baz'''
 
         report["full"]["results"][0]["results"][0]["submodule_section_content"]["md5"] = ""
         cortexreport = CortexReport()
-        cortexreport.register_report(FileInfoAnalyzer, report)
-        sample.register_cortex_report(cortexreport)
-        result = rule.evaluate(sample)
-        self.assertEqual(result.result, Result.unknown)
-
+        with self.assertRaisesRegex(TypeError, r'md5 .* long'):
+            cortexreport.register_report(FileInfoAnalyzer, report)
 
     def test_rule_expressions_cortexreport_virustotalqueryreport_context(self):
         """ Test generic rule cortexreport.VirusTotalQueryReport context """
