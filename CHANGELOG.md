@@ -20,6 +20,7 @@ See documentation for details.
   domain, hash, and ip artifacts from within the Generic rules.
 - FileInfoAnalyzerReport has new attibutes md5sum, sha256sum, and ssdeepsum
   (now don't get to excited, ssdeep hashes can only be used as strings)
+- Input validation of reports adds a new pip requirement: schema
 
 ## 2.0
 

@@ -34,6 +34,7 @@ import threading
 import cortex4py.api
 import cortex4py.exceptions
 import requests.sessions
+import schema
 import urllib3.util.retry
 
 from peekaboo.exceptions import PeekabooException
@@ -56,19 +57,30 @@ class CortexAnalyzerReportMissingException(PeekabooException):
 
 class CortexAnalyzerReport:
     """ Cortex analyzer report base class. """
-    def __init__(self, report):
-        if report is None:
-            self.report = {}
+    report_schema = schema.Schema(None, error='Subclass needs to provide a schema')
 
-        if not isinstance(report, dict):
-            raise TypeError('report is expected to be a dict')
+    report_schema_artifacts = [schema.Schema({
+        "data": str,
+        "dataType": str,
+    # Possible future extensions
+    #    "message": schema.Schema(schema.Or(str, None)),
+    #    "tags": list,
+    #    "tlp": int
+    }, ignore_extra_keys=True)]
+
+    def __init__(self, unvalidated_report):
+        if unvalidated_report is None:
+            unvalidated_report = {}
+
+        # validate the report against subclass attribute report_schema
+        self.report = self.report_schema.validate(unvalidated_report)
 
         self._domain_artifacts = self.get_filtered_elements_from_list_of_dicts(
-                report.get('artifacts', []), 'dataType', 'domain', 'data', str)
+                self.report.get('artifacts', []), 'dataType', 'domain', 'data', str)
         self._hash_artifacts = self.get_filtered_elements_from_list_of_dicts(
-                report.get('artifacts', []), 'dataType', 'hash', 'data', str)
+                self.report.get('artifacts', []), 'dataType', 'hash', 'data', str)
         self._ip_artifacts = self.get_filtered_elements_from_list_of_dicts(
-                report.get('artifacts', []), 'dataType', 'ip', 'data', str)
+                self.report.get('artifacts', []), 'dataType', 'ip', 'data', str)
 
     @classmethod
     def get_element_from_list_of_dicts(cls, list_, ident_key, ident_value, default={}):
@@ -158,40 +170,67 @@ class CortexHashAnalyzer(CortexAnalyzer):
 class FileInfoAnalyzerReport(CortexAnalyzerReport):
     """ Represents a Cortex FileInfo_7_0 analysis JSON report. """
 
-    def __init__(self, report=None):
+    report_schema = schema.Schema({
+        "summary": {
+            "taxonomies": [schema.Schema({
+                "level": schema.Or("info", "malicious", "safe"),
+                "namespace": "FileInfo",
+            #    "predicate": str,
+            #    "value": str
+            }, ignore_extra_keys=True)]
+        },
+        "full": {
+            "results": [
+            {
+                "submodule_name": "Basic properties",
+                "results": [
+                    {
+                        "submodule_section_header": "Hashes",
+                        "submodule_section_content": {
+                            "md5": schema.Regex(r'^[0-9a-z]{32}$'),
+                            "sha1": schema.Regex(r'^[0-9a-z]{40}$'),
+                            "sha256": schema.Regex(r'^[0-9a-z]{64}$'),
+                            "ssdeep": schema.Regex(r'^[0-9A-Za-z:]*$'),
+                        }
+                    },
+                    {
+                        # We consume further structures submodule_sections and
+                        # explicitly check the submodule_section_header to not
+                        # be "Hashes" or it will accept "Hashes"-structures with
+                        # malfarmed hashes.
+                        "submodule_section_header": schema.And(str, lambda s: s != "Hashes"),
+                        "submodule_section_content": schema.Schema({
+                            }, ignore_extra_keys=True)
+                    },
+                ],
+                "summary": {
+                    "taxonomies": [schema.Schema({
+                        "level": schema.Or("info", "malicious", "safe"),
+                        "namespace": "FileInfo",
+                    #    "predicate": str,
+                    #    "value": str
+                    }, ignore_extra_keys=True)]
+                }
+            }
+            ]
+        },
+        "success": bool,
+        "artifacts": CortexAnalyzerReport.report_schema_artifacts,
+        "operations": []
+    })
+
+    def __init__(self, unvalidated_report=None):
         """
         @param report: hash with report data from Cortex FileInfo Analyzer
         """
-        super().__init__(report)
+        super().__init__(unvalidated_report)
 
         basic_properties = self.get_element_from_list_of_dicts(
-                report.get('full', []).get('results', {}),
+                self.report.get('full', []).get('results', {}),
                 'submodule_name', 'Basic properties').get('results', [])
         self._hashes = self.get_element_from_list_of_dicts(
                 basic_properties, 'submodule_section_header', 'Hashes').get(
                     'submodule_section_content', {})
-        if not isinstance(self._hashes, dict):
-            raise TypeError('hashes are expected to be a dict')
-
-        sha256sum = self._hashes.get('sha256', '')
-        if not isinstance(sha256sum, str):
-            raise TypeError('sha256 sum is expected to be a string')
-        if len(sha256sum) != 64:
-            raise TypeError('sha256 sum string is expected '
-                            'to be 64 characters long')
-
-        md5sum = self._hashes.get('md5', '')
-        if not isinstance(md5sum, str):
-            raise TypeError('md5 sum is expected to be a string')
-        if len(md5sum) != 32:
-            raise TypeError('md5 sum string is expected to be 32 characters long')
-
-        ssdeepsum = self._hashes.get('ssdeep', '')
-        if not isinstance(ssdeepsum, str):
-            raise TypeError('ssdeep sum is expected to be a string')
-        if len(ssdeepsum) > 148:
-            raise TypeError('ssdeep sum string is expected to '
-                            'be less or equal to 148 characters long')
 
     @property
     def sha256sum(self):
@@ -233,10 +272,32 @@ class HybridAnalysis(CortexFileAnalyzer):
 
 class VirusTotalQueryReport(CortexAnalyzerReport):
     """ Represents a Cortex VirusTotal_GetReport_3_0 analysis JSON report. """
-    def __init__(self, report):
-        super().__init__(report)
+    report_schema = schema.Schema({
+        "summary": {
+            "taxonomies": [
+                {
+                    "level": schema.Or("info", "malicious", "safe"),
+                    "namespace": "VT",
+                    "predicate": str,
+                    "value": schema.Regex(r'^[0-9/]*$')
+                }
+            ]
+        },
+        "full": {
+            "response_code": int,
+            "resource": str,
+            "verbose_msg": str
+        },
+        "success": bool,
+        "artifacts": CortexAnalyzerReport.report_schema_artifacts,
+        "operations": []
+    })
+
+    def __init__(self, unvalidated_report):
+        super().__init__(unvalidated_report)
+
         self.taxonomies_vt = self.get_element_from_list_of_dicts(
-                report.get('summary', {}).get('taxonomies'),
+                self.report.get('summary', {}).get('taxonomies'),
                 'namespace', 'VT', {}
             )
 
@@ -607,8 +668,8 @@ class Cortex:
             # mark analysis as failed if we could not get the report e.g.
             # because it was corrupted or the API connection failed.
             job.sample.mark_cortex_failure()
-        except TypeError as error:
-            logger.warning('Report returned from Cortex conainted '
+        except schema.SchemaError as error:
+            logger.warning('Report returned from Cortex contained '
                            'invalid data: %s', error)
             job.sample.mark_cortex_failure()
 

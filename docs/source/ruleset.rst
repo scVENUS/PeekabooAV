@@ -151,7 +151,7 @@ Attribues of cortexreport
     CAPEv2FileReport.signatures
     CAPEv2FileReport.malscore
 
-and every cortexreport has these artifacts
+and all analyser reports have these artifacts
 
 .. code-block:: shell
 
