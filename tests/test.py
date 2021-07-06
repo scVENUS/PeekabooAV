@@ -36,6 +36,8 @@ import schema
 import unittest
 from datetime import datetime, timedelta
 
+import schema
+
 
 # Add Peekaboo to PYTHONPATH
 TESTSDIR = os.path.dirname(os.path.abspath(__file__))
@@ -1502,30 +1504,66 @@ unknown : baz'''
         sample = factory.make_sample(os.path.join(
             self.office_data_dir, 'blank.doc'))
 
-        report = {
-            "summary": {},
-            "full": {
-                "results": [{
-                    "submodule_name": "Basic properties",
-                    "results": [
-                        {
-                            "submodule_section_header": "Hashes",
-                            "submodule_section_content": {
-                                "md5": "78576e618aff135f320601e49bd8fe7e",
-                                "sha256": "A"*64,
-                            }
-                        },
-                    ]
-                }]
-            },
-            "success": False,
-            "artifacts": [],
-        }
+        taxonomies = [
+            {
+            "level": "info",
+            "namespace": "FileInfo",
+            "predicate": "Filetype",
+            "value": "JPEG"
+            }
+        ]
 
-        artifact = {
-            "data": "8.8.8.8",
-            "dataType": "ip",
-        }
+        report = {
+            "summary": {
+                "taxonomies": taxonomies
+            },
+            "full": {
+                "results": [
+                    {
+                        "submodule_name": "Basic properties",
+                        "results": [
+                            {
+                                "submodule_section_header": "Hashes",
+                                "submodule_section_content": {
+                                    "md5": "78576e618aff135f320601e49bd8fe7e",
+                                    "sha1": "2520dcd603b851846fa27035807adc4df83a7519",
+                                    "sha256": "42690cc82dd1f56fd6ec315723b8e1f27fdd42e670c7752477e91afb62ea2c6b",
+                                    "ssdeep": "768:GaqFVZh8KI4mF0xJcXmwE6ONpHOhbPOobiSp3ug06GnzAjUaq:NK3bI4s0xJCmwE7HEbf7ozf"
+                                }
+                            },
+                        ],
+                        "summary": {
+                            "taxonomies": taxonomies
+                        }
+                    }
+                ]
+            },
+            "success": True,
+            "artifacts": [
+                {
+                "data": "42690cc82dd1f56fd6ec315723b8e1f27fdd42e670c7752477e91afb62ea2c6b",
+                "dataType": "hash",
+                "message": None,
+                "tags": [],
+                "tlp": 2
+                },
+                {
+                "data": "2520dcd603b851846fa27035807adc4df83a7519",
+                "dataType": "hash",
+                "message": None,
+                "tags": [],
+                "tlp": 2
+                },
+                {
+                "data": "78576e618aff135f320601e49bd8fe7e",
+                "dataType": "hash",
+                "message": None,
+                "tags": [],
+                "tlp": 2
+                }
+            ],
+            "operations": []
+            }
 
         cortexreport = CortexReport()
         cortexreport.register_report(FileInfoAnalyzer, report)
@@ -1533,20 +1571,21 @@ unknown : baz'''
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.good)
 
-        report["full"]["results"][0]["results"][0]["submodule_section_content"]["md5"] = "A"*32
-        report["artifacts"] = [artifact]
+        report["full"]["results"][0]["results"][0]["submodule_section_content"]["md5"] = "a"*32
+        report["artifacts"] = [{
+            "data": "8.8.8.8",
+            "dataType": "ip",
+        }]
         cortexreport = CortexReport()
         cortexreport.register_report(FileInfoAnalyzer, report)
         sample.register_cortex_report(cortexreport)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
-        artifact = {
+        report["artifacts"] = [{
             "data": "oh.my.day.um",
             "dataType": "domain",
-        }
-
-        report["artifacts"] = [artifact]
+        }]
         cortexreport = CortexReport()
         cortexreport.register_report(FileInfoAnalyzer, report)
         sample.register_cortex_report(cortexreport)
@@ -1555,7 +1594,7 @@ unknown : baz'''
 
         report["full"]["results"][0]["results"][0]["submodule_section_content"]["md5"] = ""
         cortexreport = CortexReport()
-        with self.assertRaisesRegex(TypeError, r'md5 .* long'):
+        with self.assertRaises(schema.SchemaError):
             cortexreport.register_report(FileInfoAnalyzer, report)
 
     def test_rule_expressions_cortexreport_virustotalqueryreport_context(self):
@@ -1575,16 +1614,21 @@ unknown : baz'''
             self.office_data_dir, 'blank.doc'))
 
         tax = {
-                "level": "malicious",
-                "namespace": "VT",
-                "predicate": "GetReport",
-                "value": "37/68"
-            }
+            "level": "malicious",
+            "namespace": "VT",
+            "predicate": "GetReport",
+            "value": "37/68"
+        }
         report = {
             "summary": {
                 "taxonomies": [
-                tax
+                     tax
                 ]
+            },
+            "full": {
+                "response_code": 0,
+                "resource": "Foo",
+                "verbose_msg": "AAA"
             },
             "success": True,
             "artifacts": [],
@@ -1612,10 +1656,8 @@ unknown : baz'''
         self.assertEqual(result.result, Result.unknown)
 
         report["summary"]["taxonomies"][0]["value"] = "NAN"
-        cortexreport.register_report(VirusTotalQuery, report)
-        sample.register_cortex_report(cortexreport)
-        with self.assertRaises(ValueError):
-            result = rule.evaluate(sample)
+        with self.assertRaises(schema.SchemaError):
+            cortexreport.register_report(VirusTotalQuery, report)
 
     def test_rule_expressions_olereport_context(self):
         """ Test generic rule olereport context """
