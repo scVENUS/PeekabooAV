@@ -32,6 +32,7 @@ import os
 import tempfile
 import logging
 import shutil
+import schema
 import unittest
 from datetime import datetime, timedelta
 
@@ -866,6 +867,46 @@ class TestCuckoo(unittest.TestCase):
                 "dns": [
                     {"request": "dom1"},
                     {"request": "dom2"},
+                ],
+                "apples": tuple([7]),
+            },
+            "signatures": (
+                {"description": "desc1", "pears": [1]},
+                {"description": "desc2"}
+            ),
+            "info": {
+                "score": 1.1,
+                "oranges": {"count": 10},
+            },
+            "debug": {
+                "errors": ["error1", "error2"],
+                "cuckoo": ("msg1", "msg2"),
+                "peaches": "none",
+            },
+            "bananas": 5,
+        }
+
+        cuckooreport = CuckooReport(report, "some://where")
+        self.assertEqual(cuckooreport.requested_domains[0], "dom1")
+        self.assertEqual(cuckooreport.requested_domains[1], "dom2")
+        self.assertEqual(cuckooreport.signature_descriptions[0], "desc1")
+        self.assertEqual(cuckooreport.signature_descriptions[1], "desc2")
+        self.assertEqual(cuckooreport.score, 1.1)
+        self.assertEqual(cuckooreport.errors[0], "error1")
+        self.assertEqual(cuckooreport.errors[1], "error2")
+        self.assertEqual(cuckooreport.server_messages[0], "msg1")
+        self.assertEqual(cuckooreport.server_messages[1], "msg2")
+        self.assertEqual(cuckooreport.url, "some://where")
+
+    def test_report_dumping(self):
+        """ Test that a dump of a report matches the input. """
+        url = "some://where"
+        report = {
+            "x-peekaboo": {"origin-url": url},
+            "network": {
+                "dns": [
+                    {"request": "dom1"},
+                    {"request": "dom2"},
                 ]
             },
             "signatures": [
@@ -880,65 +921,66 @@ class TestCuckoo(unittest.TestCase):
                 "cuckoo": ["msg1", "msg2"],
             }
         }
-        cuckooreport = CuckooReport(report, "some://where")
-        self.assertEqual(cuckooreport.requested_domains[0], "dom1")
-        self.assertEqual(cuckooreport.requested_domains[1], "dom2")
-        self.assertEqual(cuckooreport.signature_descriptions[0], "desc1")
-        self.assertEqual(cuckooreport.signature_descriptions[1], "desc2")
-        self.assertEqual(cuckooreport.score, 1.1)
-        self.assertEqual(cuckooreport.errors[0], "error1")
-        self.assertEqual(cuckooreport.errors[1], "error2")
-        self.assertEqual(cuckooreport.server_messages[0], "msg1")
-        self.assertEqual(cuckooreport.server_messages[1], "msg2")
-        self.assertEqual(cuckooreport.url, "some://where")
 
-        # assumes above report is a minimal report
-        expected_dump = report.copy()
-        expected_dump.update(
-            {"x-peekaboo": {"origin-url": cuckooreport.url}})
-        self.assertEqual(cuckooreport.dump, expected_dump)
+        cuckooreport = CuckooReport(report, url)
+        self.assertEqual(cuckooreport.dump, report)
 
     def test_invalid_report(self):
         """ Test that invalid report values are rejected. """
-        with self.assertRaisesRegex(TypeError, r'report.*dict'):
+        with self.assertRaisesRegex(schema.SchemaError, r'\[\].*dict'):
             CuckooReport([])
 
-        with self.assertRaisesRegex(TypeError, r'network.*dict'):
+        # schema errors are multi-line (?m), so we need to make dot match
+        # whitspace as well (?s)
+        with self.assertRaisesRegex(
+                schema.SchemaError, r"(?ms)network.*'dict'"):
             CuckooReport({"network": []})
-        with self.assertRaisesRegex(TypeError, r'dns.*list or tuple'):
+        with self.assertRaisesRegex(
+                schema.SchemaError, r"(?ms)network.*dns.*'list'.*'tuple'"):
             CuckooReport({"network": {"dns": {}}})
-        with self.assertRaisesRegex(TypeError, r'domains.*dicts'):
+        with self.assertRaisesRegex(
+                schema.SchemaError, r"(?ms)network.*dns.*'dict'"):
             CuckooReport({"network": {"dns": [[]]}})
-        with self.assertRaisesRegex(KeyError, r'dns.*missing.*element'):
+        with self.assertRaisesRegex(
+                schema.SchemaError,
+                r"(?ms)network.*dns.*Missing key.*'request'"):
             CuckooReport({"network": {"dns": [{"not-request": 1}]}})
-        with self.assertRaisesRegex(TypeError, r'dns.*string'):
+        with self.assertRaisesRegex(
+                schema.SchemaError, r"(?ms)network.*dns.*request.*'str'"):
             CuckooReport({"network": {"dns": [{"request": 1}]}})
 
-        with self.assertRaisesRegex(TypeError, r'signatures.*list or tuple'):
+        with self.assertRaisesRegex(
+                schema.SchemaError, r"(?ms)signatures.*'list'.*'tuple'"):
             CuckooReport({"signatures": {}})
-        with self.assertRaisesRegex(TypeError, r'signatures.*dicts'):
+        with self.assertRaisesRegex(
+                schema.SchemaError, r"(?ms)signatures.*'dict'"):
             CuckooReport({"signatures": [1]})
-        with self.assertRaisesRegex(KeyError, r'signatures.*description'):
+        with self.assertRaisesRegex(
+                schema.SchemaError,
+                r"(?ms)signatures.*Missing key.*'description'"):
             CuckooReport({"signatures": [{"not-description": 1}]})
-        with self.assertRaisesRegex(TypeError, r'signature.*strings'):
+        with self.assertRaisesRegex(
+                schema.SchemaError, r"(?ms)signatures.*description.*'str'"):
             CuckooReport({"signatures": [{"description": 1}]})
 
-        with self.assertRaisesRegex(TypeError, r'info.*dict'):
+        with self.assertRaisesRegex(schema.SchemaError, r"(?ms)info.*'dict'"):
             CuckooReport({"info": 1})
-        with self.assertRaisesRegex(TypeError, r'score.*number'):
+        with self.assertRaisesRegex(
+                schema.SchemaError, r"(?ms)score.*'int'.*'float'"):
             CuckooReport({"info": {"score": "onepointtwo"}})
 
-        with self.assertRaisesRegex(TypeError, r'debug.*dict'):
+        with self.assertRaisesRegex(schema.SchemaError, r"(?ms)debug.*'dict'"):
             CuckooReport({"debug": 1})
-        with self.assertRaisesRegex(TypeError, r'error message.*list or tuple'):
+        with self.assertRaisesRegex(
+                schema.SchemaError, r"(?ms)errors.*'list'.*'tuple'"):
             CuckooReport({"debug": {"errors": {}}})
-        with self.assertRaisesRegex(TypeError, r'error messages.*strings'):
+        with self.assertRaisesRegex(schema.SchemaError, r"(?ms)errors.*'str'"):
             CuckooReport({"debug": {"errors": [1]}})
 
         with self.assertRaisesRegex(
-                TypeError, r'server message.*list or tuple'):
+                schema.SchemaError, r"(?ms)cuckoo.*'list'.*'tuple'"):
             CuckooReport({"debug": {"cuckoo": {}}})
-        with self.assertRaisesRegex(TypeError, r'server messages.*strings'):
+        with self.assertRaisesRegex(schema.SchemaError, r"(?ms)cuckoo.*'str'"):
             CuckooReport({"debug": {"cuckoo": [1]}})
 
 
