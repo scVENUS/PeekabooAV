@@ -31,6 +31,7 @@ import logging
 import threading
 
 import requests
+import schema
 import urllib3.util.retry
 
 from peekaboo.exceptions import PeekabooException
@@ -273,7 +274,7 @@ class Cuckoo:
             try:
                 reportobj = CuckooReport(report, self.request_url(report_path))
                 sample.register_cuckoo_report(reportobj)
-            except (KeyError, ValueError, TypeError) as err:
+            except schema.SchemaError as err:
                 logger.warning('Report returned from Cuckoo contained '
                                'invalid data: %s', err)
                 sample.mark_cuckoo_failure()
@@ -444,80 +445,58 @@ class CuckooReport:
         if report is None:
             report = {}
 
-        if not isinstance(report, dict):
-            raise TypeError('report is expected to be a dict')
+        # some common building blocks for reuse
+        dns_element_schema = {'request': str}
+        description_element_schema = {'description': str}
 
-        network = report.get('network', {})
-        if not isinstance(network, dict):
-            raise TypeError('network requests are expected to be a dict')
+        # defaults of optional keys are not validated. Therefore their
+        # validators can't set more default values. So we can only rely on the
+        # validation result to contain the top-level key defaults. To avoid
+        # confusion make no assumptions about optional key existance at all and
+        # only schema compliance. We still use the result though because
+        # ignore_extra_keys has stripped it of extraneous data which protects
+        # us somewhat from accidentally processing it.
+        report = schema.Schema({
+            schema.Optional('network', default={}, ignore_extra_keys=True): {
+                schema.Optional('dns', default=[]): schema.Or(
+                    list([dns_element_schema]),
+                    tuple([dns_element_schema]),
+                    ignore_extra_keys=True),
+                },
+            schema.Optional('signatures', default=[]): schema.Or(
+                list([description_element_schema]),
+                tuple([description_element_schema]),
+                ignore_extra_keys=True),
+            schema.Optional('info', default={}): {
+                schema.Optional('score', default=0.0): schema.Or(int, float),
+                },
+            schema.Optional('debug', default={}): {
+                schema.Optional('errors', default=[]): schema.Or(
+                    list([str]),
+                    tuple([str])),
+                schema.Optional('cuckoo', default=[]): schema.Or(
+                    list([str]),
+                    tuple([str])),
+                },
+            }, ignore_extra_keys=True).validate(report)
 
-        dns = network.get('dns', [])
-        if not isinstance(dns, (list, tuple)):
-            raise TypeError('dns requests are expected to be a list or tuple')
+        self._requested_domains = [
+            domain['request'] for domain in report.get(
+                'network', {}).get('dns', [])]
 
-        self._requested_domains = []
-        for domain in dns:
-            if not isinstance(domain, dict):
-                raise TypeError('domains are expected to be dicts')
-            if 'request' not in domain:
-                raise KeyError('dns request missing from dns report element')
-            if not isinstance(domain['request'], str):
-                raise TypeError('dns request is expected to be a string')
+        self._signature_descriptions = [
+            sig['description'] for sig in report.get('signatures', [])]
 
-            self._requested_domains.append(domain['request'])
-
-        sigs = report.get('signatures', [])
-        if not isinstance(sigs, (list, tuple)):
-            raise TypeError('signatures are expected to be a list or tuple')
-
-        self._signature_descriptions = []
-        for sig in sigs:
-            if not isinstance(sig, dict):
-                raise TypeError('signatures are expected to be dicts')
-            if 'description' not in sig:
-                raise KeyError(
-                    'signatures are expected to contain a description')
-            if not isinstance(sig['description'], str):
-                raise TypeError(
-                    'signature descriptions are expected to be strings')
-
-            self._signature_descriptions.append(sig['description'])
-
-        info = report.get('info', {})
-        if not isinstance(info, dict):
-            raise TypeError('info is expected to be a dict')
-
-        self._score = info.get('score', 0.0)
-        if not isinstance(self._score, (int, float)):
-            raise TypeError('score is expected to be a number')
+        # explicitly convert to the types of our external API here if we accept
+        # multiple types as input (schema.Use could convert as well but does it
+        # before validation in duck-typing fashion which could make us accept
+        # unintended types, e.g. a string because it can be converted to a list
+        # because it's iterable).
+        self._score = float(report.get('info', {}).get('score', 0.0))
 
         debug = report.get('debug', {})
-        if not isinstance(debug, dict):
-            raise TypeError('debug is expected to be a dict')
-
-        errors = debug.get('errors', [])
-        if not isinstance(errors, (list, tuple)):
-            raise TypeError(
-                'error message list is expected to be list or tuple')
-
-        self._errors = []
-        for error in errors:
-            if not isinstance(error, str):
-                raise TypeError('error messages are expected to be strings')
-
-            self._errors.append(error)
-
-        messages = debug.get('cuckoo', [])
-        if not isinstance(messages, (list, tuple)):
-            raise TypeError(
-                'server message list is expected to be list or tuple')
-
-        self._server_messages = []
-        for message in messages:
-            if not isinstance(message, str):
-                raise TypeError('server messages are expected to be strings')
-
-            self._server_messages.append(message)
+        self._errors = list(debug.get('errors', []))
+        self._server_messages = list(debug.get('cuckoo', []))
 
     @property
     def dump(self):
