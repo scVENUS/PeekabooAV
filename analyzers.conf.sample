@@ -30,6 +30,10 @@
 # where to reach the Cortex REST API
 #url: http://127.0.0.1:9001
 
+# Classification according to Traffic Light Protocol
+# white, green, amber, red
+#tlp: amber
+
 # Token to authenticate to the Cortex REST API with.
 #api_token        :    <empty>
 

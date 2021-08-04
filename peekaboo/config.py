@@ -31,6 +31,7 @@ import sys
 import logging
 import configparser
 from peekaboo.exceptions import PeekabooConfigException
+from peekaboo.toolbox.cortex import tlp
 
 
 logger = logging.getLogger(__name__)
@@ -180,6 +181,28 @@ class PeekabooConfigParser( # pylint: disable=too-many-ancestors
 
         return levels[level]
 
+    def gettlp(self, section, option, raw=False, vars=None, fallback=None):
+        levels = {
+            'red': tlp.RED,
+            '3': tlp.RED,
+            'amber': tlp.AMBER,
+            '2': tlp.AMBER,
+            'green': tlp.GREEN,
+            '1': tlp.GREEN,
+            'white': tlp.WHITE,
+            '0': tlp.WHITE,
+        }
+
+        level = self.get(section, option, raw=raw, vars=vars, fallback=None)
+        if level is None:
+            return fallback
+        level = level.lower()
+
+        if level not in levels:
+            raise PeekabooConfigException('Unknown tlp level %s' % level)
+
+        return levels[level]
+
     def getoctal(self, section, option, raw=False, vars=None, fallback=None):
         """ Get an integer in octal notation. Raises config
         exception if the format is wrong. Options identical to get(). """
@@ -228,6 +251,7 @@ class PeekabooConfigParser( # pylint: disable=too-many-ancestors
             self.OCTAL: self.getoctal,
             self.RELIST: self.getrelist,
             self.IRELIST: self.getirelist,
+            tlp: self.gettlp,
         }
 
         return getter[option_type](section, option, fallback=fallback)
@@ -457,6 +481,7 @@ class PeekabooAnalyzerConfig(PeekabooConfigParser):
         self.cuckoo_maximum_job_age = 15*60
 
         self.cortex_url = 'http://127.0.0.1:9001'
+        self.cortex_tlp = tlp.AMBER
         self.cortex_api_token = ''
         self.cortex_poll_interval = 5
         self.cortex_submit_original_filename = True
@@ -471,6 +496,7 @@ class PeekabooAnalyzerConfig(PeekabooConfigParser):
             'cuckoo_maximum_job_age': ['cuckoo', 'maximum_job_age'],
 
             'cortex_url': ['cortex', 'url'],
+            'cortex_tlp': ['cortex', 'tlp'],
             'cortex_api_token': ['cortex', 'api_token'],
             'cortex_poll_interval': ['cortex', 'poll_interval'],
             'cortex_submit_original_filename': [
