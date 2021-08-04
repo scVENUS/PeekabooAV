@@ -157,6 +157,7 @@ class RulesetEngine:
                     self.cortex = Cortex(
                         self.job_queue,
                         self.analyzer_config.cortex_url,
+                        self.analyzer_config.cortex_tlp,
                         self.analyzer_config.cortex_api_token,
                         self.analyzer_config.cortex_poll_interval,
                         self.analyzer_config.cortex_submit_original_filename,

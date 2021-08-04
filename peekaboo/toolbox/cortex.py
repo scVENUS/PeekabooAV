@@ -30,6 +30,7 @@ import http.cookiejar
 import logging
 import os
 import threading
+import enum
 
 import cortex4py.api
 import cortex4py.exceptions
@@ -42,6 +43,11 @@ from peekaboo.exceptions import PeekabooException
 
 logger = logging.getLogger(__name__)
 
+class tlp(enum.Enum):
+    WHITE = 0
+    GREEN = 1
+    AMBER = 2
+    RED = 3
 
 class CortexSubmitFailedException(PeekabooException):
     """ An exception raised if submitting a job to Cortex fails. """
@@ -128,9 +134,9 @@ class CortexAnalyzer:
     reportclass = CortexAnalyzerReport
 
 
-class CortexFileAnalyzer:
+class CortexFileAnalyzer(CortexAnalyzer):
     """ An analyzer which accepts a file as main input. """
-    def get_submit_parameters(self, sample, submit_original_filename=False):
+    def get_submit_parameters(self, sample, tlp, submit_original_filename=False):
         """ Return this analyzer's submit parameters for a given sample. """
         path = sample.submit_path
         filename = os.path.basename(path)
@@ -145,7 +151,7 @@ class CortexFileAnalyzer:
         params = {
             'data': path,
             'dataType': 'file',
-            'tlp': 1,
+            'tlp': tlp.value,
             'parameters': {
                 'filename': filename,
             }
@@ -156,12 +162,12 @@ class CortexFileAnalyzer:
 
 class CortexHashAnalyzer(CortexAnalyzer):
     """ An analyzer which accepts hashes as main input. """
-    def get_submit_parameters(self, sample, submit_original_filename=False):
+    def get_submit_parameters(self, sample, tlp, submit_original_filename=False):
         """ Return this analyzer's submit parameters for a given sample. """
         params = {
             'data': sample.sha256sum,
             'dataType': 'hash',
-            'tlp': 1,
+            'tlp': tlp.value,
         }
 
         return params
@@ -518,8 +524,8 @@ class NocookiesPolicy(http.cookiejar.DefaultCookiePolicy):
 
 class Cortex:
     """ Interfaces with a Cortex installation via its REST API. """
-    def __init__(self, job_queue, url="http://localhost:9001", api_token="",
-                 poll_interval=5, submit_original_filename=True,
+    def __init__(self, job_queue, url="http://localhost:9001", tlp=tlp.AMBER,
+                 api_token="", poll_interval=5, submit_original_filename=True,
                  max_job_age=900, retries=5, backoff=0.5):
         """ Initialize the object.
 
@@ -527,6 +533,8 @@ class Cortex:
         @type job_queue: JobQueue object
         @param url: Where to reach the Cortex REST API
         @type url: string
+        @param tlp: colour according to traffic light protocol
+        @type tlp: tlp
         @param api_token: API token to use for authentication
         @type api_token: string
         @param poll_interval: How long to wait inbetween job status checks
@@ -550,6 +558,7 @@ class Cortex:
         # reentrant because we're doing nested calls within critical sections
         self.running_jobs_lock = threading.RLock()
         self.url = url
+        self.tlp = tlp
         self.api_token = api_token
         self.poll_interval = poll_interval
         self.submit_original_filename = submit_original_filename
@@ -715,7 +724,7 @@ class Cortex:
         @returns: ID of the submitted Cortex job.
         """
         params = analyzer.get_submit_parameters(
-            sample, self.submit_original_filename)
+            sample, self.tlp, self.submit_original_filename)
 
         logger.debug("Creating Cortex job with analyzer %s and "
                      "parameters %s", analyzer.name, params)

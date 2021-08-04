@@ -66,7 +66,7 @@ from peekaboo.toolbox.file import Filetools, FiletoolsReport
 from peekaboo.toolbox.known import Knowntools, KnowntoolsReport
 from peekaboo.db import PeekabooDatabase, PeekabooDatabaseError
 from peekaboo.toolbox.cortex import CortexReport, VirusTotalQuery, \
-        FileInfoAnalyzer
+        FileInfoAnalyzer, tlp
 # pylint: enable=wrong-import-position
 
 
@@ -343,6 +343,7 @@ class TestDefaultAnalyzerConfig(unittest.TestCase):
         self.assertEqual(self.config.cuckoo_maximum_job_age, 900)
         self.assertEqual(self.config.cuckoo_api_token, '')
         self.assertEqual(self.config.cortex_url, 'http://127.0.0.1:9001')
+        self.assertEqual(self.config.cortex_tlp, tlp.AMBER)
         self.assertEqual(self.config.cortex_poll_interval, 5)
         self.assertEqual(self.config.cortex_submit_original_filename, True)
         self.assertEqual(self.config.cortex_maximum_job_age, 900)
@@ -363,6 +364,7 @@ api_token: tok
 
 [cortex]
 url: http://api:2222
+tlp: gReEn
 poll_interval: 57
 submit_original_filename: yes
 maximum_job_age: 905
@@ -377,6 +379,7 @@ api_token: tok2''')
         self.assertEqual(self.config.cuckoo_api_token, 'tok')
 
         self.assertEqual(self.config.cortex_url, 'http://api:2222')
+        self.assertEqual(self.config.cortex_tlp, tlp.GREEN)
         self.assertEqual(self.config.cortex_poll_interval, 57)
         self.assertEqual(self.config.cortex_submit_original_filename, True)
         self.assertEqual(self.config.cortex_maximum_job_age, 905)
