@@ -34,6 +34,9 @@ whitelist.5 : application/x-pkcs7-signature
 whitelist.6 : application/pkcs7-mime
 whitelist.7 : application/x-pkcs7-mime
 whitelist.8 : text/html
+whitelist.9 : application/pep.sign
+whitelist.10 : application/pep.sync
+whitelist.11 : application/pgp-keys
 
 [file_type_on_greylist]
 greylist.1  : application/octet-stream
