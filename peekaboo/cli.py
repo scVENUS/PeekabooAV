@@ -34,6 +34,8 @@ import os
 import re
 import socket
 import sys
+import urllib.parse
+import requests
 
 
 logging.basicConfig()
@@ -42,11 +44,13 @@ logger = logging.getLogger(__name__)
 
 class PeekabooUtil:
     """ Utility fo interface with Peekaboo API over the socket connection """
-    def __init__(self, socket_file):
+    def __init__(self, url):
         logger.debug('Initialising PeekabooUtil')
-        self.peekaboo = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        logger.debug('Opening socket %s', socket_file)
-        self.peekaboo.connect(socket_file)
+        self.peekaboo = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        logger.debug('Opening connection %s', url)
+        self.url = url
+        o = urllib.parse.urlparse(url)
+        self.peekaboo.connect((o.hostname, o.port))
 
     def send_receive(self, request):
         """ Send request to peekaboo and return its answer """
@@ -89,17 +93,21 @@ class PeekabooUtil:
         """ Send ping request to daemon and optionally print response. """
         logger.debug("Sending ping...")
         try:
-            pong = self.send_receive_json([{"request": "ping"}])
+            r = requests.get(urllib.parse.urljoin(self.url, "/ping"))
+            pong = r.json()
         except socket.error as error:
             logger.error("Error communicating with daemon: %s", error)
+            return 2
+        except json.decoder.JSONDecodeError as error:
+            logger.error("Error decoding the response: %s", error)
             return 2
 
         if not isinstance(pong, dict):
             logger.error("Invalid response from daemon: %s", pong)
             return 2
 
-        reqtype = pong.get('request')
-        response = pong.get('response')
+        reqtype = r.request
+        response = pong.get('answer')
         if reqtype is None or response is None:
             logger.error("Incomplete response from daemon: %s", pong)
             return 2
@@ -158,8 +166,9 @@ def main():
                         help='Output additional diagnostics')
     parser.add_argument('-t', '--timeout', type=float, required=False,
                         default=None, help='Communications timeout')
-    parser.add_argument('-s', '--socket-file', action='store', required=True,
-                        help='Path to Peekaboo\'s socket file')
+    parser.add_argument('-r', '--remote-url', action='store', required=False,
+                        default='http://127.0.0.1:8100/v1/',
+                        help='URL to Peekaboo instance e.g. http://127.0.0.1:8100/v1/')
 
     scan_file_parser = subparsers.add_parser('scan-file',
                                              help='Scan a file and report it')
@@ -189,9 +198,9 @@ def main():
         socket.setdefaulttimeout(args.timeout)
 
     try:
-        util = PeekabooUtil(args.socket_file)
+        util = PeekabooUtil(args.remote_url)
     except socket.error as error:
-        logger.error("Error connecting to peekaboo socket: %s", error)
+        logger.error("Error connecting to peekaboo: %s", error)
         return 2
 
     return args.func(util, args)
