@@ -47,9 +47,9 @@ class Oletools:
             'suspicious' : [],
         }
 
-        file_path = self.sample.file_path
+        filename = self.sample.filename
         try:
-            vbaparser = VBA_Parser(file_path)
+            vbaparser = VBA_Parser(filename, data=self.sample.content)
 
             # VBA_Parser reports macros for office documents
             report['has_macros'] = vbaparser.detect_vba_macros() or vbaparser.detect_xlm_macros()
@@ -63,7 +63,7 @@ class Oletools:
             if (report['has_macros'] and len(all_macros) == 1
                     and isinstance(all_macros[0], tuple)
                     and len(all_macros[0]) >= 3
-                    and all_macros[0][2] == file_path):
+                    and all_macros[0][2] == filename):
                 logger.warning(
                     "Buggy oletools version detected, result overridden. May "
                     "lead to false negatives, please update to fixed version")

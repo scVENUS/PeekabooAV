@@ -306,18 +306,18 @@ class Cuckoo:
         @raises: CuckooSubmitFailedException if submission failed
         @returns: ID of the submitted Cuckoo job.
         """
-        path = sample.submit_path
-        filename = os.path.basename(path)
-        # override with the original file name if available
-        if self.submit_original_filename:
-            if sample.name_declared:
-                filename = sample.name_declared
-            elif sample.filename:
-                filename = sample.filename
+        filename = sample.sha256sum
 
-        files = {"file": (filename, open(path, 'rb'))}
-        logger.debug("Creating Cuckoo task with content from %s and "
-                     "filename %s", path, filename)
+        # append file extension to aid cuckoo in file type detection
+        if sample.file_extension:
+            filename = '%s.%s' % (filename, sample.file_extension)
+
+        # override with the original file name if available
+        if self.submit_original_filename and sample.filename:
+            filename = sample.filename
+
+        files = {"file": (filename, sample.content)}
+        logger.debug("Creating Cuckoo task with filename %s", filename)
         headers = {"Authorization": "Bearer %s" % self.api_token}
 
         try:

@@ -48,6 +48,9 @@ use strict;
 use JSON::PP;
 # Yes, Amavis has its own minimalist JSON implementation Amavis::JSON. But it
 # doesn't seem to do UTF-8 encoding correctly - everything ends up as latin1.
+use LWP::UserAgent;
+use File::Basename;
+use Data::Dumper;
 
 # monkey patch a content_disposition setter/getter into the Parts package
 *{Amavis::Unpackers::Part::content_disposition} = sub {
@@ -69,7 +72,11 @@ my $amavis_mime_traverse = \&Amavis::Unpackers::MIME::mime_traverse;
 };
 
 sub ask_peekaboo_internal {
-  my ($dummy, $dummy, $names_to_parts, $dummy) = @_;
+  my ($url, $dummy, $names_to_parts, $dummy) = @_;
+  my ( $rateNames, $rateValues );
+
+  %$rateValues = ( "unchecked" => 1, "unknown" => 2, "ignored" => 3, "good" => 4, "failed" => 5, "bad" => 6 );
+  %$rateNames = reverse %$rateValues;
 
   # extract some additional info for peekaboo from the parts objects
   # structure:
@@ -99,13 +106,129 @@ sub ask_peekaboo_internal {
       $pmi->{$field} = $val if defined($val);
     }
 
+    # add more elements to the part hash, will be used when talking with peekaboo
+    $pmi->{"status"} = undef;   # HTTP return code
+    $pmi->{"rating"} = undef;   # Peekaboo rating
+    $pmi->{"content"} = undef;  # Text messages from peekaboo
+    $pmi->{"job_id"} = undef;   # Checksum for this part
     push(@$metainfo, $pmi);
   }
 
-  # format the whole thing as JSON, enforcing UTF-8 encoding and override
-  # AMaViS-expanded query for standard ask_daemon_internal to execute
-  $_[0] = JSON::PP->new->utf8->encode($metainfo) . "\n";
-  Amavis::AV::ask_daemon_internal(@_);
+  # prepare and run http reuqests to the peekaboo server and receive (wait) for the results
+  my $ua = LWP::UserAgent->new();
+  # note: we receive the url from @av_scanners ( 15-av_scanners )
+  my $scanUrl = "${url}/v1/scan";
+  my $reportUrlTmpl = "${url}/v1/report/JOB_ID";
+
+  my $workDone = 0; # loop control variable, will be set to true if all results are present
+  while ( ! $workDone ) {
+    # loop over the parts
+    foreach my $part ( @$metainfo ) {
+      # note: we get a dict/hash as loop var
+
+      # check if the part was created a a file
+      next if ! defined ( $part->{"full_name"} ) || ! -e $part->{"full_name"};
+
+      # check if this is the first call
+      if ( ! defined( $part->{"status"} ) || ! $part->{"status"} ) {
+
+        # first call: run POST scanfile
+        my $answer = $ua->post($scanUrl,
+          Content_Type => 'form-data',
+          # could be per-file but complicates handling server-side
+          'X-Content-Disposition' => $part->{"content_disposition"},
+          Content => [
+            'file' => [
+              $part->{"full_name"},
+              $part->{"name_declared"} || undef,
+              Content_Type => $part->{"type_declared"},
+            ]
+          ]
+        );
+
+        if ( $answer->{"_rc"} eq "200" ) {
+          # decode the text part of the response
+          my $tokens = JSON::PP->new->utf8->decode($answer->{"_content"});
+          # Amavis::Util::do_log( 1, "Examine tokens: '%s'", Dumper $tokens );
+          $part->{"job_id"} = $tokens->{"job_id"}; # extract the checksum
+          $part->{"status"} = $answer->{"_rc"};
+          Amavis::Util::do_log( 2, "Post: Found 200 for %s: %s", basename( $part->{"full_name"} ), $part->{"job_id"});
+
+        } else {
+          # seems we have got an error... log it
+          Amavis::Util::do_log( 1, "Post: Do not know how to handle state '%s'", $answer->{"_rc"} );
+          die sprintf( "Receive unexpected state %s", $answer->{"_rc"} );
+        }
+      } elsif ( defined( $part->{"status"} ) && $part->{"status"} eq "200" ) {
+
+        # the part has already been requested, now we try to get a report
+        Amavis::Util::do_log( 3, "Found state %s: ask with '%s'", $part->{"status"}, $part->{"job_id"});
+        my $url = $reportUrlTmpl;
+        $url =~ s/JOB_ID/$part->{"job_id"}/;
+        Amavis::Util::do_log( 3, "Resulting url: '$url'");
+
+        my $answer = $ua->get($url);
+        Amavis::Util::do_log( 1, "Found answer as '%s'", $answer->{"_rc"} );
+
+        if ( $answer->{"_rc"} eq "200" ) {
+          $part->{"status"} = $answer->{"_rc"};
+          $part->{"content"} = ( JSON::PP->new->utf8->decode($answer->{"_content"})->{"report"} );
+          $part->{"rating"} = ( JSON::PP->new->utf8->decode($answer->{"_content"})->{"result"} );
+        } elsif ( $answer->{"_rc"} eq "202" ) {
+          # result still not present
+          Amavis::Util::do_log( 3, "Answer still not present '%s'", $answer->{"_rc"} );
+        } else {
+          # seems we have got an error... log it
+          Amavis::Util::do_log( 1, "Post: Do not know how to handle state '%s'", $answer->{"_rc"} );
+          die sprintf( "Receive unexpected state %s", $answer->{"_rc"} );
+        }
+      } else {
+        # seems we have got an error... log it
+        Amavis::Util::do_log( 1, "Post: Do not know how to handle state '%s'", $part->{"status"} );
+        die sprintf( "Receive unexpected state %s", $part->{"status"} );
+      }
+    }
+    my $stateList = [];
+    # check if we need another loop pass
+    foreach my $part ( @$metainfo ) {
+      push @$stateList, $part->{"status"} if defined( $part->{"status"} ) && $part->{"status"} eq "200";
+    }
+    # if all state are 200 we are done
+    if ( $#$stateList eq $#$metainfo ) {
+      $workDone = 1;
+    }
+    # now we need to sleep a little
+    sleep(0.1) if ! $workDone;
+  }
+  # build the result text
+  my $resultText = "";
+  my $totalRate = -1;
+  foreach my $part ( @$metainfo ) {
+    foreach my $line ( @{ $part->{"content"} } ) {
+      $resultText .= $line . "\n";
+    }
+    $resultText .= "\n";
+    $totalRate = $part->{ "rating" } if $part->{ "rating" } > $totalRate;
+  }
+  # add the grep pattern
+  $resultText .= sprintf("PeekabooResult:%s", $rateNames->{ $totalRate } );
+  # compute return value (rate good = False, all other are True)
+  my $ret = $totalRate == 4 ? 0 : 1;
+
+  # Amavis::AV::ask_daemon_internal(@_);
+  # Can't use string ("{"result":["Datei \\"blank.doc\\" "...) as a HASH ref while
+  # $res = Dumper $req->{"_content"};
+  #
+  # Returns a triplet, or dies in case of failure.
+  # The first element of the triplet has the following semantics:
+  # - true if virus found,
+  # - 0 if no viruses found,
+  # - undef if it did not complete its job;
+  # the second element is a string, the text as provided by the virus scanner;
+  # the third element is ref to a list of virus names found (if any).
+  #   (it is guaranteed the list will be nonempty if virus was found)
+
+  return ( $ret, $resultText );
 }
 
 # force run_av to execute our protocol routine so we can generate the final

@@ -365,16 +365,12 @@ class PeekabooConfig(PeekabooConfigParser):
         self.user = 'peekaboo'
         self.group = None
         self.pid_file = '/var/run/peekaboo/peekaboo.pid'
-        self.sock_file = '/var/run/peekaboo/peekaboo.sock'
-        self.sock_group = None
-        self.sock_mode = 0o0660
+        self.host = '127.0.0.1'
+        self.port = 8100
         self.log_level = logging.INFO
         self.log_format = '%(asctime)s - %(name)s - (%(threadName)s) - ' \
                           '%(levelname)s - %(message)s'
         self.worker_count = 3
-        self.sample_base_dir = '/tmp'
-        self.job_hash_regex = '/amavis/tmp/([^/]+)/parts/'
-        self.keep_mail_data = False
         self.processing_info_dir = '/var/lib/peekaboo/malware_reports'
         self.report_locale = None
         self.db_url = 'sqlite:////var/lib/peekaboo/peekaboo.db'
@@ -396,13 +392,9 @@ class PeekabooConfig(PeekabooConfigParser):
             'user': ['global', 'user'],
             'group': ['global', 'group'],
             'pid_file': ['global', 'pid_file'],
-            'sock_file': ['global', 'socket_file'],
-            'sock_group': ['global', 'socket_group'],
-            'sock_mode': ['global', 'socket_mode', self.OCTAL],
+            'host': ['global', 'host'],
+            'port': ['global', 'port'],
             'worker_count': ['global', 'worker_count'],
-            'sample_base_dir': ['global', 'sample_base_dir'],
-            'job_hash_regex': ['global', 'job_hash_regex'],
-            'keep_mail_data': ['global', 'keep_mail_data'],
             'processing_info_dir': ['global', 'processing_info_dir'],
             'report_locale': ['global', 'report_locale'],
             'db_url': ['db', 'url'],

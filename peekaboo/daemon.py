@@ -84,9 +84,8 @@ class SignalHandler:
 class PeekabooDaemonInfrastructure:
     """ A class that manages typical daemon infrastructure such as PID file and
     privileges. """
-    def __init__(self, pid_file, sock_file, user, group):
+    def __init__(self, pid_file, user, group):
         self.pid_file = pid_file
-        self.sock_file = sock_file
         self.user = user
         self.group = group
 
@@ -96,7 +95,6 @@ class PeekabooDaemonInfrastructure:
         """ Initialize daemon infrastructure. """
         self.drop_privileges()
         self.create_pid_file()
-        self.check_stale_socket()
 
     def drop_privileges(self):
         """ Check and potentially drop privileges. """
@@ -207,38 +205,6 @@ class PeekabooDaemonInfrastructure:
         self.pid_file_created = True
         logger.debug('PID %d written to %s', ourpid, self.pid_file)
 
-    def check_stale_socket(self):
-        """ Check if the socket file exists already/still and if it is stale or
-        actively serviced. Remove it if stale. """
-        # is the socket also stale?
-        if not os.path.exists(self.sock_file):
-            return
-
-        stale = False
-        try:
-            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            sock.connect(self.sock_file)
-            logger.debug('Someone answered on existing socket')
-        except socket.error as sockerr:
-            logger.debug('Existing socket connection attempt failed: %s',
-                         sockerr)
-            if sockerr.errno == errno.ECONNREFUSED:
-                stale = True
-
-        if not stale:
-            logger.critical('Socket %s exists and seems to be serviced. '
-                            'Please check for another instance running.',
-                            self.sock_file)
-            sys.exit(1)
-
-        logger.warning('Removing stale socket %s', self.sock_file)
-        try:
-            os.remove(self.sock_file)
-        except OSError as oserror:
-            logger.critical('Error removing stale socket %s: %s',
-                            self.sock_file, oserror)
-            sys.exit(1)
-
     def __del__(self):
         """ Clean up on shutdown, such as removing the PID file. """
         # only remove stuff if we created it. Otherwise we're bailing (but
@@ -328,7 +294,7 @@ def run():
     # initialize the daemon infrastructure such as PID file and dropping
     # privileges, automatically cleans up after itself when going out of scope
     daemon_infrastructure = PeekabooDaemonInfrastructure(
-        config.pid_file, config.sock_file, config.user, config.group)
+        config.pid_file, config.user, config.group)
     daemon_infrastructure.init()
 
     # clear all our in flight samples and all instances' stale in flight
@@ -367,17 +333,15 @@ def run():
     # config values and references to other objects they need, such as database
     # connection and connection map.
     sample_factory = SampleFactory(
-        config.sample_base_dir, config.job_hash_regex,
-        config.keep_mail_data, config.processing_info_dir)
+        config.processing_info_dir)
 
-    # We only want to accept 2 * worker_count connections.
     try:
         server = PeekabooServer(
-            sock_file=config.sock_file, job_queue=job_queue,
+            host=config.host, port=config.port,
+            job_queue=job_queue,
             sample_factory=sample_factory,
-            request_queue_size=config.worker_count * 2,
-            sock_group=config.sock_group,
-            sock_mode=config.sock_mode)
+            request_queue_size=100,
+            db_con=db_con)
     except Exception as error:
         logger.critical('Failed to start Peekaboo Server: %s', error)
         job_queue.shut_down()

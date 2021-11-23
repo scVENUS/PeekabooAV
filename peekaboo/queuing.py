@@ -322,10 +322,6 @@ class JobQueue:
         @param sample: The Sample object to post-process. """
         self.submit_duplicates(sample.sha256sum)
 
-        # now that this sample is really done and cleared from the queue, tell
-        # its connection handler about it
-        sample.mark_done()
-
     def dequeue(self):
         """ Remove a sample from the queue. Used by the workers to get their
         work. Blocks indefinitely until some work is available. If we want to
@@ -452,16 +448,6 @@ class Worker(threading.Thread):
             # because of uncaught exceptions we should improve error handling
             # in the subroutines causing it.
 
-            if not sample.init():
-                logger.error('Sample initialization failed')
-                sample.add_rule_result(
-                    RuleResult(
-                        "Worker", result=Result.failed,
-                        reason=_("Sample initialization failed"),
-                        further_analysis=False))
-                self.job_queue.done(sample.sha256sum)
-                continue
-
             try:
                 self.ruleset_engine.run(sample)
             except PeekabooAnalysisDeferred:
@@ -471,10 +457,12 @@ class Worker(threading.Thread):
             if sample.result >= Result.failed:
                 sample.dump_processing_info()
 
+            sample.mark_done()
+
             if sample.result != Result.failed:
                 logger.debug('Saving results to database')
                 try:
-                    self.db_con.analysis_save(sample)
+                    self.db_con.analysis_update(sample)
                 except PeekabooDatabaseError as dberr:
                     logger.error('Failed to save analysis result to '
                                  'database: %s', dberr)
@@ -482,7 +470,6 @@ class Worker(threading.Thread):
             else:
                 logger.debug('Not saving results of failed analysis')
 
-            sample.cleanup()
             self.job_queue.done(sample)
 
         logger.info('Worker %d: Stopped', self.worker_id)
