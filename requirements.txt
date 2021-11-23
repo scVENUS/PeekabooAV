@@ -8,3 +8,4 @@ configparser
 pyparsing
 cortex4py
 schema
+sanic

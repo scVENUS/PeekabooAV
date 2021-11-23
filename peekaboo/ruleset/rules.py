@@ -155,7 +155,7 @@ class Rule:
         if report is not None:
             return report
 
-        logger.debug("Submitting %s to Cuckoo", sample.submit_path)
+        logger.debug("Submitting %s to Cuckoo", sample)
         try:
             job_id = self.cuckoo.submit(sample)
         except CuckooSubmitFailedException as failed:
@@ -221,7 +221,7 @@ class Rule:
                                           ruleset run until result has been
                                           retrieved.
         """
-        logger.debug("Submitting %s to Cortex", sample.submit_path)
+        logger.debug("Submitting %s to Cortex", sample)
         try:
             job_id = self.cortex.submit(sample, analyzer)
         except CortexSubmitFailedException as failed:
@@ -613,7 +613,7 @@ class ExpressionRule(Rule):
         # context of dummy objects to test expressions against
         context = {
             'variables': {
-                'sample': Sample("dummy"),
+                'sample': Sample(b"dummy"),
                 'cuckooreport': CuckooReport(),
                 'olereport': OletoolsReport(),
                 'filereport': FiletoolsReport(),

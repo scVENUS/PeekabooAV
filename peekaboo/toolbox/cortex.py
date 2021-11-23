@@ -134,23 +134,24 @@ class CortexAnalyzer:
     reportclass = CortexAnalyzerReport
 
 
-class CortexFileAnalyzer(CortexAnalyzer):
+class CortexFileAnalyzer:
     """ An analyzer which accepts a file as main input. """
     @classmethod
     def get_submit_parameters(cls, sample, sample_tlp,
                               submit_original_filename=False):
         """ Return this analyzer's submit parameters for a given sample. """
-        path = sample.submit_path
-        filename = os.path.basename(path)
+        filename = sample.sha256sum
+
+        # append file extension to aid backend analyzers in file type detection
+        if sample.file_extension:
+            filename = '%s.%s' % (filename, sample.file_extension)
 
         # override with the original file name if available
-        if submit_original_filename:
-            if sample.name_declared:
-                filename = sample.name_declared
-            elif sample.filename:
-                filename = sample.filename
+        if submit_original_filename and sample.filename:
+            filename = sample.filename
 
         params = {
+            # FIXME: need sample.content here
             'data': path,
             'dataType': 'file',
             'tlp': sample_tlp.value,

@@ -8,18 +8,12 @@
 #user             :    peekaboo
 # specific group to drop privileges to if not primary group of user
 #group            :    <empty>
-#socket_file      :    /var/run/peekaboo/peekaboo.sock
-# change socket group and mode to open up client access
-#socket_group     :    <empty>
-#socket_mode      :    0660
+#host             :    127.0.0.1
+#port             :    8100
 
 # can be set to empty to disable PID file creation
 #pid_file         :    /var/run/peekaboo/peekaboo.pid
 #worker_count     :    3
-#sample_base_dir  :    /tmp
-#job_hash_regex   :    /amavis/tmp/([^/]+)/parts/
-# Whether or not to cleanup temporary files under /tmp
-#keep_mail_data   :    no
 #processing_info_dir : /var/lib/peekaboo/malware_reports
 
 # Configure the language to use for messages in the report returned to the

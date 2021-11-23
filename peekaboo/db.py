@@ -39,9 +39,10 @@ from sqlalchemy.exc import SQLAlchemyError, IntegrityError, OperationalError, \
         DBAPIError
 from peekaboo import __version__
 from peekaboo.ruleset import Result
+from peekaboo.sample import JobState
 from peekaboo.exceptions import PeekabooDatabaseError
 
-DB_SCHEMA_VERSION = 8
+DB_SCHEMA_VERSION = 9
 
 logger = logging.getLogger(__name__)
 Base = declarative_base()
@@ -102,6 +103,7 @@ class SampleInfo(Base):
     # - compound: we frequently search by sha256sum and file extension
 
     id = Column(Integer, primary_key=True)
+    state = Column(Enum(JobState), nullable=False)
     sha256sum = Column(String(64), nullable=False)
     file_extension = Column(String(16), nullable=True)
     analysis_time = Column(DateTime, nullable=False,
@@ -238,24 +240,70 @@ class PeekabooDatabase:
 
         return -1
 
-    def analysis_save(self, sample):
+    def analysis_add(self, sample):
         """
-        Save an analysis task to the analysis journal in the database.
+        Add an analysis task to the analysis journal in the database.
 
         @param sample: The sample object for this analysis task.
+        @returns: ID of the newly created analysis task (also updated
+                  in the sample)
         """
         sample_info = SampleInfo(
+            state=sample.state,
             sha256sum=sample.sha256sum,
             file_extension=sample.file_extension,
             analysis_time=datetime.now(),
             result=sample.result,
             reason=sample.reason)
 
+        job_id = None
         with self.__lock:
             attempt = 1
             while attempt <= self.retries:
                 session = self.__session()
                 session.add(sample_info)
+                try:
+                    # flush to retrieve the automatically assigned primary key
+                    # value
+                    session.flush()
+                    job_id = sample_info.id
+                    session.commit()
+                except (OperationalError, DBAPIError,
+                        SQLAlchemyError) as error:
+                    session.rollback()
+
+                    attempt = self.was_transient_error(
+                        error, attempt, 'saving analysis result')
+                    if attempt > 0:
+                        continue
+
+                    raise PeekabooDatabaseError(
+                        'Failed to add analysis task to the database: %s' %
+                        error)
+                finally:
+                    session.close()
+
+                break
+
+        sample.update_id(job_id)
+        return job_id
+
+    def analysis_update(self, sample):
+        """
+        Update an analysis task in the analysis journal in the database.
+
+        @param sample: The sample object for this analysis task.
+        """
+        with self.__lock:
+            attempt = 1
+            while attempt <= self.retries:
+                session = self.__session()
+                analysis = session.query(SampleInfo).filter_by(
+                    id=sample.id).first()
+                analysis.state = sample.state
+                analysis.result = sample.result
+                analysis.reason = sample.reason
+
                 try:
                     session.commit()
                 except (OperationalError, DBAPIError,
@@ -288,12 +336,29 @@ class PeekabooDatabase:
             session = self.__session()
             sample_journal = session.query(
                 SampleInfo.analysis_time, SampleInfo.result, SampleInfo.reason
-                ).filter_by(
+                ).filter(SampleInfo.id != sample.id).filter_by(
                     sha256sum=sample.sha256sum,
                     file_extension=sample.file_extension
                     ).order_by(SampleInfo.analysis_time).all()
             session.close()
         return sample_journal
+
+    def analysis_retrieve(self, job_id):
+        """
+        Fetch information stored in the database about a given sample object.
+
+        @param job_id: ID of the analysis to retrieve
+        @type job_id: int
+        @return: reason and result for the given analysis task
+        """
+        with self.__lock:
+            session = self.__session()
+            sample_result = session.query(
+                SampleInfo.reason, SampleInfo.result
+                ).filter_by(id=job_id, state=JobState.FINISHED).first()
+            session.close()
+
+        return sample_result
 
     def mark_sample_in_flight(self, sample, instance_id=None, start_time=None):
         """

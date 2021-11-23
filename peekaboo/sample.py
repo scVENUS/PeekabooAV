@@ -23,6 +23,8 @@
 ###############################################################################
 
 
+import datetime
+import enum
 import os
 import hashlib
 import json
@@ -35,7 +37,6 @@ import tempfile
 # python 3's open with encoding parameter and implicit usage of the system
 # locale-specified encoding
 from builtins import open
-from datetime import datetime
 from peekaboo.ruleset import Result
 
 
@@ -47,20 +48,23 @@ class SampleFactory:
     Contains all the global configuration data and object references each
     sample needs and thus serves as a registry of potential API breakage
     perhaps deserving looking into. """
-    def __init__(self, base_dir, job_hash_regex,
-                 keep_mail_data, processing_info_dir):
+    def __init__(self, processing_info_dir):
         # configuration
-        self.base_dir = base_dir
-        self.job_hash_regex = job_hash_regex
-        self.keep_mail_data = keep_mail_data
         self.processing_info_dir = processing_info_dir
 
-    def make_sample(self, file_path, status_change=None, metainfo=None):
+    def make_sample(self, content, name=None, content_type=None,
+                    content_disposition=None):
         """ Create a new Sample object based on the factory's configured
         defaults and variable parameters. """
-        return Sample(file_path, status_change, metainfo,
-                      self.base_dir, self.job_hash_regex, self.keep_mail_data,
+        return Sample(content, name, content_type, content_disposition,
                       self.processing_info_dir)
+
+
+@enum.unique
+class JobState(enum.Enum):
+    """ Enumeration of states a job processing some sample can be in. """
+    ACCEPTED = 1
+    FINISHED = 2
 
 
 class Sample:
@@ -72,15 +76,13 @@ class Sample:
     on first access, especially if that determination is somewhat expensive
     such as the file checksum.
     """
-    def __init__(self, file_path, status_change=None,
-                 metainfo=None, base_dir=None, job_hash_regex=None,
-                 keep_mail_data=False, processing_info_dir=None):
-        self.__path = file_path
-        self.__wd = None
-        self.__filename = os.path.basename(self.__path)
-        # A symlink that points to the actual file named
-        # sha256sum.suffix
-        self.__submit_path = None
+    def __init__(self, content, filename=None, content_type=None,
+                 content_disposition=None,
+                 processing_info_dir=None, job_id=None):
+        self.__content = content
+        self.__filename = filename
+        self.__content_type = content_type
+        self.__content_disposition = content_disposition
         self.__cuckoo_failed = False
         self.__cuckoo_report = None
         self.__cortex_failed = False
@@ -88,124 +90,26 @@ class Sample:
         self.__oletools_report = None
         self.__filetools_report = None
         self.__knowntools_report = None
-        self.__done = False
-        self.__status_change = status_change
+        self.__id = job_id
+        self.__state = JobState.ACCEPTED
         self.__result = Result.unchecked
         self.__reason = None
-        self.__report = []  # Peekaboo's own report
+        self.__report = []
         self.__internal_report = []
-        self.__file_stat = None
         self.__sha256sum = None
         self.__file_extension = None
-        self.__base_dir = base_dir
-        self.__job_hash = None
-        self.__job_hash_regex = job_hash_regex
-        self.__keep_mail_data = keep_mail_data
         self.__processing_info_dir = processing_info_dir
-
-        # Additional attributes for a sample object (i.e. meta info)
-        # We do not make these private for the following reasons:
-        # - this way they still somewhat resemble the previous arbitrary
-        #   attribute dictionary idea
-        # - we'd have to implement the name mangling for setting below
-        # Even though, it is not recommended to access them directly they're an
-        # implementation detail. We add respective properties for that.
-        #
-        # Security: Add more below to allow them to be accepted from the
-        # client. We don't want anyone to be able to pollute our sample
-        # objects from the outside. This also serves as a registry of what we
-        # actually use and know how to deal with.
-        self.meta_info_name_declared = None
-        self.meta_info_type_declared = None
-        self.meta_info_content_disposition = None
-
-        self.initialized = False
-
-        if metainfo:
-            member_variables = vars(self)
-            for field in metainfo:
-                logger.debug('meta_info_%s = %s', field, metainfo[field])
-
-                # JSON will transfer null/None values but we don't want them as
-                # attributes in that case
-                member = 'meta_info_%s' % field
-                if member in member_variables and metainfo[field] is not None:
-                    member_variables[member] = metainfo[field]
-
-    def init(self):
-        """
-        Initialize the Sample object.
-
-        The actual initialization is done here, because the main thread should
-        not do the heavy lifting of e. g. parsing the meta info file to be able
-        to accept new connections as quickly as possible.
-        Instead, it only adds the sample objects to the queue and the workers
-        to the actual initialization.
-        """
-        if self.initialized:
-            return True
-
-        logger.debug("initializing sample")
-
-        # create a temporary directory where mkdtemp makes sure that
-        # creation is atomic, i.e. no other process is using it
-        try:
-            self.__wd = tempfile.mkdtemp(
-                prefix=self.job_hash, dir=self.__base_dir)
-        except OSError as oserr:
-            logger.error('Error creating working directory: %s', oserr)
-            return False
-
-        logger.debug('Working directory %s created', self.__wd)
-
-        # create a symlink to submit the file with the correct file extension
-        # to cuckoo via submit.py. This is so we do not leak the original
-        # filename by default.
-        submit_name = self.sha256sum
-        if self.file_extension:
-            submit_name = '%s.%s' % (submit_name, self.file_extension)
-
-        self.__submit_path = os.path.join(self.__wd, submit_name)
-
-        try:
-            os.symlink(self.__path, self.__submit_path)
-        except OSError as oserr:
-            logger.error('Error linking sample from %s to working '
-                         'directory as %s',
-                         self.__path, self.__submit_path)
-            self.cleanup()
-            return False
-
-        logger.debug('Sample symlinked from %s to %s',
-                     self.__path, self.__submit_path)
-
-        self.initialized = True
-
-        self.__report.append(_("File \"%s\" %s is being analyzed")
-                             % (self.__filename, self.sha256sum))
-
-        # log some additional info to report to aid debugging
-        if self.meta_info_name_declared:
-            self.__internal_report.append("meta info: name_declared: %s"
-                                          % self.meta_info_name_declared)
-
-        if self.meta_info_type_declared:
-            self.__internal_report.append("meta info: type_declared: %s"
-                                          % self.meta_info_type_declared)
-
-        return True
-
-    @property
-    def file_path(self):
-        """ Returns the path to the sample given on creation including
-        directories and filename. """
-        return self.__path
 
     @property
     def filename(self):
         """ Returns the name of the sample file, i.e. the basename without path
         but including the file extension. """
         return self.__filename
+
+    @property
+    def content(self):
+        """ Returns the content of the sample file. """
+        return self.__content
 
     @property
     def result(self):
@@ -238,56 +142,24 @@ class Sample:
                                 % (self.__filename, self.__result.name)]
 
     @property
-    def done(self):
+    def id(self):
+        """ Return the (job) ID of this sample. """
+        return self.__id
+
+    def update_id(self, job_id):
+        """ Update the (job) ID of this sample. """
+        self.__id = job_id
+
+    @property
+    def state(self):
         """ Tells whether the analysis of the sample is done, i.e. a final
         verdict has been reached and a result and reason are available. """
-        return self.__done
+        return self.__state
 
     def mark_done(self):
         """ Mark this sample as done, i.e. fully analysed and verdict reached.
         """
-        self.__done = True
-        if self.__status_change:
-            # notify whoever is interested that our status has changed
-            self.__status_change.set()
-
-    def generate_job_hash(self, size=8):
-        """
-        Generates a job hash (default: 8 characters).
-
-        @param size: The amount of random characters to use for a job hash.
-                     Defaults to 8.
-        @return: a job hash consisting of a static prefix, a timestamp
-                 representing the time when the method was invoked, and random
-                 characters.
-        """
-        job_hash = 'peekaboo-run_analysis-'
-        job_hash += '%s-' % datetime.now().strftime('%Y%m%dT%H%M%S')
-        job_hash += ''.join(
-            random.choice(string.digits + string.ascii_lowercase
-                          + string.ascii_uppercase) for _ in range(size))
-        return job_hash
-
-    @property
-    def job_hash(self):
-        """ Returns a job identifier extracted from the file path using a
-        configurable regular expression for use in other temporary or permanent
-        (dump) path names to keep correlation to the original input job. """
-        if self.__job_hash:
-            return self.__job_hash
-
-        match = re.search(self.__job_hash_regex, self.__path)
-        if match is not None:
-            job_hash = match.group(1)
-        else:
-            # regex did not match.
-            # so we generate our own job hash and create the
-            # working directory.
-            job_hash = self.generate_job_hash()
-
-        logger.debug("Job hash for this sample: %s" % job_hash)
-        self.__job_hash = job_hash
-        return job_hash
+        self.__state = JobState.FINISHED
 
     def add_rule_result(self, res):
         """ Add a rule result to the sample. This also adds a message about
@@ -313,7 +185,9 @@ class Sample:
                          'data is unconfigured.')
             return
 
-        dump_dir = os.path.join(self.__processing_info_dir, self.job_hash)
+        now = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
+        dump_dir = os.path.join(
+            self.__processing_info_dir, "%s-%s" % (now, self.sha256sum))
         if not os.path.isdir(dump_dir):
             try:
                 os.makedirs(dump_dir, 0o770)
@@ -342,14 +216,13 @@ class Sample:
 
         # store malicious sample along with the reports
         if self.__result == Result.bad:
+            sample_dump = os.path.join(dump_dir, filename + "_sample.bin")
             try:
-                shutil.copyfile(
-                    self.__path,
-                    os.path.join(dump_dir, self.__filename)
-                )
+                with open(sample_dump, 'wb') as dump_file:
+                    dump_file.write(self.__content)
             except (shutil.Error, IOError, OSError) as error:
-                logger.error('Failure to copy sample file %s to dump '
-                             'directory: %s', self.__path, error)
+                logger.error('Failure to dump sample file %s to dump '
+                             'directory: %s', self.__filename, error)
                 return
 
         # Cuckoo report
@@ -370,11 +243,8 @@ class Sample:
     def sha256sum(self):
         """ Returns the SHA256 checksum/fingerprint of this sample. Determines
         it automatically on first call. """
-
         if not self.__sha256sum:
-            with open(self.__path, 'rb') as f:
-                checksum = hashlib.sha256(f.read()).hexdigest()
-                self.__sha256sum = checksum
+            self.__sha256sum = hashlib.sha256(self.__content).hexdigest()
 
         return self.__sha256sum
 
@@ -382,13 +252,14 @@ class Sample:
     def content_disposition(self):
         """ Returns the content disposition in the original email, e.g. inline
         or attachment, None if not available. """
-        return self.meta_info_content_disposition
+        return self.__content_disposition
 
+    # for compat with ruleset
     @property
     def name_declared(self):
         """ Returns the name declared by the sample as its original filename,
         None if not available. """
-        return self.meta_info_name_declared
+        return self.__filename
 
     @property
     def file_extension(self):
@@ -396,16 +267,11 @@ class Sample:
         if self.__file_extension:
             return self.__file_extension
 
-        # try to find a file name containing an extension. Using
-        # self.__filename will almost never yield anything useful because
-        # amavis intentionally hands us files named only p001, p002 and so on.
-        # But we still try it in case there's no declared name.
-        filename = self.__filename
-        if self.name_declared:
-            filename = self.name_declared
+        # no extension if we have not filename to extract it from
+        if self.__filename is None:
+            return None
 
-        # extension or the empty string if none found
-        ext = os.path.splitext(filename)[1][1:]
+        ext = os.path.splitext(self.__filename)[1][1:]
 
         # sanity checks, where splitext already promises:
         # - ext is empty or
@@ -443,17 +309,12 @@ class Sample:
     def type_declared(self):
         """ Returns the MIME type declared by the original MIME part, None if
         not available. """
-        return self.meta_info_type_declared
+        return self.__content_type
 
     @property
     def file_size(self):
-        """ Determine and cache sample file size
-
-        @raises: OSError if e.g. file does not exist or is inaccessible """
-        if not self.__file_stat:
-            self.__file_stat = os.stat(self.__path)
-
-        return self.__file_stat.st_size
+        """ Return sample file size based on content length. """
+        return len(self.__content)
 
     @property
     def cuckoo_failed(self):
@@ -490,11 +351,6 @@ class Sample:
         """ Returns the knowntools report """
         return self.__knowntools_report
 
-    @property
-    def submit_path(self):
-        """ Returns the path to use for submission to Cuckoo """
-        return self.__submit_path
-
     def mark_cuckoo_failure(self):
         """ Records whether Cuckoo analysis failed. """
         self.__cuckoo_failed = True
@@ -522,24 +378,6 @@ class Sample:
     def register_knowntools_report(self, report):
         """ Records a Knowntools report for alter evaluation. """
         self.__knowntools_report = report
-
-    def cleanup(self):
-        """ Clean up after the sample has been analysed, removing a potentially
-        created workdir. """
-        # nothing to do if we never created a workdir
-        if not self.__wd:
-            return
-
-        if self.__keep_mail_data:
-            logger.debug('Keeping mail data in %s', self.__wd)
-            return
-
-        logger.debug("Deleting working directory %s", self.__wd)
-        try:
-            shutil.rmtree(self.__wd)
-        except OSError as oserr:
-            logger.error('Failed to remove working directory %s: %s',
-                         self.__wd, oserr)
 
     def __str__(self):
         return ("<Sample(filename='%s',"

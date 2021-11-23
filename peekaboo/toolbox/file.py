@@ -44,7 +44,7 @@ class Filetools:
 
     def guess_mime_type_from_contents(self):
         """  Get type from file magic bytes. """
-        mime_type = magic.from_file(self.sample.file_path, mime=True)
+        mime_type = magic.from_buffer(self.sample.content, mime=True)
         if not mime_type:
             return None
 
@@ -64,7 +64,7 @@ class Filetools:
     def guess_mime_type_text_representation(self):
         """ Guess the type by content and hand back text representation rather
         than mime type. """
-        type_as_text = magic.from_file(self.sample.file_path)
+        type_as_text = magic.from_buffer(self.sample.content)
         if not type_as_text:
             return None
 
