@@ -74,7 +74,8 @@ class PeekabooServer:
         self.app.add_route(self.hello, '/')
         self.app.add_route(self.ping, '/ping')
         self.app.add_route(self.scan, "/v1/scan", methods=['POST'])
-        self.app.add_route(self.report, '/v1/report/<job_id>', methods=['GET'])
+        self.app.add_route(
+            self.report, '/v1/report/<job_id:int>', methods=['GET'])
 
     async def hello(self, _):
         """ hello endpoint as fallback and catch all
@@ -129,7 +130,7 @@ class PeekabooServer:
         @param request: sanic request object
         @type request: sanic.Request
         @param job_id: job ID extracted from endpoint path
-        @type job_id: String
+        @type job_id: int
         @returns: report json response
         """
         if not job_id:
