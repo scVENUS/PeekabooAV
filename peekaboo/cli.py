@@ -34,6 +34,7 @@ import os
 import re
 import socket
 import sys
+import time
 import urllib.parse
 import requests
 
@@ -44,11 +45,12 @@ logger = logging.getLogger(__name__)
 
 class PeekabooUtil:
     """ Utility fo interface with Peekaboo API over the socket connection """
-    def __init__(self, url):
+    def __init__(self, url, polling_interval):
         logger.debug('Initialising PeekabooUtil')
         self.peekaboo = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         logger.debug('Opening connection %s', url)
         self.url = url
+        self.polling_interval = polling_interval
         o = urllib.parse.urlparse(url)
         self.peekaboo.connect((o.hostname, o.port))
 
@@ -133,23 +135,44 @@ class PeekabooUtil:
 
     def scan_file(self, filenames):
         """ Scan the supplied filenames with peekaboo and output result """
-        result_regex = re.compile(r'has been categorized',
-                                  re.MULTILINE + re.DOTALL + re.UNICODE)
-        requests = []
+        jobs = []
         for filename in filenames:
-            requests.append({"request": "scan-file",
-                             "full_name": os.path.abspath(filename)})
+            with open(filename, 'rb') as upload_file:
+                submit_name = os.path.basename(filename)
+                files = {'file': (submit_name, upload_file)}
 
-        buf = self.send_receive(json.dumps(requests))
+                response = requests.post(urllib.parse.urljoin(
+                    self.url, '/v1/scan'), files=files)
+
+            json_resp = response.json()
+            job_id = json_resp['job_id']
+            logger.debug('File %s submitted as job %d', filename, job_id)
+
+            jobs.append(job_id)
 
         exit_code = 0
-        for result in buf.splitlines():
-            output = result_regex.search(result)
-            if output:
-                if 'bad' in result:
-                    print(result)
+        while True:
+            jobs_left = []
+            for job in jobs:
+                response = requests.get(urllib.parse.urljoin(
+                    self.url, f'/v1/report/{job}'))
+
+                if response.status_code == 404:
+                    jobs_left.append(job)
+                    continue
+
+                json_resp = response.json()
+                if json_resp['result'] == 6:
+                    print("The file has been categorized 'bad'")
                     exit_code = 1
-                logger.info(result)
+
+                logger.info(json_resp['report'])
+
+            if not jobs_left:
+                break
+
+            jobs = jobs_left
+            time.sleep(self.polling_interval)
 
         return exit_code
 
@@ -166,6 +189,8 @@ def main():
                         help='Output additional diagnostics')
     parser.add_argument('-t', '--timeout', type=float, required=False,
                         default=None, help='Communications timeout')
+    parser.add_argument('-i', '--polling-interval', type=int, required=False,
+                        default=5, help='Polling interval')
     parser.add_argument('-r', '--remote-url', action='store', required=False,
                         default='http://127.0.0.1:8100/v1/',
                         help='URL to Peekaboo instance e.g. http://127.0.0.1:8100/v1/')
@@ -198,7 +223,7 @@ def main():
         socket.setdefaulttimeout(args.timeout)
 
     try:
-        util = PeekabooUtil(args.remote_url)
+        util = PeekabooUtil(args.remote_url, args.polling_interval)
     except socket.error as error:
         logger.error("Error connecting to peekaboo: %s", error)
         return 2
