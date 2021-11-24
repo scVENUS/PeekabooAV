@@ -79,6 +79,11 @@ class Sample:
     def __init__(self, content, filename=None, content_type=None,
                  content_disposition=None,
                  processing_info_dir=None, job_id=None):
+        # we do neither need nor accept for path traversal attack avoidance
+        # full paths
+        if filename is not None:
+            filename = os.path.basename(filename)
+
         self.__content = content
         self.__filename = filename
         self.__content_type = content_type
