@@ -36,8 +36,6 @@ import schema
 import unittest
 from datetime import datetime, timedelta
 
-import schema
-
 
 # Add Peekaboo to PYTHONPATH
 TESTSDIR = os.path.dirname(os.path.abspath(__file__))
@@ -48,7 +46,7 @@ from peekaboo.exceptions import PeekabooConfigException, \
         PeekabooRulesetConfigError
 from peekaboo.config import (
     PeekabooConfig, PeekabooConfigParser, PeekabooAnalyzerConfig)
-from peekaboo.sample import SampleFactory
+from peekaboo.sample import Sample, JobState
 from peekaboo.ruleset import RuleResult, Result
 from peekaboo.ruleset.engine import RulesetEngine
 from peekaboo.ruleset.rules import FileTypeOnWhitelistRule, \
@@ -175,17 +173,11 @@ class TestDefaultConfig(unittest.TestCase):
             self.config.config_file, self.config.created_config_file)
         self.assertEqual(self.config.user, 'peekaboo')
         self.assertEqual(self.config.group, None)
-        self.assertEqual(
-            self.config.sock_file, '/var/run/peekaboo/peekaboo.sock')
-        self.assertEqual(self.config.sock_group, None)
-        self.assertEqual(self.config.sock_mode, 0o0660)
+        self.assertEqual(self.config.host, '127.0.0.1')
+        self.assertEqual(self.config.port, 8100)
         self.assertEqual(
             self.config.pid_file, '/var/run/peekaboo/peekaboo.pid')
         self.assertEqual(self.config.worker_count, 3)
-        self.assertEqual(self.config.sample_base_dir, '/tmp')
-        self.assertEqual(
-            self.config.job_hash_regex, '/amavis/tmp/([^/]+)/parts/')
-        self.assertEqual(self.config.keep_mail_data, False)
         self.assertEqual(
             self.config.processing_info_dir,
             '/var/lib/peekaboo/malware_reports')
@@ -210,14 +202,10 @@ class TestValidConfig(unittest.TestCase):
         cls.config = CreatingPeekabooConfig('''[global]
 user             :    user1
 group            :    group1
-socket_file      :    /socket/1
-socket_group     :    riddlers
-socket_mode      :    0141
+host: 192.168.2.3
+port: 8200
 pid_file         :    /pid/1
 worker_count     :    18
-sample_base_dir  :    /tmp/1
-job_hash_regex   :    /var/2
-keep_mail_data   :    yes
 processing_info_dir : /var/3
 
 [ruleset]
@@ -243,14 +231,10 @@ duplicate_check_interval: 61
             self.config.config_file, self.config.created_config_file)
         self.assertEqual(self.config.user, 'user1')
         self.assertEqual(self.config.group, 'group1')
-        self.assertEqual(self.config.sock_file, '/socket/1')
-        self.assertEqual(self.config.sock_group, 'riddlers')
-        self.assertEqual(self.config.sock_mode, 0o0141)
+        self.assertEqual(self.config.host, '192.168.2.3')
+        self.assertEqual(self.config.port, 8200)
         self.assertEqual(self.config.pid_file, '/pid/1')
         self.assertEqual(self.config.worker_count, 18)
-        self.assertEqual(self.config.sample_base_dir, '/tmp/1')
-        self.assertEqual(self.config.job_hash_regex, '/var/2')
-        self.assertEqual(self.config.keep_mail_data, True)
         self.assertEqual(self.config.processing_info_dir, '/var/3')
         self.assertEqual(self.config.ruleset_config, '/rules/1')
         self.assertEqual(self.config.log_level, logging.DEBUG)
@@ -389,33 +373,6 @@ api_token: tok2''')
         self.assertEqual(self.config.cortex_api_token, 'tok2')
 
 
-class CreatingSampleFactory(SampleFactory):
-    """ A special kind of sample factory that creates the sample files with
-    defined content in a temporary directory and cleans up after itself. """
-    def __init__(self, *args, **kwargs):
-        self.directory = tempfile.mkdtemp()
-        super().__init__(*args, **kwargs)
-
-    def create_sample(self, relpath, content, *args, **kwargs):
-        """ Make a new sample with defined base name and content in the
-        previously created temporary directory. The given basename can
-        optionally be a path relative to the temporary directory and the
-        subdirectory will be created automatically. """
-        file_path = os.path.join(self.directory, relpath)
-        subdir = os.path.dirname(file_path)
-        if subdir != self.directory:
-            os.makedirs(subdir)
-        with open(file_path, 'w') as file_desc:
-            file_desc.write(content)
-
-        return super().make_sample(file_path, *args, **kwargs)
-
-    def __del__(self):
-        """ Remove the sample files we've created and the temporary directory
-        itself. """
-        shutil.rmtree(self.directory)
-
-
 class TestDatabase(unittest.TestCase):
     """ Unittests for Peekaboo's database module. """
     @classmethod
@@ -428,24 +385,35 @@ class TestDatabase(unittest.TestCase):
                                       stale_in_flight_threshold=10)
         cls.no_cluster_db = PeekabooDatabase('sqlite:///' + cls.test_db,
                                              instance_id=0)
-        cls.factory = CreatingSampleFactory(
-            base_dir=cls.conf.sample_base_dir,
-            job_hash_regex=cls.conf.job_hash_regex, keep_mail_data=False,
-            processing_info_dir=None)
-        cls.sample = cls.factory.create_sample('test.py', 'test')
+        cls.sample = Sample(b'test', 'test.py')
         result = RuleResult('Unittest',
                             Result.failed,
                             'This is just a test case.',
                             further_analysis=False)
         cls.sample.add_rule_result(result)
 
-    def test_1_analysis_save(self):
-        """ Test saving of analysis results. """
-        self.db_con.analysis_save(self.sample)
-        self.db_con.analysis_save(self.sample)
+    def test_1_analysis_add(self):
+        """ Test adding a new analysis. """
+        self.db_con.analysis_add(self.sample)
+        # sample now contains a job ID
+
+    def test_2_analysis_update(self):
+        """ Test updating of analysis results. """
+        # mark sample done so journal and result retrieval tests can work
+        self.sample.mark_done()
+        self.db_con.analysis_update(self.sample)
 
     def test_3_analysis_journal_fetch_journal(self):
         """ Test retrieval of analysis results. """
+        self.db_con.analysis_add(self.sample)
+        # sample now contains another, new job ID
+        # mark sample done so journal and result retrieval tests can work
+        self.sample.mark_done()
+        self.db_con.analysis_update(self.sample)
+        # reset the job id so this sample is not ignored when fetching the
+        # journal
+        self.sample.update_id(None)
+
         journal = self.db_con.analysis_journal_fetch_journal(self.sample)
         self.assertEqual(journal[0].result, Result.failed)
         self.assertEqual(journal[0].reason, 'This is just a test case.')
@@ -454,6 +422,14 @@ class TestDatabase(unittest.TestCase):
         self.assertEqual(journal[1].reason, 'This is just a test case.')
         self.assertIsNotNone(journal[1].analysis_time)
         self.assertNotEqual(journal[0].analysis_time, journal[1].analysis_time)
+
+    def test_4_analysis_retrieve(self):
+        """ Test retrieval of analysis results. """
+        self.db_con.analysis_add(self.sample)
+        # sample now contains a job ID
+        reason, result = self.db_con.analysis_retrieve(self.sample.id)
+        self.assertEqual(result, Result.failed)
+        self.assertEqual(reason, 'This is just a test case.')
 
     def test_5_in_flight_no_cluster(self):
         """ Test that marking of samples as in-flight on a non-cluster-enabled
@@ -478,8 +454,8 @@ class TestDatabase(unittest.TestCase):
 
     def test_7_in_flight_clear(self):
         """ Test clearing of in-flight markers. """
-        sample2 = self.factory.create_sample('foo.pyc', 'foo')
-        sample3 = self.factory.create_sample('bar.pyc', 'bar')
+        sample2 = Sample(b'foo', 'foo.pyc')
+        sample3 = Sample(b'bar', 'bar.pyc')
 
         self.assertTrue(self.db_con.mark_sample_in_flight(self.sample, 1))
         self.assertTrue(self.db_con.mark_sample_in_flight(sample2, 1))
@@ -524,7 +500,7 @@ class TestDatabase(unittest.TestCase):
         stale = datetime.utcnow() - timedelta(seconds=20)
         self.assertTrue(self.db_con.mark_sample_in_flight(
             self.sample, 1, stale))
-        sample2 = self.factory.create_sample('baz.pyc', 'baz')
+        sample2 = Sample(b'baz', 'baz.pyc')
         self.assertTrue(self.db_con.mark_sample_in_flight(sample2, 1))
 
         # should not clear anything because the database is not cluster-enabled
@@ -561,9 +537,6 @@ class TestDatabase(unittest.TestCase):
     def tearDownClass(cls):
         """ Clean up after the tests. """
         os.unlink(cls.test_db)
-        # test framework doesn't seem to give up reference so that __del__ is
-        # never run
-        del cls.factory
 
 
 class TestSample(unittest.TestCase):
@@ -574,45 +547,16 @@ class TestSample(unittest.TestCase):
         cls.test_db = os.path.abspath('./test.db')
         cls.conf = CreatingPeekabooConfig()
         cls.db_con = PeekabooDatabase('sqlite:///' + cls.test_db)
-        cls.factory = CreatingSampleFactory(
-            base_dir=cls.conf.sample_base_dir,
-            job_hash_regex=cls.conf.job_hash_regex, keep_mail_data=False,
-            processing_info_dir=None)
-        part = {
-            "name_declared": "text.py",
-            "type_declared": "text/x-python"
-        }
-        cls.sample = cls.factory.create_sample('test.py', 'test', metainfo=part)
-
-    def test_job_hash_regex(self):
-        """ Test extraction of the job hash from the working directory path.
-        """
-        # class sample has no job hash in path and therefore generates one
-        # itself
-        self.assertIn('peekaboo-run_analysis', self.sample.job_hash)
-
-        # a new sample with a job hash in it's path should return it
-        job_hash = 'amavis-20170831T132736-07759-iSI0rJ4b'
-        path_with_job_hash = 'd/var/lib/amavis/tmp/%s/parts/file' % job_hash
-        sample = self.factory.make_sample(path_with_job_hash, 'file')
-        self.assertEqual(job_hash, sample.job_hash,
-                         'Job hash regex is not working')
-
-        legacy_factory = CreatingSampleFactory(
-            base_dir=self.conf.sample_base_dir,
-            job_hash_regex=r'/var/lib/amavis/tmp/([^/]+)/parts.*',
-            keep_mail_data=False, processing_info_dir=None)
-        sample = legacy_factory.make_sample(path_with_job_hash, 'file')
-        self.assertEqual(job_hash, sample.job_hash,
-                         'Job hash regex is not working')
+        cls.sample = Sample(
+            b'test', 'test.py', 'text/x-python', 'inline', 'dump', 11)
 
     def test_3_sample_attributes(self):
         """ Test the various sample attribute getters. """
-        self.assertEqual(self.sample.file_path,
-                         os.path.join(self.factory.directory, 'test.py'))
+        self.assertEqual(self.sample.content, b'test')
         self.assertEqual(self.sample.filename, 'test.py')
+        self.assertEqual(self.sample.name_declared, 'test.py')
         self.assertEqual(self.sample.file_extension, 'py')
-        self.assertEqual('text/x-python', self.sample.type_declared)
+        self.assertEqual(self.sample.type_declared, 'text/x-python')
         self.assertEqual(
             self.sample.sha256sum,
             '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08')
@@ -623,40 +567,13 @@ class TestSample(unittest.TestCase):
             'File "%s" is considered "unchecked"'
             % self.sample.filename)
         self.assertEqual(self.sample.cuckoo_report, None)
-        self.assertEqual(self.sample.done, False)
-        self.assertEqual(self.sample.submit_path, None)
-        self.assertEqual(self.sample.file_size, 4)
-
-    def test_4_initialised_sample_attributes(self):
-        """ Test the various sample attributes of an initialised sample. """
-        self.sample.init()
-        self.assertEqual(self.sample.file_path,
-                         os.path.join(self.factory.directory, 'test.py'))
-        self.assertEqual(self.sample.filename, 'test.py')
-        self.assertEqual(self.sample.file_extension, 'py')
-        self.assertEqual('text/x-python', self.sample.type_declared)
-        self.assertEqual(
-            self.sample.sha256sum,
-            '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08')
-        self.assertEqual(self.sample.result, Result.unchecked)
-        self.assertEqual(self.sample.reason, None)
-        self.assertRegex(
-            self.sample.peekaboo_report[0], 'File "%s" %s is being analyzed'
-            % (self.sample.filename, self.sample.sha256sum))
-        self.assertRegex(
-            self.sample.peekaboo_report[1],
-            'File "%s" is considered "unchecked"'
-            % self.sample.filename)
-        self.assertEqual(self.sample.cuckoo_report, None)
-        self.assertEqual(self.sample.done, False)
-        self.assertRegex(
-            self.sample.submit_path, '/%s.py$' % self.sample.sha256sum)
+        self.assertEqual(self.sample.state, JobState.ACCEPTED)
         self.assertEqual(self.sample.file_size, 4)
 
     def test_5_mark_done(self):
         """ Test the marking of a sample as done. """
         self.sample.mark_done()
-        self.assertEqual(self.sample.done, True)
+        self.assertEqual(self.sample.state, JobState.FINISHED)
 
     def test_6_add_rule_result(self):
         """ Test the adding of a rule result. """
@@ -668,35 +585,18 @@ class TestSample(unittest.TestCase):
         self.assertEqual(self.sample.result, Result.failed)
         self.assertEqual(self.sample.reason, reason)
 
-    def test_sample_attributes_with_meta_info(self):
-        """ Test use of optional meta data. """
-        sample = self.factory.make_sample(
-            'test.pyc', metainfo={
-                'full_name': '/tmp/test.pyc',
-                'name_declared': 'test.pyc',
-                'type_declared': 'application/x-bytecode.python',
-                'content_disposition': 'angry',
-                'type_long': 'application/x-python-bytecode',
-                'type_short': 'pyc',
-                'size': '200'})
-        self.assertEqual(sample.file_extension, 'pyc')
-        self.assertEqual(sample.content_disposition, 'angry')
-
     def test_sample_without_suffix(self):
         """ Test extraction of file extension from declared name. """
-        sample = self.factory.make_sample(
-            'junk', metainfo={
-                'full_name': '/tmp/junk',
-                'name_declared': 'Report.docx',
-                'type_declared': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                'type_long': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                'type_short': 'docx',
-                'size': '212'})
+        sample = Sample(None, 'Report.docx')
         self.assertEqual(sample.file_extension, 'docx')
+        sample = Sample(None, 'Report')
+        self.assertEqual(sample.file_extension, '')
+        sample = Sample(None, None)
+        self.assertEqual(sample.file_extension, None)
 
     def test_sample_extension_multiple_dots(self):
         """ Test file extension with name containing multiple dots. """
-        sample = self.factory.make_sample('junk..ext')
+        sample = Sample(None, 'junk..ext')
         self.assertEqual(sample.file_extension, 'ext')
 
     def test_sample_extension_filtering(self):
@@ -717,7 +617,7 @@ class TestSample(unittest.TestCase):
         ]
 
         for ext, accepted in testcases:
-            sample = self.factory.make_sample('junk.' + ext)
+            sample = Sample(None, 'junk.' + ext)
             self.assertEqual(
                 sample.file_extension is not None,
                 accepted,
@@ -727,20 +627,22 @@ class TestSample(unittest.TestCase):
     def tearDownClass(cls):
         """ Clean up after the tests. """
         os.unlink(cls.test_db)
-        del cls.factory
 
 
-class OletoolsSample:  # pylint: disable=too-few-public-methods
-    """ A dummy sample class that only contains a file_path and a dummy report
-    registration callback for testing the Oletools analyser. """
-    def __init__(self, file_path, report=None):
-        # don't even need to make it a property
-        self.file_path = file_path
-        self.oletools_report = report
+class FileSample(Sample):
+    """ A sample that reads its content from a file. """
+    def __init__(self, file_path, *args, **kwargs):
+        with open(file_path, 'rb') as sample_file:
+            content = sample_file.read()
 
-    def register_oletools_report(self, report):
-        """ Dummy report registration. """
-        self.oletools_report = report
+        # inject a derived filename into kwargs if none is supplied in args or
+        # kwargs, filename will be element 0 of args (and its length will be 1)
+        # if supplied because self and file_path of this routine will have
+        # consumed the two leading positional arguments
+        if len(args) < 1 and kwargs.get('filename') is None:
+            kwargs['filename'] = os.path.basename(file_path)
+
+        super().__init__(content, *args, **kwargs)
 
 
 class TestOletools(unittest.TestCase):
@@ -764,7 +666,7 @@ class TestOletools(unittest.TestCase):
                 expected_has_autoexec, expected_detected_autoexec, \
                 expected_is_suspicious, expected_detected_suspicious in cases:
             file_path = os.path.join(self.office_data_dir, file_name)
-            report = Oletools(OletoolsSample(file_path)).get_report()
+            report = Oletools(FileSample(file_path)).get_report()
             self.assertEqual(
                 report.has_office_macros, expected_has_office_macros,
                 "Oletools has_office_macros: %s" % file_name)
@@ -787,25 +689,10 @@ class TestOletools(unittest.TestCase):
     def test_caching(self):
         """ Test Oletools report caching in the sample. """
         report = object()
-        sample = OletoolsSample("dummy", report)
+        sample = Sample(None)
+        sample.register_oletools_report(report)
         new_report = Oletools(sample).get_report()
         self.assertIs(report, new_report)
-
-
-class FiletoolsSample:  # pylint: disable=too-few-public-methods
-    """ A dummy sample class that only contains a file_path and a dummy report
-    registration callback for testing the Filetools analyser. """
-    def __init__(self, filename, file_path=None, name_declared=None,
-                 report=None):
-        # don't even need to make it a property
-        self.filename = filename
-        self.file_path = file_path
-        self.name_declared = name_declared
-        self.filetools_report = report
-
-    def register_filetools_report(self, report):
-        """ Dummy report registration. """
-        self.filetools_report = report
 
 
 class TestFiletools(unittest.TestCase):
@@ -814,27 +701,28 @@ class TestFiletools(unittest.TestCase):
     def setUpClass(cls):
         """ Set up common test case resources. """
         cls.tests_data_dir = os.path.join(TESTSDIR, "test-data")
+        cls.office_data_dir = os.path.join(cls.tests_data_dir, "office")
 
     def test_analysis(self):
         """ Test Filetools analysis. """
+        textfile = os.path.join(self.tests_data_dir, 'textfile')
+        blank_doc = os.path.join(self.office_data_dir, 'blank.doc')
         cases = [
-            # subdir, , declared name, , type by name
-            # , file name, , type by content, , type as text
-            # a file without declared name
-            ['', 'textfile', None, 'text/plain', None, 'ASCII text'],
-            # a file with declared name but without file extension
-            ['', 'textfile', 'textfile', 'text/plain', None, 'ASCII text'],
-            # a file with declared name and file extension
-            ['', 'textfile', 'textfile.txt',
-             'text/plain', 'text/plain', 'ASCII text'],
-            # a file with declared name and a file extension that belies its
-            # actual content
-            ['', 'textfile', 'textfile.py',
-             'text/plain', 'text/x-python', 'ASCII text'],
+            # file path,       , type by content,  , type as text
+            #        , file name,              , type by name,
+            # a file without file extension
+            [textfile, 'textfile', 'text/plain', None, 'ASCII text'],
+            # a file with file extension
+            [textfile, 'textfile.txt', 'text/plain', 'text/plain',
+                'ASCII text'],
+            # a file with a file extension that belies its actual content
+            [textfile, 'textfile.py', 'text/plain', 'text/x-python',
+                'ASCII text'],
             # a word document - just because we can
             # interesting conundrum here: magic output depends on local timezone
-            ['office', 'blank.doc', None, 'application/msword',
-             'application/msword', '^Composite Document File V2 Document, '
+            [blank_doc, blank_doc,
+             'application/msword', 'application/msword',
+             '^Composite Document File V2 Document, '
              'Little Endian, Os: MacOS, Version 14.10, Code page: 10000, '
              'Author: Microsoft Office User, Template: Normal.dotm, Last '
              'Saved By: Microsoft Office User, Revision Number: 2, Name of '
@@ -843,25 +731,25 @@ class TestFiletools(unittest.TestCase):
              'Time/Date: Tue Jun 25 [0-2][0-9]:07:00 2019, Number of Pages: '
              '1, Number of Words: 0, Number of Characters: 0, Security: 0$'],
         ]
-        for subdir, file_name, name_declared, expected_type_by_content, \
+        for sample_path, file_name, expected_type_by_content, \
                 expected_type_by_name, expected_type_as_text in cases:
-            file_path = os.path.join(self.tests_data_dir, subdir, file_name)
-            sample = FiletoolsSample(file_name, file_path, name_declared)
+            sample = FileSample(sample_path, file_name)
             report = Filetools(sample).get_report()
             self.assertEqual(
                 report.type_by_content, expected_type_by_content,
-                "Filetools type_by_content: %s:%s" % (file_name, name_declared))
+                "Filetools type_by_content: %s" % file_name)
             self.assertEqual(
                 report.type_by_name, expected_type_by_name,
-                "Filetools type_by_name: %s:%s" % (file_name, name_declared))
+                "Filetools type_by_name: %s" % file_name)
             self.assertRegex(
                 report.type_as_text, expected_type_as_text,
-                "Filetools type_as_text: %s:%s" % (file_name, name_declared))
+                "Filetools type_as_text: %s" % file_name)
 
     def test_caching(self):
         """ Test Filetools report caching in the sample. """
         report = object()
-        sample = FiletoolsSample("dummy", report=report)
+        sample = Sample(None)
+        sample.register_filetools_report(report)
         new_report = Filetools(sample).get_report()
         self.assertIs(report, new_report)
 
@@ -1128,52 +1016,48 @@ unknown : baz'''
             keyword.2 : AutoClose
             keyword.3 : suSPi.ious'''
 
-        # sampe factory to create samples
-        factory = CreatingSampleFactory(
-            base_dir=None, job_hash_regex=None,
-            keep_mail_data=False, processing_info_dir=None)
+        parsed_config = CreatingConfigParser(config)
 
         # test if macro with suspicious keyword
-        rule = OfficeMacroWithSuspiciousKeyword(
-            CreatingConfigParser(config), None)
         combinations = [
             # no office document file extension
-            [Result.unknown, factory.create_sample('test.nodoc', 'test')],
+            [Result.unknown, Sample(b'test', 'test.nodoc')],
             # test with empty file
-            [Result.unknown, factory.make_sample(os.path.join(
+            [Result.unknown, FileSample(os.path.join(
                 self.office_data_dir, 'empty.doc'))],
             # office document with 'suspicious' in macro code
-            [Result.bad, factory.make_sample(os.path.join(
+            [Result.bad, FileSample(os.path.join(
                 self.office_data_dir, 'suspiciousMacro.doc'))],
             # test with blank word doc
-            [Result.unknown, factory.make_sample(os.path.join(
+            [Result.unknown, FileSample(os.path.join(
                 self.office_data_dir, 'blank.doc'))],
             # test with legitimate macro
-            [Result.unknown, factory.make_sample(os.path.join(
+            [Result.unknown, FileSample(os.path.join(
                 self.office_data_dir, 'legitmacro.xls'))]
         ]
+        rule = OfficeMacroWithSuspiciousKeyword(parsed_config, None)
         for expected, sample in combinations:
             result = rule.evaluate(sample)
             self.assertEqual(result.result, expected)
 
         # test if macro present
-        rule = OfficeMacroRule(CreatingConfigParser(config), None)
         combinations = [
             # no office document file extension
-            [Result.unknown, factory.create_sample('test.nodoc', 'test')],
+            [Result.unknown, Sample(b'test', 'test.nodoc')],
             # test with empty file
-            [Result.unknown, factory.make_sample(os.path.join(
+            [Result.unknown, FileSample(os.path.join(
                 self.office_data_dir, 'empty.doc'))],
             # office document with 'suspicious' in macro code
-            [Result.bad, factory.make_sample(os.path.join(
+            [Result.bad, FileSample(os.path.join(
                 self.office_data_dir, 'suspiciousMacro.doc'))],
             # test with blank word doc
-            [Result.unknown, factory.make_sample(os.path.join(
+            [Result.unknown, FileSample(os.path.join(
                 self.office_data_dir, 'blank.doc'))],
             # test with legitimate macro
-            [Result.bad, factory.make_sample(os.path.join(
+            [Result.bad, FileSample(os.path.join(
                 self.office_data_dir, 'legitmacro.xls'))]
         ]
+        rule = OfficeMacroRule(parsed_config, None)
         for expected, sample in combinations:
             result = rule.evaluate(sample)
             self.assertEqual(result.result, expected)
@@ -1185,24 +1069,20 @@ unknown : baz'''
                               'text/plain', 'inode/x-empty', 'image/jpeg'
                           } -> ignore
         '''
-        factory = CreatingSampleFactory(
-            base_dir="",
-            job_hash_regex="", keep_mail_data=False,
-            processing_info_dir=None)
 
-        sample = factory.create_sample('file.txt', 'abc')
-        rule = ExpressionRule(CreatingConfigParser(config), None)
+        parsed_config = CreatingConfigParser(config)
+        rule = ExpressionRule(parsed_config, None)
+
+        sample = Sample(b'abc', 'file.txt')
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.ignored)
 
-        sample = factory.create_sample('file.html', '<html')
-        rule = ExpressionRule(CreatingConfigParser(config), None)
+        sample = Sample(b'<html', 'file.html')
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
         # bzip2 compressed data
-        sample = factory.create_sample('file.txt', 'BZh91AY=')
-        rule = ExpressionRule(CreatingConfigParser(config), None)
+        sample = Sample(b'BZh91AY=', 'file.txt')
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
@@ -1212,23 +1092,18 @@ unknown : baz'''
             expression.3  : not sample.name_declared -> ignore
         '''
 
-        factory = CreatingSampleFactory(
-            base_dir="",
-            job_hash_regex="", keep_mail_data=False,
-            processing_info_dir=None)
+        sample_kwargs = {
+            'content_type': 'image/gif',
+        }
 
-        part = {"full_name": "file1.gif",
-                "name_declared": "file1.gif",
-                "type_declared": "image/gif"
-               }
+        parsed_config = CreatingConfigParser(config)
+        rule = ExpressionRule(parsed_config, None)
 
-        sample = factory.create_sample('file1.gif', 'GIF87...', metainfo=part)
-        rule = ExpressionRule(CreatingConfigParser(config), None)
+        sample = Sample(b'GIF87...', 'file1.gif', **sample_kwargs)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
-        sample = factory.create_sample('file2.gif', 'GIF87...')
-        rule = ExpressionRule(CreatingConfigParser(config), None)
+        sample = Sample(b'GIF87...')
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.ignored)
 
@@ -1236,8 +1111,10 @@ unknown : baz'''
             expression.3  : sample.name_declared is None -> ignore
         '''
 
-        sample = factory.create_sample('file2.gif', 'GIF87...')
-        rule = ExpressionRule(CreatingConfigParser(config), None)
+        parsed_config = CreatingConfigParser(config)
+        rule = ExpressionRule(parsed_config, None)
+
+        sample = Sample(b'GIF87...')
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.ignored)
 
@@ -1256,67 +1133,55 @@ unknown : baz'''
                     'application/pgp-signature'
                 } -> ignore
             '''
-        rule = ExpressionRule(CreatingConfigParser(config), None)
 
-        factory = SampleFactory(
-            base_dir=None, job_hash_regex=None,
-            keep_mail_data=False, processing_info_dir=None)
+        parsed_config = CreatingConfigParser(config)
+        rule = ExpressionRule(parsed_config, None)
 
-        sample = factory.make_sample('file.1')
+        sample = Sample(None, 'file.1')
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
         # test smime signatures
-        part = {
-            "full_name": "p001",
-            "name_declared": "smime.p7s",
-            "type_declared": "application/pkcs7-signature"
+        sample_kwargs = {
+            'content_type': 'application/pkcs7-signature'
         }
 
-        sample = factory.make_sample('', metainfo=part)
+        sample = Sample(None, filename='smime.p7s', **sample_kwargs)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.ignored)
 
-        part["name_declared"] = "asmime.p7m"
-        sample = factory.make_sample('', metainfo=part)
+        sample = Sample(None, filename='asmime.p7s', **sample_kwargs)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
-        part["name_declared"] = "smime.p7m"
-        sample = factory.make_sample('', metainfo=part)
+        sample = Sample(None, filename='smime.p7m', **sample_kwargs)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.ignored)
 
-        part["name_declared"] = "smime.p7o"
-        sample = factory.make_sample('', metainfo=part)
+        sample = Sample(None, filename='smime.p7o', **sample_kwargs)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
-        part["name_declared"] = "smime.p7"
-        sample = factory.make_sample('', metainfo=part)
+        sample = Sample(None, filename='smime.p7', **sample_kwargs)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
-        part["name_declared"] = "smime.p7sm"
-        sample = factory.make_sample('', metainfo=part)
+        sample = Sample(None, filename='smime.p7sm', **sample_kwargs)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
-        part["name_declared"] = "file"
-        sample = factory.make_sample('', metainfo=part)
+        sample = Sample(None, filename='file', **sample_kwargs)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
         # test gpg signatures
-        part["name_declared"] = "signature.asc"
-        sample = factory.make_sample('', metainfo=part)
-        rule = ExpressionRule(CreatingConfigParser(config), None)
+        # test with wrong content type
+        sample = Sample(None, filename='signature.asc', **sample_kwargs)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
-        part["type_declared"] = "application/pgp-signature"
-        sample = factory.make_sample('', metainfo=part)
-        rule = ExpressionRule(CreatingConfigParser(config), None)
+        sample = Sample(None, filename='signature.asc',
+                        content_type="application/pgp-signature")
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.ignored)
 
@@ -1333,13 +1198,10 @@ unknown : baz'''
         }
         cuckooreport = CuckooReport(report)
 
-        factory = SampleFactory(
-            base_dir=None, job_hash_regex=None,
-            keep_mail_data=False, processing_info_dir=None)
-
-        sample = factory.make_sample('')
+        sample = Sample(None)
         sample.register_cuckoo_report(cuckooreport)
-        rule = ExpressionRule(CreatingConfigParser(config), None)
+        parsed_config = CreatingConfigParser(config)
+        rule = ExpressionRule(parsed_config, None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
@@ -1351,25 +1213,21 @@ unknown : baz'''
                     {sample.type_declared} | filereport.mime_types) -> bad
         '''
 
-        factory = SampleFactory(
-            base_dir=None, job_hash_regex=None,
-            keep_mail_data=False, processing_info_dir=None)
-
-        part = {
-            "full_name": "p001",
-            "name_declared": "file1.doc",
-            "type_declared": "application/word"
+        kwargs = {
+            'filename': 'file1.doc',
+            'content_type': 'application/word'
         }
 
+        parsed_config = CreatingConfigParser(config)
+        rule = ExpressionRule(parsed_config, None)
+
         path = os.path.join(self.office_data_dir, 'blank.doc')
-        sample = factory.make_sample(path, metainfo=part)
-        rule = ExpressionRule(CreatingConfigParser(config), None)
+        sample = FileSample(path, **kwargs)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
         path = os.path.join(self.office_data_dir, 'example.rtf')
-        sample = factory.make_sample(path, metainfo=part)
-        rule = ExpressionRule(CreatingConfigParser(config), None)
+        sample = FileSample(path, **kwargs)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
@@ -1382,33 +1240,28 @@ unknown : baz'''
                 and filereport.type_by_content != /application\/.*word/ -> bad
         '''
 
-        factory = SampleFactory(
-            base_dir=None, job_hash_regex=None,
-            keep_mail_data=False, processing_info_dir=None)
-
-        part = {
-            "full_name": "p001",
-            "name_declared": "file1.doc",
-            "type_declared": "application/word"
+        sample_kwargs = {
+            'filename': 'file1.doc',
+            'content_type': 'application/word',
         }
 
+        parsed_config = CreatingConfigParser(config)
+        rule = ExpressionRule(parsed_config, None)
+
         path = os.path.join(self.office_data_dir, 'blank.doc')
-        sample = factory.make_sample(path, metainfo=part)
-        rule = ExpressionRule(CreatingConfigParser(config), None)
+        sample = FileSample(path, **sample_kwargs)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
         path = os.path.join(self.office_data_dir, 'example.rtf')
-        sample = factory.make_sample(path, metainfo=part)
-        rule = ExpressionRule(CreatingConfigParser(config), None)
+        sample = FileSample(path, **sample_kwargs)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
         path = os.path.join(
             self.office_data_dir,
             'AppleDoubleencodedMacintoshfileCheckVM.xls')
-        sample = factory.make_sample(path, metainfo=part)
-        rule = ExpressionRule(CreatingConfigParser(config), None)
+        sample = FileSample(path, **sample_kwargs)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.ignored)
 
@@ -1427,44 +1280,57 @@ unknown : baz'''
         db_con = PeekabooDatabase('sqlite:///' + test_db,
                                       instance_id=1,
                                       stale_in_flight_threshold=10)
-        factory = CreatingSampleFactory(
-            base_dir=conf.sample_base_dir,
-            job_hash_regex=conf.job_hash_regex, keep_mail_data=False,
-            processing_info_dir=None)
 
-        sample = factory.create_sample('test.py', 'test')
-        result = RuleResult('Unittest',
-                            Result.failed,
-                            'This is just a test case.',
-                            further_analysis=False)
-        sample.add_rule_result(result)
-        db_con.analysis_save(sample)
+        sample = Sample(b'test', 'test.py')
+        failed_result = RuleResult(
+            'Unittest', Result.failed, 'This is just a test case.',
+            further_analysis=False)
+        sample.add_rule_result(failed_result)
+        db_con.analysis_add(sample)
+        sample.mark_done()
+        db_con.analysis_update(sample)
 
-        rule = ExpressionRule(CreatingConfigParser(config), db_con)
+        parsed_config = CreatingConfigParser(config)
+        rule = ExpressionRule(parsed_config, db_con)
 
-        sample = factory.create_sample('test.py', 'test')
+        sample = Sample(b'test', 'test.py')
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.failed)
 
-        sample = factory.create_sample('first.a', 'firsttest')
+        sample = Sample(b'firsttest', 'first.a')
         result = rule.evaluate(sample)
-        sample.add_rule_result(result)
-        db_con.analysis_save(sample)
         self.assertEqual(result.result, Result.ignored)
 
-        sample = factory.create_sample('first.a', 'firsttest')
+        sample.add_rule_result(result)
+        db_con.analysis_add(sample)
+        sample.mark_done()
+        db_con.analysis_update(sample)
+
+        sample = Sample(b'firsttest', 'first.a')
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
-        sample = factory.create_sample('second.b', 'secondtest')
+        sample = Sample(b'secondtest', 'second.b')
         result = rule.evaluate(sample)
-        sample.add_rule_result(result)
-        db_con.analysis_save(sample)
         self.assertEqual(result.result, Result.ignored)
 
-        sample = factory.create_sample('second.b', 'secondtest')
+        sample.add_rule_result(result)
+        db_con.analysis_add(sample)
+        sample.mark_done()
+        db_con.analysis_update(sample)
+
+        sample = Sample(b'secondtest', 'second.b')
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.ignored)
+
+        sample.add_rule_result(failed_result)
+        db_con.analysis_add(sample)
+        sample.mark_done()
+        db_con.analysis_update(sample)
+
+        sample = Sample(b'secondtest', 'second.b')
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.failed)
 
         os.unlink(test_db)
 
@@ -1475,22 +1341,18 @@ unknown : baz'''
                 and cuckooreport.score > 4 -> bad
         '''
 
-        factory = CreatingSampleFactory(
-            base_dir=None, job_hash_regex=None,
-            keep_mail_data=False, processing_info_dir=None)
-
         report = {
             "signatures": [
                 {"description": "EVIL"}
             ],
             "info": {"score": 4.2}
         }
-        cuckooreport = CuckooReport(report)
 
-        sample = factory.make_sample(os.path.join(
-            self.office_data_dir, 'blank.doc'))
-        sample.register_cuckoo_report(cuckooreport)
-        rule = ExpressionRule(CreatingConfigParser(config), None)
+        blank_doc = os.path.join(self.office_data_dir, 'blank.doc')
+        sample = FileSample(blank_doc)
+        sample.register_cuckoo_report(CuckooReport(report))
+        parsed_config = CreatingConfigParser(config)
+        rule = ExpressionRule(parsed_config, None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
@@ -1501,14 +1363,6 @@ unknown : baz'''
                 expression.4  : '.day.um' in cortexreport.FileInfoReport.domain_artifacts -> unknown
                 expression.6  : '8.8.8.8' in cortexreport.FileInfoReport.ip_artifacts -> bad
         '''
-        rule = ExpressionRule(CreatingConfigParser(config), None)
-
-        factory = CreatingSampleFactory(
-            base_dir=None, job_hash_regex=None,
-            keep_mail_data=False, processing_info_dir=None)
-
-        sample = factory.make_sample(os.path.join(
-            self.office_data_dir, 'blank.doc'))
 
         taxonomies = [
             {
@@ -1573,7 +1427,13 @@ unknown : baz'''
 
         cortexreport = CortexReport()
         cortexreport.register_report(FileInfoAnalyzer, report)
+
+        blank_doc = os.path.join(self.office_data_dir, 'blank.doc')
+        sample = FileSample(blank_doc)
         sample.register_cortex_report(cortexreport)
+
+        parsed_config = CreatingConfigParser(config)
+        rule = ExpressionRule(parsed_config, None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.good)
 
@@ -1582,9 +1442,14 @@ unknown : baz'''
             "data": "8.8.8.8",
             "dataType": "ip",
         }]
+
         cortexreport = CortexReport()
         cortexreport.register_report(FileInfoAnalyzer, report)
+
+        sample = FileSample(blank_doc)
         sample.register_cortex_report(cortexreport)
+
+        # re-use rule
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
@@ -1594,6 +1459,7 @@ unknown : baz'''
         }]
         cortexreport = CortexReport()
         cortexreport.register_report(FileInfoAnalyzer, report)
+        sample = FileSample(blank_doc)
         sample.register_cortex_report(cortexreport)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
@@ -1610,15 +1476,6 @@ unknown : baz'''
                 or cortexreport.VirusTotalQueryReport.level != 'safe'
                 ->  bad
         '''
-        rule = ExpressionRule(CreatingConfigParser(config), None)
-
-        factory = CreatingSampleFactory(
-            base_dir=None, job_hash_regex=None,
-            keep_mail_data=False, processing_info_dir=None)
-
-        sample = factory.make_sample(os.path.join(
-            self.office_data_dir, 'blank.doc'))
-
         tax = {
             "level": "malicious",
             "namespace": "VT",
@@ -1640,29 +1497,50 @@ unknown : baz'''
             "artifacts": [],
             "operations": []
         }
+
         cortexreport = CortexReport()
         cortexreport.register_report(VirusTotalQuery, report)
 
+        blank_doc = os.path.join(self.office_data_dir, 'blank.doc')
+        sample = FileSample(blank_doc)
         sample.register_cortex_report(cortexreport)
+
+        parsed_config = CreatingConfigParser(config)
+        rule = ExpressionRule(parsed_config, None)
         result = rule.evaluate(sample)
+
         self.assertEqual(result.result, Result.bad)
 
+        # patch report for different outcome
         tax["level"] = "safe"
         tax["value"] = "0/86"
         report["summary"]["taxonomies"].append(tax)
+
+        cortexreport = CortexReport()
         cortexreport.register_report(VirusTotalQuery, report)
+
+        # re-use rule
+        sample = FileSample(blank_doc)
         sample.register_cortex_report(cortexreport)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
+        # patch report for different outcome
         report["summary"]["taxonomies"].pop(0)
+
+        cortexreport = CortexReport()
         cortexreport.register_report(VirusTotalQuery, report)
+
+        # re-use rule
+        sample = FileSample(blank_doc)
         sample.register_cortex_report(cortexreport)
         result = rule.evaluate(sample)
+
         self.assertEqual(result.result, Result.unknown)
 
         report["summary"]["taxonomies"][0]["value"] = "NAN"
         with self.assertRaises(schema.SchemaError):
+            cortexreport = CortexReport()
             cortexreport.register_report(VirusTotalQuery, report)
 
     def test_rule_expressions_olereport_context(self):
@@ -1672,57 +1550,50 @@ unknown : baz'''
                               and olereport.has_office_macros == True -> bad
         '''
 
-        factory = CreatingSampleFactory(
-            base_dir=None, job_hash_regex=None,
-            keep_mail_data=False, processing_info_dir=None)
+        parsed_config = CreatingConfigParser(config)
+        rule = ExpressionRule(parsed_config, None)
 
         path = os.path.join(self.office_data_dir, 'empty.doc')
-        sample = factory.make_sample(path)
-        rule = ExpressionRule(CreatingConfigParser(config), None)
+        sample = FileSample(path)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
         path = os.path.join(self.office_data_dir, 'file.txt')
-        sample = factory.make_sample(path)
-        rule = ExpressionRule(CreatingConfigParser(config), None)
+        sample = FileSample(path)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
         path = os.path.join(self.office_data_dir, 'blank.doc')
-        sample = factory.make_sample(path)
-        rule = ExpressionRule(CreatingConfigParser(config), None)
+        sample = FileSample(path)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
         path = os.path.join(self.office_data_dir, 'example.rtf')
-        sample = factory.make_sample(path)
-        rule = ExpressionRule(CreatingConfigParser(config), None)
+        sample = FileSample(path)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
         path = os.path.join(self.office_data_dir, 'suspiciousMacro.rtf')
-        sample = factory.make_sample(path)
-        rule = ExpressionRule(CreatingConfigParser(config), None)
+        sample = FileSample(path)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
         path = os.path.join(self.office_data_dir, 'suspiciousMacro.doc')
-        sample = factory.make_sample(path)
-        rule = ExpressionRule(CreatingConfigParser(config), None)
+        sample = FileSample(path)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
         path = os.path.join(self.office_data_dir, 'suspiciousMacro.doc')
-        sample = factory.make_sample(path, metainfo={
-            'name_declared': 'foo.rtx'})
-        rule = ExpressionRule(CreatingConfigParser(config), None)
+        sample = FileSample(path, filename='foo.rtx')
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
         config = '''[expressions]
             expression.3  : /suspicious/ in olereport.vba_code -> bad
         '''
-        rule = ExpressionRule(CreatingConfigParser(config), None)
+
+        parsed_config = CreatingConfigParser(config)
+        rule = ExpressionRule(parsed_config, None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
@@ -1734,57 +1605,52 @@ unknown : baz'''
             expression.5  : "suspicious" in olereport.vba_code -> bad
         '''
 
-        factory = CreatingSampleFactory(
-            base_dir=None, job_hash_regex=None,
-            keep_mail_data=False, processing_info_dir=None)
-        sample = factory.make_sample(os.path.join(
-            self.office_data_dir, 'empty.doc'))
-        rule = ExpressionRule(CreatingConfigParser(config), None)
+        parsed_config = CreatingConfigParser(config)
+        rule = ExpressionRule(parsed_config, None)
+
+        path = os.path.join(self.office_data_dir, 'empty.doc')
+        sample = FileSample(path)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
-        sample = factory.make_sample(os.path.join(
-            self.office_data_dir, 'file.txt'))
-        rule = ExpressionRule(CreatingConfigParser(config), None)
+        path = os.path.join(self.office_data_dir, 'file.txt')
+        sample = FileSample(path)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
-        sample = factory.make_sample(os.path.join(
-            self.office_data_dir, 'blank.doc'))
-        rule = ExpressionRule(CreatingConfigParser(config), None)
+        path = os.path.join(self.office_data_dir, 'blank.doc')
+        sample = FileSample(path)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
-        sample = factory.make_sample(os.path.join(
-            self.office_data_dir, 'example.rtf'))
-        rule = ExpressionRule(CreatingConfigParser(config), None)
+        path = os.path.join(self.office_data_dir, 'example.rtf')
+        sample = FileSample(path)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
-        sample = factory.make_sample(os.path.join(
-            self.office_data_dir, 'suspiciousMacro.rtf'))
-        rule = ExpressionRule(CreatingConfigParser(config), None)
+        path = os.path.join(self.office_data_dir, 'suspiciousMacro.rtf')
+        sample = FileSample(path)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
-        sample = factory.make_sample(os.path.join(
-            self.office_data_dir, 'suspiciousMacro.doc'))
-        rule = ExpressionRule(CreatingConfigParser(config), None)
+        path = os.path.join(self.office_data_dir, 'suspiciousMacro.doc')
+        sample = FileSample(path)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
-        sample = factory.make_sample(os.path.join(
-            self.office_data_dir, 'CheckVM.xls'))
-        rule = ExpressionRule(CreatingConfigParser(config), None)
+        path = os.path.join(self.office_data_dir, 'CheckVM.xls')
+        sample = FileSample(path)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
         config = '''[expressions]
             expression.5  : "VBOX" in olereport.detected_suspicious -> bad
         '''
-        sample = factory.make_sample(os.path.join(
-            self.office_data_dir, 'CheckVM.xls'))
-        rule = ExpressionRule(CreatingConfigParser(config), None)
+
+        path = os.path.join(self.office_data_dir, 'CheckVM.xls')
+        sample = FileSample(path)
+        parsed_config = CreatingConfigParser(config)
+        rule = ExpressionRule(parsed_config, None)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
