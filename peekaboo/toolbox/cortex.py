@@ -151,8 +151,8 @@ class CortexFileAnalyzer:
             filename = sample.filename
 
         params = {
-            # FIXME: need sample.content here
-            'data': path,
+            'data': sample.content,
+            'dataProvided': True,
             'dataType': 'file',
             'tlp': sample_tlp.value,
             'parameters': {
