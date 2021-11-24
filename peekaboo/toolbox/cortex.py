@@ -202,7 +202,7 @@ class FileInfoAnalyzerReport(CortexAnalyzerReport):
                             "md5": schema.Regex(r'^[0-9a-z]{32}$'),
                             "sha1": schema.Regex(r'^[0-9a-z]{40}$'),
                             "sha256": schema.Regex(r'^[0-9a-z]{64}$'),
-                            "ssdeep": schema.Regex(r'^[0-9A-Za-z:]*$'),
+                            "ssdeep": schema.Regex(r'^[0-9A-Za-z:+/]*$'),
                         }
                     },
                     {
