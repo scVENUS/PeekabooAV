@@ -337,6 +337,7 @@ class PeekabooDatabase:
             sample_journal = session.query(
                 SampleInfo.analysis_time, SampleInfo.result, SampleInfo.reason
                 ).filter(SampleInfo.id != sample.id).filter_by(
+                    state=JobState.FINISHED,
                     sha256sum=sample.sha256sum,
                     file_extension=sample.file_extension
                     ).order_by(SampleInfo.analysis_time).all()
