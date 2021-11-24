@@ -108,8 +108,9 @@ sub ask_peekaboo_internal {
 
     # add more elements to the part hash, will be used when talking with peekaboo
     $pmi->{"status"} = undef;   # HTTP return code
-    $pmi->{"rating"} = undef;   # Peekaboo rating
-    $pmi->{"content"} = undef;  # Text messages from peekaboo
+    $pmi->{"result"} = undef;   # Peekaboo result as string
+    $pmi->{"rating"} = undef;   # Peekaboo result as numeric rating
+    $pmi->{"reason"} = undef;   # Text messages from peekaboo
     $pmi->{"job_id"} = undef;   # Checksum for this part
     push(@$metainfo, $pmi);
   }
@@ -172,8 +173,10 @@ sub ask_peekaboo_internal {
 
         if ( $answer->{"_rc"} eq "200" ) {
           $part->{"status"} = $answer->{"_rc"};
-          $part->{"content"} = ( JSON::PP->new->utf8->decode($answer->{"_content"})->{"report"} );
-          $part->{"rating"} = ( JSON::PP->new->utf8->decode($answer->{"_content"})->{"result"} );
+          $part->{"reason"} = ( JSON::PP->new->utf8->decode($answer->{"_content"})->{"reason"} );
+          $part->{"report"} = ( JSON::PP->new->utf8->decode($answer->{"_content"})->{"report"} );
+          $part->{"result"} = ( JSON::PP->new->utf8->decode($answer->{"_content"})->{"result"} );
+          $part->{"rating"} = ( JSON::PP->new->utf8->decode($answer->{"_content"})->{"rating"} );
         } elsif ( $answer->{"_rc"} eq "202" ) {
           # result still not present
           Amavis::Util::do_log( 3, "Answer still not present '%s'", $answer->{"_rc"} );
@@ -204,7 +207,7 @@ sub ask_peekaboo_internal {
   my $resultText = "";
   my $totalRate = -1;
   foreach my $part ( @$metainfo ) {
-    foreach my $line ( @{ $part->{"content"} } ) {
+    foreach my $line ( @{ $part->{"report"} } ) {
       $resultText .= $line . "\n";
     }
     $resultText .= "\n";
