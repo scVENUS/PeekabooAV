@@ -152,8 +152,12 @@ class PeekabooServer:
                 {'message': 'No analysis result yet for job %d' % job_id}, 404)
 
         reason, result = job_info
-        return sanic.response.json(
-            {'report': [reason], 'result': result.value}, 200)
+        return sanic.response.json({
+            'result': result.name,
+            'reason': reason,
+            # FIXME: depends on saving the report to the database
+            # 'report': report,
+            }, 200)
 
     def serve(self):
         """ Serves requests until shutdown is requested from the outside. """
