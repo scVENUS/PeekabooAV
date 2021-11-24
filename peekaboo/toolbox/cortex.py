@@ -136,7 +136,9 @@ class CortexAnalyzer:
 
 class CortexFileAnalyzer(CortexAnalyzer):
     """ An analyzer which accepts a file as main input. """
-    def get_submit_parameters(self, sample, tlp, submit_original_filename=False):
+    @classmethod
+    def get_submit_parameters(cls, sample, sample_tlp,
+                              submit_original_filename=False):
         """ Return this analyzer's submit parameters for a given sample. """
         path = sample.submit_path
         filename = os.path.basename(path)
@@ -151,7 +153,7 @@ class CortexFileAnalyzer(CortexAnalyzer):
         params = {
             'data': path,
             'dataType': 'file',
-            'tlp': tlp.value,
+            'tlp': sample_tlp.value,
             'parameters': {
                 'filename': filename,
             }
@@ -162,12 +164,16 @@ class CortexFileAnalyzer(CortexAnalyzer):
 
 class CortexHashAnalyzer(CortexAnalyzer):
     """ An analyzer which accepts hashes as main input. """
-    def get_submit_parameters(self, sample, tlp, submit_original_filename=False):
+    @classmethod
+    def get_submit_parameters(cls, sample, sample_tlp,
+                              submit_original_filename=False):
         """ Return this analyzer's submit parameters for a given sample. """
+        del submit_original_filename
+
         params = {
             'data': sample.sha256sum,
             'dataType': 'hash',
-            'tlp': tlp.value,
+            'tlp': sample_tlp.value,
         }
 
         return params
