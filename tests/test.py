@@ -26,6 +26,7 @@
 
 """ The testsuite. """
 
+import asyncio
 import gettext
 import sys
 import os
@@ -391,10 +392,12 @@ class TestDatabase(unittest.TestCase):
                             'This is just a test case.',
                             further_analysis=False)
         cls.sample.add_rule_result(result)
+        cls.loop = asyncio.get_event_loop()
 
     def test_1_analysis_add(self):
         """ Test adding a new analysis. """
-        self.db_con.analysis_add(self.sample)
+        self.loop.run_until_complete(
+            self.db_con.analysis_add(self.sample))
         # sample now contains a job ID
 
     def test_2_analysis_update(self):
@@ -405,7 +408,8 @@ class TestDatabase(unittest.TestCase):
 
     def test_3_analysis_journal_fetch_journal(self):
         """ Test retrieval of analysis results. """
-        self.db_con.analysis_add(self.sample)
+        self.loop.run_until_complete(
+            self.db_con.analysis_add(self.sample))
         # sample now contains another, new job ID
         # mark sample done so journal and result retrieval tests can work
         self.sample.mark_done()
@@ -425,9 +429,11 @@ class TestDatabase(unittest.TestCase):
 
     def test_4_analysis_retrieve(self):
         """ Test retrieval of analysis results. """
-        self.db_con.analysis_add(self.sample)
+        self.loop.run_until_complete(
+            self.db_con.analysis_add(self.sample))
         # sample now contains a job ID
-        reason, result = self.db_con.analysis_retrieve(self.sample.id)
+        reason, result = self.loop.run_until_complete(
+            self.db_con.analysis_retrieve(self.sample.id))
         self.assertEqual(result, Result.failed)
         self.assertEqual(reason, 'This is just a test case.')
 
@@ -961,6 +967,7 @@ success.1: analysis completed successfully''')
 
         cls.tests_data_dir = os.path.join(TESTSDIR, "test-data")
         cls.office_data_dir = os.path.join(cls.tests_data_dir, 'office')
+        cls.loop = asyncio.get_event_loop()
 
     def test_config_known(self):  # pylint: disable=no-self-use
         """ Test the known rule configuration. """
@@ -1286,7 +1293,8 @@ unknown : baz'''
             'Unittest', Result.failed, 'This is just a test case.',
             further_analysis=False)
         sample.add_rule_result(failed_result)
-        db_con.analysis_add(sample)
+        self.loop.run_until_complete(
+            db_con.analysis_add(sample))
         sample.mark_done()
         db_con.analysis_update(sample)
 
@@ -1302,7 +1310,8 @@ unknown : baz'''
         self.assertEqual(result.result, Result.ignored)
 
         sample.add_rule_result(result)
-        db_con.analysis_add(sample)
+        self.loop.run_until_complete(
+            db_con.analysis_add(sample))
         sample.mark_done()
         db_con.analysis_update(sample)
 
@@ -1315,7 +1324,8 @@ unknown : baz'''
         self.assertEqual(result.result, Result.ignored)
 
         sample.add_rule_result(result)
-        db_con.analysis_add(sample)
+        self.loop.run_until_complete(
+            db_con.analysis_add(sample))
         sample.mark_done()
         db_con.analysis_update(sample)
 
@@ -1324,7 +1334,8 @@ unknown : baz'''
         self.assertEqual(result.result, Result.ignored)
 
         sample.add_rule_result(failed_result)
-        db_con.analysis_add(sample)
+        self.loop.run_until_complete(
+            db_con.analysis_add(sample))
         sample.mark_done()
         db_con.analysis_update(sample)
 

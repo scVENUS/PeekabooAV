@@ -25,13 +25,17 @@
 """ A class wrapping database operations needed by Peekaboo based on
 SQLAlchemy. """
 
+import asyncio
 import random
+import re
 import time
 import threading
 import logging
 from datetime import datetime, timedelta
 from sqlalchemy import Column, Integer, String, Text, DateTime, \
         Enum, Index
+import sqlalchemy.sql.expression
+import sqlalchemy.ext.asyncio
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.engine import create_engine
 from sqlalchemy.orm import sessionmaker, scoped_session
@@ -154,10 +158,23 @@ class PeekabooDatabase:
         """
         logging.getLogger('sqlalchemy.engine').setLevel(log_level)
 
-        self.__engine = create_engine(db_url)
+        self.__engine = create_engine(db_url, future=True)
         session_factory = sessionmaker(bind=self.__engine)
         self.__session = scoped_session(session_factory)
         self.__lock = threading.RLock()
+        self.__async_lock = asyncio.Lock()
+
+        async_db_url = re.sub(
+            r'sqlite(\+[a-z]+)?:///', 'sqlite+aiosqlite:///', re.sub(
+            r'mysql(\+[a-z]+)?://', 'mysql+asyncmy://', re.sub(
+            r'postgresql(\+[a-z]+)?://', 'postgresql+asyncpg://',
+            db_url)))
+        async_engine = sqlalchemy.ext.asyncio.create_async_engine(async_db_url)
+        self.__async_session_factory = sessionmaker(
+            bind=async_engine,
+            class_=sqlalchemy.ext.asyncio.AsyncSession)
+        # no scoping necessary as we're not using asyncio across threads
+
         self.instance_id = instance_id
         self.stale_in_flight_threshold = stale_in_flight_threshold
         self.retries = 5
@@ -169,23 +186,23 @@ class PeekabooDatabase:
         self.deadlock_backoff_base = 10
         self.connect_backoff_base = 2000
 
-        with self.__lock:
-            attempt = 1
-            while attempt <= self.retries:
+        attempt = 1
+        delay = 0
+        while attempt <= self.retries:
+            with self.__lock:
                 try:
                     Base.metadata.create_all(self.__engine)
+                    break
                 except (OperationalError, DBAPIError,
                         SQLAlchemyError) as error:
-                    attempt = self.was_transient_error(
+                    attempt, delay = self.was_transient_error(
                         error, attempt, 'create metadata')
-                    if attempt > 0:
-                        continue
 
-                    raise PeekabooDatabaseError(
-                        'Failed to create schema in database: %s' %
-                        error)
+                    if attempt < 0:
+                        raise PeekabooDatabaseError(
+                            'Failed to create schema in database: %s' % error)
 
-                break
+            time.sleep(delay)
 
     def was_transient_error(self, error, attempt, action):
         """ Decide if an exception signals a transient error condition and
@@ -198,12 +215,13 @@ class PeekabooDatabase:
         """
         # will not be retried anyway, so no use checking and sleeping
         if attempt >= self.retries:
-            return -1
+            return -1, 0
 
         # only DBAPIError has connection_invalidated
+
         if getattr(error, 'connection_invalidated', False):
             logger.debug('Connection invalidated %s. Retrying.', action)
-            return attempt + 1
+            return attempt + 1, 0
 
         # Access the original DBAPI exception anonymously.
         # We intentionally do some crude duck-typing here to avoid
@@ -212,7 +230,7 @@ class PeekabooDatabase:
         # identically numbered error of another RDBMS.
         if (getattr(error, 'orig', None) is None or
                 getattr(error.orig, 'args', None) is None):
-            return -1
+            return -1, 0
 
         args = error.orig.args
 
@@ -224,8 +242,7 @@ class PeekabooDatabase:
             backoff = random.randint(maxmsecs/2, maxmsecs)
             logger.debug('Connection failed %s, backing off for %d '
                          'milliseconds before retrying', action, backoff)
-            time.sleep(backoff / 1000)
-            return attempt + 1
+            return attempt + 1, backoff / 1000
 
         # (MySQLdb._exceptions.OperationalError) (1213, 'Deadlock
         # found when trying to get lock; try restarting transaction')
@@ -235,12 +252,11 @@ class PeekabooDatabase:
             backoff = random.randint(maxmsecs/2, maxmsecs)
             logger.debug('Database deadlock detected %s, backing off for %d '
                          'milliseconds before retrying.', action, backoff)
-            time.sleep(backoff / 1000)
-            return attempt + 1
+            return attempt + 1, backoff / 1000
 
-        return -1
+        return -1, 0
 
-    def analysis_add(self, sample):
+    async def analysis_add(self, sample):
         """
         Add an analysis task to the analysis journal in the database.
 
@@ -257,33 +273,31 @@ class PeekabooDatabase:
             reason=sample.reason)
 
         job_id = None
-        with self.__lock:
-            attempt = 1
-            while attempt <= self.retries:
-                session = self.__session()
-                session.add(sample_info)
-                try:
-                    # flush to retrieve the automatically assigned primary key
-                    # value
-                    session.flush()
-                    job_id = sample_info.id
-                    session.commit()
-                except (OperationalError, DBAPIError,
-                        SQLAlchemyError) as error:
-                    session.rollback()
+        attempt = 1
+        delay = 0
+        while attempt <= self.retries:
+            async with self.__async_lock:
+                async with self.__async_session_factory() as session:
+                    session.add(sample_info)
+                    try:
+                        # flush to retrieve the automatically assigned primary
+                        # key value
+                        await session.flush()
+                        job_id = sample_info.id
+                        await session.commit()
+                        break
+                    except (OperationalError, DBAPIError,
+                            SQLAlchemyError) as error:
+                        await session.rollback()
 
-                    attempt = self.was_transient_error(
-                        error, attempt, 'saving analysis result')
-                    if attempt > 0:
-                        continue
+                        attempt, delay = self.was_transient_error(
+                            error, attempt, 'adding analysis')
 
-                    raise PeekabooDatabaseError(
-                        'Failed to add analysis task to the database: %s' %
-                        error)
-                finally:
-                    session.close()
+                        if attempt < 0:
+                            raise PeekabooDatabaseError(
+                                'Failed to add analysis task to the database: %s' % error)
 
-                break
+            await asyncio.sleep(delay)
 
         sample.update_id(job_id)
         return job_id
@@ -294,34 +308,34 @@ class PeekabooDatabase:
 
         @param sample: The sample object for this analysis task.
         """
-        with self.__lock:
-            attempt = 1
-            while attempt <= self.retries:
-                session = self.__session()
-                analysis = session.query(SampleInfo).filter_by(
-                    id=sample.id).first()
-                analysis.state = sample.state
-                analysis.result = sample.result
-                analysis.reason = sample.reason
+        statement = sqlalchemy.sql.expression.update(SampleInfo).where(
+            SampleInfo.id == sample.id).values(
+                state=sample.state,
+                result=sample.result,
+                reason=sample.reason)
 
-                try:
-                    session.commit()
-                except (OperationalError, DBAPIError,
-                        SQLAlchemyError) as error:
-                    session.rollback()
+        attempt = 1
+        delay = 0
+        while attempt <= self.retries:
+            with self.__lock:
+                with self.__session() as session:
+                    try:
+                        session.execute(statement)
+                        session.commit()
+                        break
+                    except (OperationalError, DBAPIError,
+                            SQLAlchemyError) as error:
+                        session.rollback()
 
-                    attempt = self.was_transient_error(
-                        error, attempt, 'saving analysis result')
-                    if attempt > 0:
-                        continue
+                        attempt, delay = self.was_transient_error(
+                            error, attempt, 'updating analysis')
 
-                    raise PeekabooDatabaseError(
-                        'Failed to add analysis task to the database: %s' %
-                        error)
-                finally:
-                    session.close()
+                        if attempt < 0:
+                            raise PeekabooDatabaseError(
+                                'Failed to update analysis task in the database: %s' %
+                                error)
 
-                break
+            time.sleep(delay)
 
     def analysis_journal_fetch_journal(self, sample):
         """
@@ -332,19 +346,40 @@ class PeekabooDatabase:
         @return: A sorted list of (analysis_time, result, reason) of the
                  requested sample.
         """
-        with self.__lock:
-            session = self.__session()
-            sample_journal = session.query(
-                SampleInfo.analysis_time, SampleInfo.result, SampleInfo.reason
-                ).filter(SampleInfo.id != sample.id).filter_by(
+        statement = sqlalchemy.sql.expression.select(
+            SampleInfo.analysis_time, SampleInfo.result,
+            SampleInfo.reason).where(
+                SampleInfo.id != sample.id).filter_by(
                     state=JobState.FINISHED,
                     sha256sum=sample.sha256sum,
-                    file_extension=sample.file_extension
-                    ).order_by(SampleInfo.analysis_time).all()
-            session.close()
+                    file_extension=sample.file_extension).order_by(
+                        SampleInfo.analysis_time)
+
+        sample_journal = None
+        attempt = 1
+        delay = 0
+        while attempt <= self.retries:
+            with self.__session() as session:
+                try:
+                    sample_journal = session.execute(statement).all()
+                    break
+                except (OperationalError, DBAPIError,
+                        SQLAlchemyError) as error:
+                    session.rollback()
+
+                    attempt, delay = self.was_transient_error(
+                        error, attempt, 'fetching analysis journal')
+
+                    if attempt < 0:
+                        raise PeekabooDatabaseError(
+                            'Failed to fetch analysis journal from the database: %s' %
+                            error)
+
+            time.sleep(delay)
+
         return sample_journal
 
-    def analysis_retrieve(self, job_id):
+    async def analysis_retrieve(self, job_id):
         """
         Fetch information stored in the database about a given sample object.
 
@@ -352,14 +387,34 @@ class PeekabooDatabase:
         @type job_id: int
         @return: reason and result for the given analysis task
         """
-        with self.__lock:
-            session = self.__session()
-            sample_result = session.query(
-                SampleInfo.reason, SampleInfo.result
-                ).filter_by(id=job_id, state=JobState.FINISHED).first()
-            session.close()
+        statement = sqlalchemy.sql.expression.select(
+            SampleInfo.reason, SampleInfo.result).filter_by(
+                id=job_id, state=JobState.FINISHED)
 
-        return sample_result
+        result = None
+        attempt = 1
+        delay = 0
+        while attempt <= self.retries:
+            async with self.__async_session_factory() as session:
+                try:
+                    proxy = await session.execute(statement)
+                    result = proxy.first()
+                    break
+                except (OperationalError, DBAPIError,
+                        SQLAlchemyError) as error:
+                    await session.rollback()
+
+                    attempt, delay = self.was_transient_error(
+                        error, attempt, 'retrieving analysis result')
+
+                    if attempt < 0:
+                        raise PeekabooDatabaseError(
+                            'Failed to retrieve analysis from the database: %s' %
+                            error)
+
+            await asyncio.sleep(delay)
+
+        return result
 
     def mark_sample_in_flight(self, sample, instance_id=None, start_time=None):
         """
@@ -388,40 +443,37 @@ class PeekabooDatabase:
                                           instance_id=instance_id,
                                           start_time=start_time)
         attempt = 1
-        locked = False
+        delay = 0
         while attempt <= self.retries:
             # a new session needs to be constructed on each attempt
-            session = self.__session()
+            with self.__session() as session:
+                # try to mark this sample as in flight in an atomic insert
+                # operation (modulo possible deadlocks with various RDBMS)
+                session.add(in_flight_marker)
 
-            # try to mark this sample as in flight in an atomic insert
-            # operation (modulo possible deadlocks with various RDBMS)
-            session.add(in_flight_marker)
+                try:
+                    session.commit()
+                    logger.debug('Marked sample %s as in flight', sha256sum)
+                    return True
+                # duplicate primary key == entry already exists
+                except IntegrityError:
+                    session.rollback()
+                    logger.debug('Sample %s is already in flight on another '
+                                'instance', sha256sum)
+                    return False
+                except (OperationalError, DBAPIError,
+                        SQLAlchemyError) as error:
+                    session.rollback()
 
-            try:
-                session.commit()
-                locked = True
-                logger.debug('Marked sample %s as in flight', sha256sum)
-            # duplicate primary key == entry already exists
-            except IntegrityError:
-                session.rollback()
-                logger.debug('Sample %s is already in flight on another '
-                             'instance', sha256sum)
-            except (OperationalError, DBAPIError,
-                    SQLAlchemyError) as error:
-                session.rollback()
+                    attempt, delay = self.was_transient_error(
+                        error, attempt, 'marking sample %s as in flight' %
+                        sha256sum)
 
-                attempt = self.was_transient_error(
-                    error, attempt, 'marking sample %s as in flight' %
-                    sha256sum)
-                if attempt > 0:
-                    continue
+                    if attempt < 0:
+                        raise PeekabooDatabaseError(
+                            'Unable to mark sample as in flight: %s' % error)
 
-                raise PeekabooDatabaseError(
-                    'Unable to mark sample as in flight: %s' % error)
-            finally:
-                session.close()
-
-            return locked
+            time.sleep(delay)
 
         return False
 
@@ -443,36 +495,35 @@ class PeekabooDatabase:
             instance_id = self.instance_id
 
         sha256sum = sample.sha256sum
-
-        attempt = 1
-        while attempt <= self.retries:
-            session = self.__session()
-
-            # clear in-flight marker from database
-            query = session.query(InFlightSample).filter(
-                InFlightSample.sha256sum == sha256sum).filter(
+        statement = sqlalchemy.sql.expression.delete(
+            InFlightSample).where(
+                InFlightSample.sha256sum == sha256sum).where(
                     InFlightSample.instance_id == instance_id)
 
-            try:
-                # delete() is not queued and goes to the DB before commit()
-                cleared = query.delete()
-                session.commit()
-            except (OperationalError, DBAPIError,
-                    SQLAlchemyError) as error:
-                session.rollback()
+        attempt = 1
+        cleared = 0
+        while attempt <= self.retries:
+            with self.__session() as session:
+                try:
+                    # clear in-flight marker from database
+                    marker = session.execute(statement)
+                    session.commit()
+                    cleared = marker.rowcount
+                    break
+                except (OperationalError, DBAPIError,
+                        SQLAlchemyError) as error:
+                    session.rollback()
 
-                attempt = self.was_transient_error(
-                    error, attempt, 'clearing in-flight status of sample %s' %
-                    sha256sum)
-                if attempt > 0:
-                    continue
+                    attempt, delay = self.was_transient_error(
+                        error, attempt, 'clearing in-flight status of '
+                        'sample %s' % sha256sum)
 
-                raise PeekabooDatabaseError('Unable to clear in-flight status '
-                                            'of sample: %s' % error)
-            finally:
-                session.close()
+                    if attempt < 0:
+                        raise PeekabooDatabaseError(
+                            'Unable to clear in-flight status of sample: %s' %
+                            error)
 
-            break
+            time.sleep(delay)
 
         if cleared == 0:
             raise PeekabooDatabaseError('Unexpected inconsistency: Sample %s '
@@ -507,39 +558,39 @@ class PeekabooDatabase:
         if instance_id is None:
             instance_id = self.instance_id
 
+        if instance_id < 0:
+            # delete all locks
+            statement = sqlalchemy.sql.expression.delete(InFlightSample)
+            logger.debug('Clearing database of all in-flight samples.')
+        else:
+            # delete only the locks of a specific instance
+            statement = sqlalchemy.sql.expression.delete(
+                InFlightSample).where(
+                    InFlightSample.instance_id == instance_id)
+            logger.debug('Clearing database of all in-flight samples of '
+                         'instance %d.', instance_id)
+
         attempt = 1
         while attempt <= self.retries:
-            session = self.__session()
+            with self.__session() as session:
+                try:
+                    session.execute(statement)
+                    session.commit()
+                    break
+                except (OperationalError, DBAPIError,
+                        SQLAlchemyError) as error:
+                    session.rollback()
 
-            if instance_id < 0:
-                # delete all locks
-                query = session.query(InFlightSample)
-                logger.debug('Clearing database of all in-flight samples.')
-            else:
-                # delete only the locks of a specific instance
-                query = session.query(InFlightSample).filter(
-                    InFlightSample.instance_id == instance_id)
-                logger.debug('Clearing database of all in-flight samples of '
-                             'instance %d.', instance_id)
-            try:
-                # delete() is not queued and goes to the DB before commit()
-                query.delete()
-                session.commit()
-            except (OperationalError, DBAPIError,
-                    SQLAlchemyError) as error:
-                session.rollback()
+                    attempt, delay = self.was_transient_error(
+                        error, attempt,
+                        'clearing database of in-flight samples')
 
-                attempt = self.was_transient_error(
-                    error, attempt, 'clearing database of in-flight samples')
-                if attempt > 0:
-                    continue
+                    if attempt < 0:
+                        raise PeekabooDatabaseError(
+                            'Unable to clear the database of in-flight '
+                            'samples: %s' % error)
 
-                raise PeekabooDatabaseError('Unable to clear the database of '
-                                            'in-flight samples: %s' % error)
-            finally:
-                session.close()
-
-            break
+            time.sleep(delay)
 
     def clear_stale_in_flight_samples(self):
         """
@@ -555,49 +606,54 @@ class PeekabooDatabase:
             'Clearing database of all stale in-flight samples '
             '(%d seconds)', self.stale_in_flight_threshold)
 
-        attempt = 1
-        while attempt <= self.retries:
-            session = self.__session()
-
+        def clear_statement(statement_class):
             # delete only the locks of a specific instance
-            query = session.query(InFlightSample).filter(
+            return statement_class(InFlightSample).where(
                 InFlightSample.start_time <= datetime.utcnow() - timedelta(
                     seconds=self.stale_in_flight_threshold))
-            try:
-                # the loop triggers the query, so only do it if debugging is
-                # enabled
-                if logger.isEnabledFor(logging.DEBUG):
-                    # obviously there's a race between logging and actual
-                    # delete here, use with caution, compare with actual number
-                    # of markers cleared below before relying on it for
-                    # debugging
-                    for stale in query:
-                        logger.debug(
-                            'Stale in-flight marker to clear: %s', stale)
 
-                # delete() is not queued and goes to the DB before commit()
-                cleared = query.delete()
-                session.commit()
-                if cleared > 0:
-                    logger.warning(
-                        '%d stale in-flight samples cleared.', cleared)
-            except (OperationalError, DBAPIError,
-                    SQLAlchemyError) as error:
-                session.rollback()
+        delete_statement = clear_statement(sqlalchemy.sql.expression.delete)
+        select_statement = clear_statement(sqlalchemy.sql.expression.select)
 
-                attempt = self.was_transient_error(
-                    error, attempt,
-                    'clearing the database of stale in-flight samples')
-                if attempt > 0:
-                    continue
+        attempt = 1
+        cleared = 0
+        while attempt <= self.retries:
+            with self.__session() as session:
+                try:
+                    # only do the query if debugging is enabled
+                    if logger.isEnabledFor(logging.DEBUG):
+                        # obviously there's a race between logging and actual
+                        # delete here, use with caution, compare with actual
+                        # number of markers cleared below before relying on it
+                        # for debugging
+                        markers = session.execute(select_statement)
+                        for stale in markers:
+                            logger.debug(
+                                'Stale in-flight marker to clear: %s', stale)
 
-                raise PeekabooDatabaseError(
-                    'Unable to clear the database of stale in-flight '
-                    'samples: %s' % error)
-            finally:
-                session.close()
+                    markers = session.execute(delete_statement)
+                    session.commit()
 
-            break
+                    cleared = markers.rowcount
+                    if cleared > 0:
+                        logger.warning(
+                            '%d stale in-flight samples cleared.', cleared)
+
+                    break
+                except (OperationalError, DBAPIError,
+                        SQLAlchemyError) as error:
+                    session.rollback()
+
+                    attempt, delay = self.was_transient_error(
+                        error, attempt,
+                        'clearing the database of stale in-flight samples')
+
+                    if attempt < 0:
+                        raise PeekabooDatabaseError(
+                            'Unable to clear the database of stale in-flight '
+                            'samples: %s' % error)
+
+            time.sleep(delay)
 
         return cleared > 0
 
