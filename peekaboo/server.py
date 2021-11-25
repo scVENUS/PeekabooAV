@@ -110,7 +110,7 @@ class PeekabooServer:
             sample_file.type, content_disposition)
 
         try:
-            self.db_con.analysis_add(sample)
+            await self.db_con.analysis_add(sample)
         except PeekabooDatabaseError as dberr:
             logger.error('Failed to add analysis to database: %s', dberr)
             return sanic.response.json(
@@ -138,7 +138,7 @@ class PeekabooServer:
                 {'message': 'job ID missing from request'}, 400)
 
         try:
-            job_info = self.db_con.analysis_retrieve(job_id)
+            job_info = await self.db_con.analysis_retrieve(job_id)
         except PeekabooDatabaseError as dberr:
             logger.error('Failed to retrieve analysis result from '
                          'database: %s', dberr)
