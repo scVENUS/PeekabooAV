@@ -139,7 +139,8 @@ class CortexFileAnalyzer:
     @classmethod
     def get_submit_parameters(cls, sample, sample_tlp,
                               submit_original_filename=False):
-        """ Return this analyzer's submit parameters for a given sample. """
+        """ Return this analyzer's submit parameters for a given sample and a
+        filtered, loggable version of them. """
         filename = sample.sha256sum
 
         # append file extension to aid backend analyzers in file type detection
@@ -150,8 +151,10 @@ class CortexFileAnalyzer:
         if submit_original_filename and sample.filename:
             filename = sample.filename
 
-        params = {
-            'data': sample.content,
+        # log-friendly params prevent flooding the log with superfluous data
+        # and can prevent information leakage
+        log_params = {
+            'data': '<%d bytes of sample data>' % sample.file_size,
             'dataProvided': True,
             'dataType': 'file',
             'tlp': sample_tlp.value,
@@ -160,7 +163,10 @@ class CortexFileAnalyzer:
             }
         }
 
-        return params
+        params = log_params.copy()
+        params['data'] = sample.content
+
+        return params, log_params
 
 
 class CortexHashAnalyzer(CortexAnalyzer):
@@ -168,7 +174,8 @@ class CortexHashAnalyzer(CortexAnalyzer):
     @classmethod
     def get_submit_parameters(cls, sample, sample_tlp,
                               submit_original_filename=False):
-        """ Return this analyzer's submit parameters for a given sample. """
+        """ Return this analyzer's submit parameters for a given sample and a
+        filtered, loggable version of them. """
         del submit_original_filename
 
         params = {
@@ -177,7 +184,7 @@ class CortexHashAnalyzer(CortexAnalyzer):
             'tlp': sample_tlp.value,
         }
 
-        return params
+        return params, params
 
 
 class FileInfoAnalyzerReport(CortexAnalyzerReport):
@@ -730,11 +737,11 @@ class Cortex:
         @raises: CortexSubmitFailedException if submission failed
         @returns: ID of the submitted Cortex job.
         """
-        params = analyzer.get_submit_parameters(
+        params, log_params = analyzer.get_submit_parameters(
             sample, self.tlp, self.submit_original_filename)
 
         logger.debug("Creating Cortex job with analyzer %s and "
-                     "parameters %s", analyzer.name, params)
+                     "parameters %s", analyzer.name, log_params)
         try:
             job = self.api.analyzers.run_by_name(analyzer.name, params)
         except cortex4py.exceptions.CortexException as error:
