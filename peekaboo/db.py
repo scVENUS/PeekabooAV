@@ -157,6 +157,9 @@ class PeekabooDatabase:
                           independently of the Peekaboo log level.
         """
         logging.getLogger('sqlalchemy.engine').setLevel(log_level)
+        # aiosqlite picks up the global log level unconditionally so we need to
+        # override it as well and explicitly
+        logging.getLogger('aiosqlite').setLevel(log_level)
 
         self.__engine = create_engine(db_url, future=True)
         session_factory = sessionmaker(bind=self.__engine)
