@@ -30,9 +30,8 @@ use strict;
 use JSON::PP;
 # Yes, Amavis has its own minimalist JSON implementation Amavis::JSON. But it
 # doesn't seem to do UTF-8 encoding correctly - everything ends up as latin1.
+
 use LWP::UserAgent;
-use File::Basename;
-use Data::Dumper;
 
 # monkey patch a content_disposition setter/getter into the Parts package
 *{Amavis::Unpackers::Part::content_disposition} = sub {
@@ -56,17 +55,24 @@ my $amavis_mime_traverse = \&Amavis::Unpackers::MIME::mime_traverse;
 sub ask_peekaboo {
   my($dummy, $names_to_parts, $dummy, $av_name, $dummy, $args, $dummy,
      $dummy, $dummy) = @_;
-  my ( $rateNames, $rateValues );
 
-  %$rateValues = ( "unchecked" => 1, "unknown" => 2, "ignored" => 3, "good" => 4, "failed" => 5, "bad" => 6 );
-  %$rateNames = reverse %$rateValues;
+  # we receive the url and potentially other parameters from @av_scanners (15-av_scanners)
+  my $base_url = "http://127.0.0.1:8100";
+  my $polling_interval = 5;
 
-  # extract some additional info for peekaboo from the parts objects
-  # structure:
-  # [ { "full_name" => "<path>", "name_declared" => ..., ... },
-  #   { ... },
-  #   ... ]
-  my $metainfo = [];
+  if (defined($args)) {
+    $base_url = $$args[0] if (defined($$args[0]));
+    $polling_interval = $$args[1] if (defined($$args[1]));
+  }
+
+  my $scan_url = "${base_url}/v1/scan";
+  my $report_url_tmpl = "${base_url}/v1/report/%d";
+
+  # extract some additional info for peekaboo from the parts objects and
+  # prepare and run http reuqests to the peekaboo server
+  my $ua = LWP::UserAgent->new();
+  my @jobs;
+  my $result_text = "";
   foreach my $partname (keys %{$names_to_parts}) {
     my $pmi = {};
 
@@ -89,133 +95,114 @@ sub ask_peekaboo {
       $pmi->{$field} = $val if defined($val);
     }
 
-    # add more elements to the part hash, will be used when talking with peekaboo
-    $pmi->{"status"} = undef;   # HTTP return code
-    $pmi->{"result"} = undef;   # Peekaboo result as string
-    $pmi->{"rating"} = undef;   # Peekaboo result as numeric rating
-    $pmi->{"reason"} = undef;   # Text messages from peekaboo
-    $pmi->{"job_id"} = undef;   # Checksum for this part
-    push(@$metainfo, $pmi);
+    my $answer = $ua->post($scan_url,
+      Content_Type => 'form-data',
+      # could be per-file but complicates handling server-side
+      'X-Content-Disposition' => $pmi->{"content_disposition"},
+      Content => [
+        'file' => [
+          $pmi->{"full_name"},
+          $pmi->{"name_declared"} || undef,
+          Content_Type => $pmi->{"type_declared"},
+        ]
+      ]
+    );
+
+    my $code = $answer->code;
+    if ($code != 200) {
+      my $message = sprintf("Peekaboo: Received error %d when submitting %s",
+              $code, $partname);
+      Amavis::Util::do_log(1, $message);
+      return (undef, $result_text . $message . "\n", undef);
+    }
+
+    # decode the text part of the response
+    my $peekaboo_response = JSON::PP->new->utf8->decode(
+            $answer->decoded_content);
+    my $job = $peekaboo_response->{"job_id"};
+
+    my $message = sprintf("Peekaboo: %s submitted as job %d", $partname, $job);
+    Amavis::Util::do_log(5, "Peekaboo: " . $message);
+    $result_text .= $message . "\n";
+
+    push(@jobs, $job);
   }
 
-  # prepare and run http reuqests to the peekaboo server and receive (wait) for the results
-  my $ua = LWP::UserAgent->new();
-  # note: we receive the url from @av_scanners ( 15-av_scanners )
-  my $url = $args[0];
-  my $scanUrl = "${url}/v1/scan";
-  my $reportUrlTmpl = "${url}/v1/report/JOB_ID";
+  # poll the running jobs until all are done
+  my @jobs_left = ();
+  while (@jobs) {
+    my $duration = $polling_interval;
+    my $numjobs = $#jobs + 1;
+    if (!@jobs_left) {
+      # sleep a hundredth of the polling interval per job on the first loop in
+      # case all jobs got answered from cached results and are ready very
+      # quickly
+      $duration = $polling_interval / 100 * $#jobs;
+    }
 
-  my $workDone = 0; # loop control variable, will be set to true if all results are present
-  while ( ! $workDone ) {
-    # loop over the parts
-    foreach my $part ( @$metainfo ) {
-      # note: we get a dict/hash as loop var
+    Amavis::Util::do_log(5, "Peekaboo: Sleeping %.2f seconds before " .
+            "polling %d jobs again", $duration, $numjobs);
+    sleep($duration);
 
-      # check if the part was created a a file
-      next if ! defined ( $part->{"full_name"} ) || ! -e $part->{"full_name"};
+    @jobs_left = ();
+    for my $job (@jobs) {
+      my $answer = $ua->get(sprintf($report_url_tmpl, $job));
 
-      # check if this is the first call
-      if ( ! defined( $part->{"status"} ) || ! $part->{"status"} ) {
+      my $code = $answer->code;
+      if ($code == 200) {
+        my $message = sprintf("Peekaboo: Received report for job %d", $job);
+        Amavis::Util::do_log(5, $message);
+        $result_text .= $message . "\n";
 
-        # first call: run POST scanfile
-        my $answer = $ua->post($scanUrl,
-          Content_Type => 'form-data',
-          # could be per-file but complicates handling server-side
-          'X-Content-Disposition' => $part->{"content_disposition"},
-          Content => [
-            'file' => [
-              $part->{"full_name"},
-              $part->{"name_declared"} || undef,
-              Content_Type => $part->{"type_declared"},
-            ]
-          ]
-        );
+        # final answer
+        my $peekaboo_answer = JSON::PP->new->utf8->decode($answer->decoded_content);
 
-        if ( $answer->{"_rc"} eq "200" ) {
-          # decode the text part of the response
-          my $tokens = JSON::PP->new->utf8->decode($answer->{"_content"});
-          # Amavis::Util::do_log( 1, "Examine tokens: '%s'", Dumper $tokens );
-          $part->{"job_id"} = $tokens->{"job_id"}; # extract the checksum
-          $part->{"status"} = $answer->{"_rc"};
-          Amavis::Util::do_log( 2, "Post: Found 200 for %s: %s", basename( $part->{"full_name"} ), $part->{"job_id"});
-
-        } else {
-          # seems we have got an error... log it
-          Amavis::Util::do_log( 1, "Post: Do not know how to handle state '%s'", $answer->{"_rc"} );
-          die sprintf( "Receive unexpected state %s", $answer->{"_rc"} );
+        # extend result text with report and reason from this result
+        my $report = $peekaboo_answer->{"report"};
+        if (defined($report)) {
+          $result_text .= join("\n", @{$report});
         }
-      } elsif ( defined( $part->{"status"} ) && $part->{"status"} eq "200" ) {
 
-        # the part has already been requested, now we try to get a report
-        Amavis::Util::do_log( 3, "Found state %s: ask with '%s'", $part->{"status"}, $part->{"job_id"});
-        my $url = $reportUrlTmpl;
-        $url =~ s/JOB_ID/$part->{"job_id"}/;
-        Amavis::Util::do_log( 3, "Resulting url: '$url'");
+        $result_text .= $peekaboo_answer->{"reason"} . "\n";
 
-        my $answer = $ua->get($url);
-        Amavis::Util::do_log( 1, "Found answer as '%s'", $answer->{"_rc"} );
-
-        if ( $answer->{"_rc"} eq "200" ) {
-          $part->{"status"} = $answer->{"_rc"};
-          $part->{"reason"} = ( JSON::PP->new->utf8->decode($answer->{"_content"})->{"reason"} );
-          $part->{"report"} = ( JSON::PP->new->utf8->decode($answer->{"_content"})->{"report"} );
-          $part->{"result"} = ( JSON::PP->new->utf8->decode($answer->{"_content"})->{"result"} );
-          $part->{"rating"} = ( JSON::PP->new->utf8->decode($answer->{"_content"})->{"rating"} );
-        } elsif ( $answer->{"_rc"} eq "202" ) {
-          # result still not present
-          Amavis::Util::do_log( 3, "Answer still not present '%s'", $answer->{"_rc"} );
-        } else {
-          # seems we have got an error... log it
-          Amavis::Util::do_log( 1, "Post: Do not know how to handle state '%s'", $answer->{"_rc"} );
-          die sprintf( "Receive unexpected state %s", $answer->{"_rc"} );
+        # check for bad or failure first
+        my $result = $peekaboo_answer->{"result"};
+        if ($result eq "failed") {
+          # no sense in dragging this out since one failed analysis means we
+          # cannot reach any conclusive verdict
+          my $message = sprintf("Peekaboo: Job %d failed", $job);
+          Amavis::Util::do_log(1, $message);
+          return (undef, $result_text . $message . "\n", undef)
+        } elsif ($result eq "bad") {
+          # same applies for one bad sample: we found malware, done
+          my $message = sprintf("Peekaboo: Job %d found malware", $job);
+          Amavis::Util::do_log(5, $message);
+          return (1, $result_text . $message . "\n", undef)
         }
+
+        # everything else means that this job did not find malware nor fail
+      } elsif ($code == 404) {
+        # result not yet present
+        Amavis::Util::do_log(5, "Peekaboo: Job %d not finished yet", $job);
+        push(@jobs_left, $job);
+        next;
       } else {
-        # seems we have got an error... log it
-        Amavis::Util::do_log( 1, "Post: Do not know how to handle state '%s'", $part->{"status"} );
-        die sprintf( "Receive unexpected state %s", $part->{"status"} );
+        # all other codes indicate some kind of error
+        my $message = sprintf("Peekaboo: Received error %d when " .
+                "requesting report for job %d", $code, $job);
+        Amavis::Util::do_log(1, $message);
+        return (undef, $result_text . $message . "\n", undef);
       }
     }
-    my $stateList = [];
-    # check if we need another loop pass
-    foreach my $part ( @$metainfo ) {
-      push @$stateList, $part->{"status"} if defined( $part->{"status"} ) && $part->{"status"} eq "200";
-    }
-    # if all state are 200 we are done
-    if ( $#$stateList eq $#$metainfo ) {
-      $workDone = 1;
-    }
-    # now we need to sleep a little
-    sleep(0.1) if ! $workDone;
-  }
-  # build the result text
-  my $resultText = "";
-  my $totalRate = -1;
-  foreach my $part ( @$metainfo ) {
-    foreach my $line ( @{ $part->{"report"} } ) {
-      $resultText .= $line . "\n";
-    }
-    $resultText .= "\n";
-    $totalRate = $part->{ "rating" } if $part->{ "rating" } > $totalRate;
-  }
-  # add the grep pattern
-  $resultText .= sprintf("PeekabooResult:%s", $rateNames->{ $totalRate } );
-  # compute return value (rate good = False, all other are True)
-  my $ret = $totalRate == 4 ? 0 : 1;
 
-  # Amavis::AV::ask_daemon_internal(@_);
-  # Can't use string ("{"result":["Datei \\"blank.doc\\" "...) as a HASH ref while
-  # $res = Dumper $req->{"_content"};
-  #
-  # Returns a triplet, or dies in case of failure.
-  # The first element of the triplet has the following semantics:
-  # - true if virus found,
-  # - 0 if no viruses found,
-  # - undef if it did not complete its job;
-  # the second element is a string, the text as provided by the virus scanner;
-  # the third element is ref to a list of virus names found (if any).
-  #   (it is guaranteed the list will be nonempty if virus was found)
+    @jobs = @jobs_left;
+  }
 
-  return ( $ret, $resultText );
+  # see amavisd-new routines run_av() and virus_scan() for the meaning of these
+  # return values.
+  my $message = sprintf("Peekaboo: No malware found");
+  Amavis::Util::do_log(1, $message);
+  return (0, $result_text . $message . "\n", undef);
 }
 
 1;  # ensure a defined return value

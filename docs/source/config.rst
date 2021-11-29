@@ -241,7 +241,21 @@ Put the following code into ``/etc/amavis/conf.d/15-av_scanners``:
 .. code-block:: perl
 
     @av_scanners = (
-        ['Peekaboo-Analysis', \&ask_peekaboo, ["http://127.0.0.1:8100"]]
+        ['Peekaboo-Analysis', \&ask_peekaboo]
+    );
+
+    1;  # ensure a defined return
+
+
+A third parameter can be added for custom configuration.
+This is an array which currently supports adjustment of the Peekaboo API base
+URL as well as the polling interval in positions 0 and 1, respectively.
+Overriding them with their default values would look like this:
+
+.. code-block:: perl
+
+    @av_scanners = (
+        ['Peekaboo-Analysis', \&ask_peekaboo, ["http://127.0.0.1:8100", 5]]
     );
 
     1;  # ensure a defined return
