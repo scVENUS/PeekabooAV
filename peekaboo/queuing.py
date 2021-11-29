@@ -459,16 +459,13 @@ class Worker(threading.Thread):
 
             sample.mark_done()
 
-            if sample.result != Result.failed:
-                logger.debug('Saving results to database')
-                try:
-                    self.db_con.analysis_update(sample)
-                except PeekabooDatabaseError as dberr:
-                    logger.error('Failed to save analysis result to '
-                                 'database: %s', dberr)
-                    # no showstopper, we can limp on without caching in DB
-            else:
-                logger.debug('Not saving results of failed analysis')
+            logger.debug('Saving results to database')
+            try:
+                self.db_con.analysis_update(sample)
+            except PeekabooDatabaseError as dberr:
+                logger.error('Failed to save analysis result to '
+                             'database: %s', dberr)
+                # no showstopper, we can limp on without caching in DB
 
             self.job_queue.done(sample)
 
