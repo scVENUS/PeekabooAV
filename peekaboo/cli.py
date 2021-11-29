@@ -214,6 +214,7 @@ def main():
     parser.add_argument('-r', '--remote-url', action='store', required=False,
                         default='http://127.0.0.1:8100/v1/',
                         help='URL to Peekaboo instance e.g. http://127.0.0.1:8100/v1/')
+    parser.set_defaults(func=PeekabooUtil.ping)
 
     scan_file_parser = subparsers.add_parser('scan-file',
                                              help='Scan a file and report it')
