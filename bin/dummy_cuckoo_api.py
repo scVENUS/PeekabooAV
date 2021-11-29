@@ -102,6 +102,11 @@ class Report(QueueResource):
                             "DDE has been identified",
                     }
                 ],
+                "debug": {
+                    "cuckoo": [
+                        "analysis completed successfully",
+                    ],
+                },
             }
 
         return flask.jsonify(report)
