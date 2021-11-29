@@ -198,9 +198,7 @@ class PeekabooUtil:
 
 def main():
     """ The peekaboo-util main program. """
-    parser = argparse.ArgumentParser()
-    subparsers = parser.add_subparsers(help='commands')
-
+    parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument('-v', '--verbose', action='store_true', required=False,
                         help='List results of all files not only bad ones')
     parser.add_argument('-vv', '--verbose2', action='store_true', required=False,
@@ -214,10 +212,13 @@ def main():
     parser.add_argument('-r', '--remote-url', action='store', required=False,
                         default='http://127.0.0.1:8100/v1/',
                         help='URL to Peekaboo instance e.g. http://127.0.0.1:8100/v1/')
-    parser.set_defaults(func=PeekabooUtil.ping)
 
-    scan_file_parser = subparsers.add_parser('scan-file',
-                                             help='Scan a file and report it')
+    global_parser = argparse.ArgumentParser(parents=[parser])
+    global_parser.set_defaults(func=PeekabooUtil.ping)
+
+    subparsers = global_parser.add_subparsers(help='commands')
+    scan_file_parser = subparsers.add_parser(
+        'scan-file', help='Scan a file and report it', parents=[parser])
     scan_file_parser.add_argument('-f', '--filename', action='append', required=True,
                                   help='Path to the file to scan. Can be given more '
                                        'than once to scan multiple files.')
@@ -232,16 +233,17 @@ def main():
 
     scan_file_parser.set_defaults(func=PeekabooUtil.scan_file)
 
-    ping_parser = subparsers.add_parser('ping', help='Ping the daemon')
+    ping_parser = subparsers.add_parser(
+        'ping', help='Ping the daemon', parents=[parser])
     ping_parser.set_defaults(func=PeekabooUtil.ping)
 
-    raw_parser = subparsers.add_parser('raw',
-                                       help='Send raw input to the daemon')
+    raw_parser = subparsers.add_parser(
+        'raw', help='Send raw input to the daemon', parents=[parser])
     raw_parser.add_argument('-j', '--json', action='store', required=True,
                             help='Raw JSON to send to daemon')
     raw_parser.set_defaults(func=PeekabooUtil.raw)
 
-    args = parser.parse_args()
+    args = global_parser.parse_args()
 
     logger.setLevel(logging.ERROR)
     if args.verbose:
