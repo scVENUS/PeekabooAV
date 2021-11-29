@@ -91,7 +91,7 @@ class PeekabooUtil:
 
         return outdata
 
-    def ping(self):
+    def ping(self, _):
         """ Send ping request to daemon and optionally print response. """
         logger.debug("Sending ping...")
         try:
@@ -121,11 +121,11 @@ class PeekabooUtil:
         logger.info('Pong received.')
         return 0
 
-    def raw(self, raw):
+    def raw(self, args):
         """ Send raw data to the daemon and display response. """
         logger.debug("Sending raw...")
         try:
-            response = self.send_receive(raw)
+            response = self.send_receive(args.json)
         except socket.error as error:
             logger.error("Error communicating with daemon: %s", error)
             return 2
@@ -133,15 +133,15 @@ class PeekabooUtil:
         print(response)
         return 0
 
-    def scan_file(self, filenames, content_types, content_dispositions):
+    def scan_file(self, args):
         """ Scan the supplied filenames with peekaboo and output result """
         jobs = []
-        for filename in filenames:
+        for filename in args.filename:
             logger.debug('Submitting file %s', filename)
 
             content_type = None
-            if content_types:
-                ct_popped = content_types.pop(0)
+            if args.content_type:
+                ct_popped = args.content_type.pop(0)
                 # empty string is treated as no selection to allow specificaion
                 # for later file arguments still
                 if ct_popped:
@@ -149,8 +149,8 @@ class PeekabooUtil:
                     logger.debug('Using content type %s', content_type)
 
             content_disposition = None
-            if content_dispositions:
-                cd_popped = content_dispositions.pop(0)
+            if args.content_disposition:
+                cd_popped = args.content_disposition.pop(0)
                 if cd_popped:
                     content_disposition = cd_popped
                     logger.debug(
@@ -229,16 +229,16 @@ def main():
         help='Content disposition of file to scan. Can be given more than '
         'once and has to match the file list in order.')
 
-    scan_file_parser.set_defaults(func=command_scan_file)
+    scan_file_parser.set_defaults(func=PeekabooUtil.scan_file)
 
     ping_parser = subparsers.add_parser('ping', help='Ping the daemon')
-    ping_parser.set_defaults(func=command_ping)
+    ping_parser.set_defaults(func=PeekabooUtil.ping)
 
     raw_parser = subparsers.add_parser('raw',
                                        help='Send raw input to the daemon')
     raw_parser.add_argument('-j', '--json', action='store', required=True,
                             help='Raw JSON to send to daemon')
-    raw_parser.set_defaults(func=command_raw)
+    raw_parser.set_defaults(func=PeekabooUtil.raw)
 
     args = parser.parse_args()
 
@@ -258,22 +258,6 @@ def main():
         return 2
 
     return args.func(util, args)
-
-
-def command_scan_file(util, args):
-    """ Handler for command scan_file """
-    return util.scan_file(
-        args.filename, args.content_type, args.content_disposition)
-
-
-def command_ping(util, _):
-    """ Handler for command ping """
-    return util.ping()
-
-
-def command_raw(util, args):
-    """ Handler for command raw """
-    return util.raw(args.json)
 
 
 if __name__ == "__main__":
