@@ -146,7 +146,6 @@ class JobQueue:
         @raises Full: if the queue is full.
         """
         sample_hash = sample.sha256sum
-        sample_str = "%s" % sample
         duplicate = None
         cluster_duplicate = None
         resubmit = None
@@ -161,12 +160,12 @@ class JobQueue:
                 # obviously isn't a duplicate but continued processing of the
                 # same sample.
                 if duplicates['master'] == sample:
-                    resubmit = sample_str
+                    resubmit = sample.id
                     self.jobs.put(sample, True, self.queue_timeout)
                 else:
                     # record the to-be-submitted sample as duplicate and do
                     # nothing
-                    duplicate = sample_str
+                    duplicate = sample.id
                     duplicates['duplicates'].append(sample)
             else:
                 # are we the first of potentially multiple instances working on
@@ -190,25 +189,25 @@ class JobQueue:
                     if self.cluster_duplicates.get(sample_hash) is None:
                         self.cluster_duplicates[sample_hash] = []
 
-                    cluster_duplicate = sample_str
+                    cluster_duplicate = sample.id
                     self.cluster_duplicates[sample_hash].append(sample)
 
-        if duplicate:
+        if duplicate is not None:
             logger.debug(
-                "Sample from %s is duplicate and waiting for running "
-                "analysis to finish: %s", submitter, duplicate)
-        elif cluster_duplicate:
+                "%d: Sample from %s is duplicate and waiting for running "
+                "analysis to finish", duplicate, submitter)
+        elif cluster_duplicate is not None:
             logger.debug(
-                "Sample from %s is concurrently processed by another "
-                "instance and held: %s", submitter, cluster_duplicate)
-        elif resubmit:
+                "%d: Sample from %s is concurrently processed by another "
+                "instance and held", cluster_duplicate, submitter)
+        elif resubmit is not None:
             logger.debug(
-                "Resubmitted sample to job queue for %s: %s", submitter,
-                resubmit)
+                "%d: Resubmitted sample to job queue for %s",
+                resubmit, submitter)
         else:
             logger.debug(
-                "New sample submitted to job queue by %s. %s", submitter,
-                sample_str)
+                "%d: New sample submitted to job queue by %s.",
+                sample.id, submitter)
 
         return True
 
@@ -237,12 +236,11 @@ class JobQueue:
                     return False
 
                 if locked:
-                    sample_str = "%s" % sample_duplicates[0]
                     if self.duplicates.get(sample_hash) is not None:
                         logger.error(
-                            "Possible backlog corruption for sample %s! "
+                            "Possible backlog corruption for sample %d! "
                             "Please file a bug report. Trying to continue...",
-                            sample_str)
+                            sample.id)
                         continue
 
                     # submit one of the held-back samples as a new master
@@ -256,7 +254,7 @@ class JobQueue:
                         'master': sample,
                         'duplicates': sample_duplicates,
                     }
-                    submitted_cluster_duplicates.append(sample_str)
+                    submitted_cluster_duplicates.append(sample.id)
                     self.jobs.put(sample, True, self.queue_timeout)
                     del self.cluster_duplicates[sample_hash]
 
@@ -297,7 +295,7 @@ class JobQueue:
 
             # submit all samples which have accumulated in the backlog
             for sample in self.duplicates[sample_hash]['duplicates']:
-                submitted_duplicates.append("%s" % sample)
+                submitted_duplicates.append(sample.id)
                 self.jobs.put(sample, True, self.queue_timeout)
 
             sample = self.duplicates[sample_hash]['master']
@@ -306,10 +304,9 @@ class JobQueue:
             except PeekabooDatabaseError as dberr:
                 logger.error(dberr)
 
-            sample_str = "%s" % sample
             del self.duplicates[sample_hash]
 
-        logger.debug("Cleared sample %s from in-flight list", sample_str)
+        logger.debug("%d: Cleared sample from in-flight list", sample.id)
         if len(submitted_duplicates) > 0:
             logger.debug(
                 "Submitted duplicates from backlog: %s", submitted_duplicates)
@@ -437,8 +434,8 @@ class Worker(threading.Thread):
                 # we just got pinged
                 continue
 
-            logger.info('Worker %d: Processing sample %s',
-                        self.worker_id, sample)
+            logger.info('%d: Worker %d: Processing sample',
+                        sample.id, self.worker_id)
 
             # The following used to be one big try/except block catching any
             # exception. This got complicated because in the case of
@@ -451,7 +448,7 @@ class Worker(threading.Thread):
             try:
                 self.ruleset_engine.run(sample)
             except PeekabooAnalysisDeferred:
-                logger.debug("Report for sample %s still pending", sample)
+                logger.debug('%d: Report still pending', sample.id)
                 continue
 
             if sample.result >= Result.failed:
@@ -459,12 +456,12 @@ class Worker(threading.Thread):
 
             sample.mark_done()
 
-            logger.debug('Saving results to database')
+            logger.debug('%d: Saving results to database', sample.id)
             try:
                 self.db_con.analysis_update(sample)
             except PeekabooDatabaseError as dberr:
-                logger.error('Failed to save analysis result to '
-                             'database: %s', dberr)
+                logger.error('%d: Failed to save analysis result to '
+                             'database: %s', sample.id, dberr)
                 # no showstopper, we can limp on without caching in DB
 
             self.job_queue.done(sample)

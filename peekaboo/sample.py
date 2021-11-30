@@ -170,11 +170,11 @@ class Sample:
         """ Add a rule result to the sample. This also adds a message about
         this to the report and updates the overall analysis result (so far).
         """
-        logger.debug('Adding rule result %s', res)
+        logger.debug("%d: Adding rule result %s", self.__id, res)
         self.__report.append(_("File \"%s\": %s") % (self.__filename, res))
 
-        logger.debug("Current overall result: %s, new rule result: %s",
-                     self.__result, res.result)
+        logger.debug("%d: Current overall result: %s, new rule result: %s",
+                     self.__id, self.__result, res.result)
         # check if result of this rule is worse than what we know so far
         if res.result >= self.__result:
             self.__result = res.result
@@ -203,8 +203,8 @@ class Sample:
 
         filename = self.__filename + '-' + self.sha256sum
 
-        logger.debug('Dumping processing info to %s for sample %s',
-                     dump_dir, self)
+        logger.debug('%d: Dumping processing info to %s',
+                     self.__id, dump_dir)
 
         # Peekaboo's report
         peekaboo_report = os.path.join(dump_dir, filename + '_report.txt')

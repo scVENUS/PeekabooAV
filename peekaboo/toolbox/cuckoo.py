@@ -221,8 +221,9 @@ class Cuckoo:
             if (job_id in self.running_jobs and
                     self.running_jobs[job_id] is not sample):
                 raise CuckooSubmitFailedException(
-                    'A job with ID %d is already registered as running '
-                    'for sample %s' % (job_id, self.running_jobs[job_id]))
+                    '%d: A job with ID %d is already registered as running '
+                    'for different sample %d' % (
+                        sample.id, job_id, self.running_jobs[job_id].id))
 
             self.running_jobs[job_id] = CuckooJob(sample)
 
@@ -263,7 +264,7 @@ class Cuckoo:
             logger.debug('No sample found for job ID %d', job_id)
             return None
 
-        logger.debug('Requesting Cuckoo report for sample %s', sample)
+        logger.debug('%d: Requesting Cuckoo report', sample.id)
         report_path = "tasks/report/%d" % job_id
         report = self.__get(report_path)
         if report is None:

@@ -492,8 +492,7 @@ class PeekabooDatabase:
         if start_time is None:
             start_time = datetime.utcnow()
 
-        sha256sum = sample.sha256sum
-        in_flight_marker = InFlightSample(sha256sum=sha256sum,
+        in_flight_marker = InFlightSample(sha256sum=sample.sha256sum,
                                           instance_id=instance_id,
                                           start_time=start_time)
         attempt = 1
@@ -507,25 +506,26 @@ class PeekabooDatabase:
 
                 try:
                     session.commit()
-                    logger.debug('Marked sample %s as in flight', sha256sum)
+                    logger.debug('%d: Marked sample in flight', sample.id)
                     return True
                 # duplicate primary key == entry already exists
                 except IntegrityError:
                     session.rollback()
-                    logger.debug('Sample %s is already in flight on another '
-                                'instance', sha256sum)
+                    logger.debug('%d: Sample is already in flight on another '
+                                 'instance', sample.id)
                     return False
                 except (OperationalError, DBAPIError,
                         SQLAlchemyError) as error:
                     session.rollback()
 
                     attempt, delay = self.was_transient_error(
-                        error, attempt, 'marking sample %s as in flight' %
-                        sha256sum)
+                        error, attempt, 'marking sample %d in flight' %
+                        sample.id)
 
                     if attempt < 0:
                         raise PeekabooDatabaseError(
-                            'Unable to mark sample as in flight: %s' % error)
+                            '%d: Unable to mark sample as in flight: %s' % (
+                                sample.id, error))
 
             time.sleep(delay)
 
@@ -548,10 +548,9 @@ class PeekabooDatabase:
         if instance_id is None:
             instance_id = self.instance_id
 
-        sha256sum = sample.sha256sum
         statement = sqlalchemy.sql.expression.delete(
             InFlightSample).where(
-                InFlightSample.sha256sum == sha256sum).where(
+                InFlightSample.sha256sum == sample.sha256sum).where(
                     InFlightSample.instance_id == instance_id)
 
         attempt = 1
@@ -570,26 +569,24 @@ class PeekabooDatabase:
 
                     attempt, delay = self.was_transient_error(
                         error, attempt, 'clearing in-flight status of '
-                        'sample %s' % sha256sum)
+                        'sample %d' % sample.id)
 
                     if attempt < 0:
                         raise PeekabooDatabaseError(
-                            'Unable to clear in-flight status of sample: %s' %
-                            error)
+                            '%d: Unable to clear in-flight status of sample: '
+                            '%s' % (sample.id, error))
 
             time.sleep(delay)
 
         if cleared == 0:
-            raise PeekabooDatabaseError('Unexpected inconsistency: Sample %s '
-                                        'not recoreded as in-flight upon '
-                                        'clearing flag.' % sha256sum)
+            raise PeekabooDatabaseError(
+                '%d: Unexpected inconsistency: Sample not recorded as '
+                'in-flight upon clearing flag.' % sample.id)
         elif cleared > 1:
-            raise PeekabooDatabaseError('Unexpected inconsistency: Multiple '
-                                        'instances of sample %s in-flight '
-                                        'status cleared against database '
-                                        'constraints!?' % sha256sum)
-
-        logger.debug('Cleared sample %s from in-flight list', sha256sum)
+            raise PeekabooDatabaseError(
+                '%d: Unexpected inconsistency: Multiple instances of sample '
+                'in-flight status cleared against database constraints!?' %
+                sample.id)
 
     def clear_in_flight_samples(self, instance_id=None):
         """
