@@ -472,8 +472,8 @@ class TestDatabase(unittest.TestCase):
         self.assertIsNone(self.db_con.clear_sample_in_flight(self.sample, 1))
         # unlocking twice should fail
         self.assertRaisesRegex(
-            PeekabooDatabaseError, "Unexpected inconsistency: Sample .* not "
-            "recoreded as in-flight upon clearing flag",
+            PeekabooDatabaseError, "Unexpected inconsistency: Sample not "
+            "recorded as in-flight upon clearing flag",
             self.db_con.clear_sample_in_flight, self.sample, 1)
 
     def test_7_in_flight_clear(self):

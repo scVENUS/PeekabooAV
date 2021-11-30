@@ -636,7 +636,8 @@ class Cortex:
                     self.running_jobs[job_id] is not job):
                 raise CortexSubmitFailedException(
                     'A job with ID %s is already registered as running '
-                    'for sample %s' % (job_id, self.running_jobs[job_id]))
+                    'for different sample %d' % (
+                        job_id, self.running_jobs[job_id].id))
 
             self.running_jobs[job_id] = job
 
@@ -680,7 +681,7 @@ class Cortex:
             logger.debug('No job found for job ID %s', job_id)
             return None
 
-        logger.debug('Requesting Cortex report for sample %s', job.sample)
+        logger.debug('%d: Requesting Cortex report', job.sample.id)
         try:
             report = self.api.jobs.get_report(job_id)
             # register this job's analysis report with our main report object

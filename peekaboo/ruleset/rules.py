@@ -155,15 +155,15 @@ class Rule:
         if report is not None:
             return report
 
-        logger.debug("Submitting %s to Cuckoo", sample)
+        logger.debug("%d: Submitting to Cuckoo", sample.id)
         try:
             job_id = self.cuckoo.submit(sample)
         except CuckooSubmitFailedException as failed:
-            logger.error("Submit to Cuckoo failed: %s", failed)
+            logger.error("%d: Submit to Cuckoo failed: %s", sample.id, failed)
             return None
 
-        logger.info('Sample submitted to Cuckoo. Job ID: %s. '
-                    'Sample: %s', job_id, sample)
+        logger.info("%d: Sample submitted to Cuckoo. Job ID: %s",
+                    sample.id, job_id)
         raise PeekabooAnalysisDeferred()
 
     def get_oletools_report(self, sample):
@@ -221,15 +221,15 @@ class Rule:
                                           ruleset run until result has been
                                           retrieved.
         """
-        logger.debug("Submitting %s to Cortex", sample)
+        logger.debug("%d: Submitting to Cortex", sample.id)
         try:
             job_id = self.cortex.submit(sample, analyzer)
         except CortexSubmitFailedException as failed:
-            logger.error("Submit to Cortex failed: %s", failed)
+            logger.error("%d: Submit to Cortex failed: %s", sample.id, failed)
             return None
 
-        logger.info('Sample submitted to Cortex. Job ID: %s. '
-                    'Sample: %s', job_id, sample)
+        logger.info("%d: Sample submitted to Cortex. Job ID: %s",
+                    sample.id, job_id)
         raise PeekabooAnalysisDeferred()
 
 
