@@ -241,10 +241,7 @@ Put the following code into ``/etc/amavis/conf.d/15-av_scanners``:
 .. code-block:: perl
 
     @av_scanners = (
-        ['Peekaboo-Analysis',
-        \&ask_peekaboo, ["{}\n", "/var/run/peekaboo/peekaboo.sock"],
-        qr/has been categorized "(unknown|checked|good|ignored)"$/m,
-        qr/has been categorized "bad"$/m ],
+        ['Peekaboo-Analysis', \&ask_peekaboo, ["http://127.0.0.1:8100"]]
     );
 
     1;  # ensure a defined return

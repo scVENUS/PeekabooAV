@@ -24,24 +24,6 @@
 
 use strict;
 
-# define our own JSON-based protocol by plugging into AMaViS' AV control flow.
-# Standard ask_daemon call graph:
-#
-# virus_scan (iterate over active virus scanners)
-# -> ask_daemon (decide what protocol routine to use)
-# -> run_av (iterate over files, run scanner and collect results)
-# -> ask_daemon_internal (protocol routine: communicate with scanner)
-#
-# Our call graph:
-#
-# virus_scan
-# -> ask_peekaboo (force our protocol routine)
-# -> run_av
-# -> ask_peekaboo_internal (override query to JSON)
-# -> ask_daemon_internal
-#
-# See below for reasoning.
-
 # use pure-perl implementation since performance should be enough for our needs
 # and it's been a core module since 5.14, avoiding an additional dependency on
 # JSON or JSON::XS
@@ -71,8 +53,9 @@ my $amavis_mime_traverse = \&Amavis::Unpackers::MIME::mime_traverse;
   }
 };
 
-sub ask_peekaboo_internal {
-  my ($url, $dummy, $names_to_parts, $dummy) = @_;
+sub ask_peekaboo {
+  my($dummy, $names_to_parts, $dummy, $av_name, $dummy, $args, $dummy,
+     $dummy, $dummy) = @_;
   my ( $rateNames, $rateValues );
 
   %$rateValues = ( "unchecked" => 1, "unknown" => 2, "ignored" => 3, "good" => 4, "failed" => 5, "bad" => 6 );
@@ -118,6 +101,7 @@ sub ask_peekaboo_internal {
   # prepare and run http reuqests to the peekaboo server and receive (wait) for the results
   my $ua = LWP::UserAgent->new();
   # note: we receive the url from @av_scanners ( 15-av_scanners )
+  my $url = $args[0];
   my $scanUrl = "${url}/v1/scan";
   my $reportUrlTmpl = "${url}/v1/report/JOB_ID";
 
@@ -232,24 +216,6 @@ sub ask_peekaboo_internal {
   #   (it is guaranteed the list will be nonempty if virus was found)
 
   return ( $ret, $resultText );
-}
-
-# force run_av to execute our protocol routine so we can generate the final
-# JSON request structure there. We cannot do it here because run_av will expand
-# special placeholders {} and * in the query template and corrupt our JSON if
-# it contains those, either because of empty hashes formatted as {} or just a
-# simple file name containing the sequence.
-sub ask_peekaboo {
-  my (@run_av_args) = @_;
-
-  # be sure to patch a copy and not @_ because this would change the referenced
-  # call parameter and make the next call to us go directly to _internal
-  # instead, resulting in error messages like: Peekaboo-Analysis av-scanner
-  # FAILED: Can't use string ("/var/lib/amavis/tmp/amavis-20180"...) as a HASH
-  # ref while "strict refs" in use at /etc/amavis/conf.d/10-ask_peekaboo line
-  # 61.
-  $run_av_args[4] = \&ask_peekaboo_internal;
-  Amavis::AV::run_av(@run_av_args);
 }
 
 1;  # ensure a defined return value
