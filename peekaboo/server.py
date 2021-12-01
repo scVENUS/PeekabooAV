@@ -158,7 +158,12 @@ class PeekabooServer:
     def serve(self):
         """ Serves requests until shutdown is requested from the outside. """
         self.server = self.loop.run_until_complete(self.server_coroutine)
-        self.loop.run_until_complete(self.server.startup())
+
+        # sanic 21.9 introduced an explicit startup that finalizes the app,
+        # particularly the request routing. So we need to run it if present.
+        if hasattr(self.server, 'startup'):
+            self.loop.run_until_complete(self.server.startup())
+
         self.loop.run_until_complete(self.server.start_serving())
         logger.info('Peekaboo server is now listening on %s:%d',
                     self.host, self.port)
