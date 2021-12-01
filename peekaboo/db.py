@@ -138,7 +138,8 @@ class PeekabooDatabase:
     """ Peekaboo's database. """
     def __init__(self, db_url, instance_id=0,
                  stale_in_flight_threshold=15*60,
-                 log_level=logging.WARNING):
+                 log_level=logging.WARNING,
+                 async_driver=None):
         """
         Initialize the Peekaboo database handler.
 
@@ -154,6 +155,8 @@ class PeekabooDatabase:
                           idea is for the database to be silent by default and
                           only emit log messages if switched on explictly and
                           independently of the Peekaboo log level.
+        @param async_driver: last resort override of the asyncio driver
+                             auto-detection
         """
         logging.getLogger('sqlalchemy.engine').setLevel(log_level)
         # aiosqlite picks up the global log level unconditionally so we need to
@@ -175,10 +178,13 @@ class PeekabooDatabase:
         # <backend>[+<driver>]:// -> <backend>
         backend = db_url.split(':')[0].split('+')[0]
 
-        drivers = asyncio_drivers.get(backend)
-        if drivers is None:
-            raise PeekabooDatabaseError(
-                'Unknown database backend configured: %s' % backend)
+        if async_driver is not None:
+            drivers = [async_driver]
+        else:
+            drivers = asyncio_drivers.get(backend)
+            if drivers is None:
+                raise PeekabooDatabaseError(
+                    'Unknown database backend configured: %s' % backend)
 
         async_engine = None
         for driver in drivers:

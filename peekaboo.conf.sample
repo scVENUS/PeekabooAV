@@ -55,6 +55,10 @@
 # PostgreSQL
 # url             :    postgresql://user:password@host:port/database
 
+# as a last resort it's possible to override the driver for asyncio database
+# accesses if auto-detection fails.
+# async_driver: aiosqlite
+
 # Enable additional logging by the SQLAlchemy database module beyond Peekaboo's
 # own logging. Can be considered another set of debug logging even beyond
 # Peekaboo's DEBUG log level.

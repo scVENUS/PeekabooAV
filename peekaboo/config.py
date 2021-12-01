@@ -374,6 +374,7 @@ class PeekabooConfig(PeekabooConfigParser):
         self.processing_info_dir = '/var/lib/peekaboo/malware_reports'
         self.report_locale = None
         self.db_url = 'sqlite:////var/lib/peekaboo/peekaboo.db'
+        self.db_async_driver = None
         self.db_log_level = logging.WARNING
         self.config_file = '/opt/peekaboo/etc/peekaboo.conf'
         self.ruleset_config = '/opt/peekaboo/etc/ruleset.conf'
@@ -398,6 +399,7 @@ class PeekabooConfig(PeekabooConfigParser):
             'processing_info_dir': ['global', 'processing_info_dir'],
             'report_locale': ['global', 'report_locale'],
             'db_url': ['db', 'url'],
+            'db_async_driver': ['db', 'async_driver'],
             'db_log_level': ['db', 'log_level', self.LOG_LEVEL],
             'ruleset_config': ['ruleset', 'config'],
             'analyzer_config': ['analyzers', 'config'],
