@@ -196,6 +196,7 @@ class TestDefaultConfig(unittest.TestCase):
             self.config.log_format, '%(asctime)s - %(name)s - '
             '(%(threadName)s) - %(levelname)s - %(message)s')
         self.assertEqual(self.config.db_url, 'sqlite:////var/lib/peekaboo/peekaboo.db')
+        self.assertEqual(self.config.db_log_level, logging.WARNING)
         self.assertEqual(self.config.cluster_instance_id, 0)
         self.assertEqual(self.config.cluster_stale_in_flight_threshold, 15*60)
         self.assertEqual(self.config.cluster_duplicate_check_interval, 60)
@@ -228,6 +229,7 @@ log_format       :    format%%(foo1)s
 
 [db]
 url              :    sqlite:////peekaboo.db1
+log_level        :    INFO
 
 [cluster]
 instance_id: 12
@@ -254,6 +256,7 @@ duplicate_check_interval: 61
         self.assertEqual(self.config.log_level, logging.DEBUG)
         self.assertEqual(self.config.log_format, 'format%(foo1)s')
         self.assertEqual(self.config.db_url, 'sqlite:////peekaboo.db1')
+        self.assertEqual(self.config.db_log_level, logging.INFO)
         self.assertEqual(self.config.cluster_instance_id, 12)
         self.assertEqual(self.config.cluster_stale_in_flight_threshold, 31)
         self.assertEqual(self.config.cluster_duplicate_check_interval, 61)

@@ -145,6 +145,10 @@ class PeekabooDatabase:
                             to worry about.
         @param stale_in_flight_threshold: Number of seconds after which a in
         flight marker is considered stale and deleted or ignored.
+        @param log_level: Overrides the log level of the database modules. The
+                          idea is for the database to be silent by default and
+                          only emit log messages if switched on explictly and
+                          independently of the Peekaboo log level.
         """
         logging.getLogger('sqlalchemy.engine').setLevel(log_level)
 
