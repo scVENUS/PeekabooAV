@@ -45,17 +45,20 @@ logger = logging.getLogger(__name__)
 
 class PeekabooUtil:
     """ Utility fo interface with Peekaboo API over the socket connection """
-    def __init__(self, url, polling_interval):
+    def __init__(self, url, polling_interval, timeout):
         logger.debug('Initialising PeekabooUtil')
         logger.debug('Opening connection %s', url)
         self.url = url
         self.polling_interval = polling_interval
+        self.timeout = timeout
 
     def ping(self, _):
         """ Send ping request to daemon and optionally print response. """
         logger.debug("Sending ping...")
         try:
-            r = requests.get(urllib.parse.urljoin(self.url, "/ping"))
+            r = requests.get(
+                urllib.parse.urljoin(self.url, "/ping"),
+                timeout=self.timeout)
             pong = r.json()
         except socket.error as error:
             logger.error("Error communicating with daemon: %s", error)
@@ -110,7 +113,8 @@ class PeekabooUtil:
                 headers = {'x-content-disposition': content_disposition}
 
                 response = requests.post(urllib.parse.urljoin(
-                    self.url, '/v1/scan'), files=files, headers=headers)
+                    self.url, '/v1/scan'), files=files, headers=headers,
+                    timeout=self.timeout)
 
             json_resp = response.json()
             job_id = json_resp['job_id']
@@ -123,7 +127,7 @@ class PeekabooUtil:
             jobs_left = []
             for job in jobs:
                 response = requests.get(urllib.parse.urljoin(
-                    self.url, f'/v1/report/{job}'))
+                    self.url, f'/v1/report/{job}'), timeout=self.timeout)
 
                 if response.status_code == 404:
                     jobs_left.append(job)
@@ -193,11 +197,9 @@ def main():
     if args.verbose2 or args.debug:
         logger.setLevel(logging.DEBUG)
 
-    if args.timeout:
-        socket.setdefaulttimeout(args.timeout)
-
     try:
-        util = PeekabooUtil(args.remote_url, args.polling_interval)
+        util = PeekabooUtil(
+            args.remote_url, args.polling_interval, args.timeout)
     except socket.error as error:
         logger.error("Error connecting to peekaboo: %s", error)
         return 2
