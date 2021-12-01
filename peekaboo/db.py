@@ -27,7 +27,6 @@ SQLAlchemy. """
 
 import asyncio
 import random
-import re
 import time
 import threading
 import logging
@@ -167,12 +166,41 @@ class PeekabooDatabase:
         self.__lock = threading.RLock()
         self.__async_lock = asyncio.Lock()
 
-        async_db_url = re.sub(
-            r'sqlite(\+[a-z]+)?:///', 'sqlite+aiosqlite:///', re.sub(
-            r'mysql(\+[a-z]+)?://', 'mysql+asyncmy://', re.sub(
-            r'postgresql(\+[a-z]+)?://', 'postgresql+asyncpg://',
-            db_url)))
-        async_engine = sqlalchemy.ext.asyncio.create_async_engine(async_db_url)
+        asyncio_drivers = {
+            'sqlite': ['aiosqlite'],
+            'mysql': ['asyncmy', 'aiomysql'],
+            'postgresql': ['asyncpg'],
+        }
+
+        # <backend>[+<driver>]:// -> <backend>
+        backend = db_url.split(':')[0].split('+')[0]
+
+        drivers = asyncio_drivers.get(backend)
+        if drivers is None:
+            raise PeekabooDatabaseError(
+                'Unknown database backend configured: %s' % backend)
+
+        async_engine = None
+        for driver in drivers:
+            # replace backend and driver with our asyncio alternative
+            scheme = "%s+%s" % (backend, driver)
+            async_db_url = ':'.join([scheme] + db_url.split(':')[1:])
+
+            try:
+                async_engine = sqlalchemy.ext.asyncio.create_async_engine(
+                    async_db_url)
+            except ModuleNotFoundError:
+                continue
+
+            logger.debug('Auto-detected %s SQLAlchemy backend+driver for '
+                         'asyncio database accesses', scheme)
+            break
+
+        if async_engine is None:
+            raise PeekabooDatabaseError(
+                'None of the asyncio drivers for backend %s could be '
+                'found: %s' % (backend, drivers))
+
         self.__async_session_factory = sessionmaker(
             bind=async_engine,
             class_=sqlalchemy.ext.asyncio.AsyncSession)
