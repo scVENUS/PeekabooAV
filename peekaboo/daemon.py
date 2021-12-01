@@ -284,7 +284,7 @@ def run():
         db_con = PeekabooDatabase(
             db_url=config.db_url, instance_id=config.cluster_instance_id,
             stale_in_flight_threshold=config.cluster_stale_in_flight_threshold,
-            log_level=config.db_log_level)
+            log_level=config.db_log_level, async_driver=config.db_async_driver)
     except PeekabooDatabaseError as error:
         logging.critical(error)
         sys.exit(1)
