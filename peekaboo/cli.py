@@ -47,49 +47,9 @@ class PeekabooUtil:
     """ Utility fo interface with Peekaboo API over the socket connection """
     def __init__(self, url, polling_interval):
         logger.debug('Initialising PeekabooUtil')
-        self.peekaboo = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         logger.debug('Opening connection %s', url)
         self.url = url
         self.polling_interval = polling_interval
-        o = urllib.parse.urlparse(url)
-        self.peekaboo.connect((o.hostname, o.port))
-
-    def send_receive(self, request):
-        """ Send request to peekaboo and return its answer """
-        logger.debug('Sending request: %s', request)
-
-        self.peekaboo.send(request.encode('utf-8'))
-        logger.info('Waiting for response...')
-
-        buf = ''
-        while True:
-            data = self.peekaboo.recv(1024)
-            if data:
-                buf += data.decode('utf-8')
-            else:
-                self.peekaboo.close()
-                break
-        logger.debug('Received from peekaboo: %s', buf)
-        return buf
-
-    def send_receive_json(self, data):
-        """ Send and receive data in JSON format. """
-        request = json.dumps(data)
-        response = self.send_receive(request)
-        outdata = None
-        for line in response.splitlines():
-            try:
-                # try to parse and stop at first thing that parses
-                outdata = json.loads(line)
-                break
-            except ValueError:
-                # FIXME: daemon talks a mix of plain text and JSON. So for now
-                # we must ignore everything that doesn't parse. This includes
-                # errors.  We can't even employ a heuristic since all of those
-                # can be translated.
-                pass
-
-        return outdata
 
     def ping(self, _):
         """ Send ping request to daemon and optionally print response. """
@@ -119,18 +79,6 @@ class PeekabooUtil:
             return 2
 
         logger.info('Pong received.')
-        return 0
-
-    def raw(self, args):
-        """ Send raw data to the daemon and display response. """
-        logger.debug("Sending raw...")
-        try:
-            response = self.send_receive(args.json)
-        except socket.error as error:
-            logger.error("Error communicating with daemon: %s", error)
-            return 2
-
-        print(response)
         return 0
 
     def scan_file(self, args):
@@ -236,12 +184,6 @@ def main():
     ping_parser = subparsers.add_parser(
         'ping', help='Ping the daemon', parents=[parser])
     ping_parser.set_defaults(func=PeekabooUtil.ping)
-
-    raw_parser = subparsers.add_parser(
-        'raw', help='Send raw input to the daemon', parents=[parser])
-    raw_parser.add_argument('-j', '--json', action='store', required=True,
-                            help='Raw JSON to send to daemon')
-    raw_parser.set_defaults(func=PeekabooUtil.raw)
 
     args = global_parser.parse_args()
 
