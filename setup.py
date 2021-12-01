@@ -44,9 +44,15 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
 with open(path.join(here, 'requirements.txt'), encoding='utf-8') as f:
     all_reqs = f.read().split('\n')
 
-install_requires = [x.strip() for x in all_reqs if 'git+' not in x]
-dependency_links = [x.strip().replace('git+', '')
-                    for x in all_reqs if 'git+' not in x]
+install_requires = []
+for req in all_reqs:
+    # for git repo references, extract the egg/package name from the end and
+    # prepend it with @ as per pip Github issue 3939
+    if 'git+' in req:
+        egg = req.split('=')[-1]
+        req = "%s @ %s" % (egg, req)
+
+    install_requires.append(req.strip())
 
 setup(
     name='PeekabooAV',
@@ -115,7 +121,6 @@ setup(
     author=__author__,
     python_requires='>=3.6',
     install_requires=install_requires,
-    dependency_links=dependency_links,
     author_email='felix.bauer@atos.net',
     entry_points={
         'console_scripts': [
