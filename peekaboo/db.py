@@ -103,7 +103,8 @@ class SampleInfo(Base):
     # - general considerations: The table grows very large over time. Every
     #   sample is checked against it to find a cached analysis result.
     #   Otherwise it's quite unused currently.
-    # - compound: we frequently search by sha256sum and file extension
+    # - compound: we fetch the analsysis journal by id, state, result,
+    #   sha256sum and file extension
 
     id = Column(Integer, primary_key=True)
     state = Column(Enum(JobState), nullable=False)
@@ -115,8 +116,9 @@ class SampleInfo(Base):
     reason = Column(Text, nullable=True)
 
     __table_args__ = (
-        Index('ix_%s_sha_fe' % __tablename__, sha256sum, file_extension),
-        )
+        Index('ix_%s_id_st_re_sha_fe' % __tablename__,
+              id, state, result, sha256sum, file_extension),
+    )
 
     def __str__(self):
         return ('<SampleInfo(sample_sha256_hash="%s", file_extension="%s", '
