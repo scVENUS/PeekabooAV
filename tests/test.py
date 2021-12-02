@@ -391,7 +391,7 @@ class TestDatabase(unittest.TestCase):
                                              instance_id=0)
         cls.sample = Sample(b'test', 'test.py')
         result = RuleResult('Unittest',
-                            Result.failed,
+                            Result.good,
                             'This is just a test case.',
                             further_analysis=False)
         cls.sample.add_rule_result(result)
@@ -417,18 +417,32 @@ class TestDatabase(unittest.TestCase):
         # mark sample done so journal and result retrieval tests can work
         self.sample.mark_done()
         self.db_con.analysis_update(self.sample)
+
+        # add a failed analysis to check that it is ignored
+        result = RuleResult('Unittest',
+                            Result.failed,
+                            'This is just a test case.',
+                            further_analysis=False)
+        self.sample.add_rule_result(result)
+        self.loop.run_until_complete(
+            self.db_con.analysis_add(self.sample))
+        self.sample.mark_done()
+        self.db_con.analysis_update(self.sample)
+
         # reset the job id so this sample is not ignored when fetching the
         # journal
         self.sample.update_id(None)
 
         journal = self.db_con.analysis_journal_fetch_journal(self.sample)
-        self.assertEqual(journal[0].result, Result.failed)
+        self.assertEqual(journal[0].result, Result.good)
         self.assertEqual(journal[0].reason, 'This is just a test case.')
         self.assertIsNotNone(journal[0].analysis_time)
-        self.assertEqual(journal[1].result, Result.failed)
+        self.assertEqual(journal[1].result, Result.good)
         self.assertEqual(journal[1].reason, 'This is just a test case.')
         self.assertIsNotNone(journal[1].analysis_time)
         self.assertNotEqual(journal[0].analysis_time, journal[1].analysis_time)
+        # does not contain the failed result
+        self.assertEqual(len(journal), 2)
 
     def test_4_analysis_retrieve(self):
         """ Test retrieval of analysis results. """
@@ -437,6 +451,7 @@ class TestDatabase(unittest.TestCase):
         # sample now contains a job ID
         reason, result = self.loop.run_until_complete(
             self.db_con.analysis_retrieve(self.sample.id))
+        # does not ignore failed analyses like the journal above
         self.assertEqual(result, Result.failed)
         self.assertEqual(reason, 'This is just a test case.')
 
@@ -1292,10 +1307,21 @@ unknown : baz'''
                                       stale_in_flight_threshold=10)
 
         sample = Sample(b'test', 'test.py')
-        failed_result = RuleResult(
-            'Unittest', Result.failed, 'This is just a test case.',
+        good_result = RuleResult(
+            'Unittest', Result.good, 'This is just a test case.',
             further_analysis=False)
-        sample.add_rule_result(failed_result)
+        sample.add_rule_result(good_result)
+        self.loop.run_until_complete(
+            db_con.analysis_add(sample))
+        sample.mark_done()
+        db_con.analysis_update(sample)
+
+        # add a failed analysis to check that it is ignored
+        result = RuleResult('Unittest',
+                            Result.failed,
+                            'This is just a test case.',
+                            further_analysis=False)
+        sample.add_rule_result(result)
         self.loop.run_until_complete(
             db_con.analysis_add(sample))
         sample.mark_done()
@@ -1306,7 +1332,7 @@ unknown : baz'''
 
         sample = Sample(b'test', 'test.py')
         result = rule.evaluate(sample)
-        self.assertEqual(result.result, Result.failed)
+        self.assertEqual(result.result, Result.good)
 
         sample = Sample(b'firsttest', 'first.a')
         result = rule.evaluate(sample)
@@ -1336,7 +1362,7 @@ unknown : baz'''
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.ignored)
 
-        sample.add_rule_result(failed_result)
+        sample.add_rule_result(good_result)
         self.loop.run_until_complete(
             db_con.analysis_add(sample))
         sample.mark_done()
@@ -1344,7 +1370,7 @@ unknown : baz'''
 
         sample = Sample(b'secondtest', 'second.b')
         result = rule.evaluate(sample)
-        self.assertEqual(result.result, Result.failed)
+        self.assertEqual(result.result, Result.good)
 
         os.unlink(test_db)
 
