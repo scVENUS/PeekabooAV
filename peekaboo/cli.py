@@ -150,27 +150,74 @@ class PeekabooUtil:
 
 def main():
     """ The peekaboo-util main program. """
-    parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument('-v', '--verbose', action='store_true', required=False,
-                        help='List results of all files not only bad ones')
-    parser.add_argument('-vv', '--verbose2', action='store_true', required=False,
-                        help='List detailed analysis results of every rule')
-    parser.add_argument('-d', '--debug', action='store_true', required=False,
-                        help='Output additional diagnostics')
-    parser.add_argument('-t', '--timeout', type=float, required=False,
-                        default=None, help='Communications timeout')
-    parser.add_argument('-i', '--polling-interval', type=int, required=False,
-                        default=5, help='Polling interval')
-    parser.add_argument('-r', '--remote-url', action='store', required=False,
-                        default='http://127.0.0.1:8100/v1/',
-                        help='URL to Peekaboo instance e.g. http://127.0.0.1:8100/v1/')
+    # do not use store_true and store_false because it initializes the dest to
+    # its opposite instead of None which interferes with our merging-down of
+    # global parser values if not specified per command
+    common_args = [
+        {
+            'args': ['-v', '--verbose'],
+            'kwargs': {
+                'action': 'store_const', 'const': True, 'required': False,
+                'help': 'List results of all files not only bad ones'},
+        }, {
+            'args': ['-vv', '--verbose2'],
+            'kwargs': {
+                'action': 'store_const', 'const': True, 'required': False,
+                'help': 'List detailed analysis results of every rule'},
+        }, {
+            'args': ['-d', '--debug'],
+            'kwargs': {
+                'action': 'store_const', 'const': True, 'required': False,
+                'help': 'Output additional diagnostics'},
+        }, {
+            'args': ['-t', '--timeout'],
+            'kwargs': {
+                'type': float, 'required': False, 'default': None,
+                'help': 'Communications timeout'},
+        }, {
+            'args': ['-i', '--polling-interval'],
+            'kwargs': {
+                'type': int, 'required': False, 'default': 5,
+                'help': 'Polling interval'},
+        }, {
+            'args': ['-r', '--remote-url'],
+            'kwargs': {
+                'action': 'store', 'required': False,
+                'default': 'http://127.0.0.1:8100/v1/',
+                'help': 'URL to Peekaboo instance e.g. '
+                        'http://127.0.0.1:8100/v1/'},
+        }
+    ]
 
-    global_parser = argparse.ArgumentParser(parents=[parser])
-    global_parser.set_defaults(func=PeekabooUtil.ping)
+    # using the common parser as parent to the command parser does not work as
+    # the subcommand arguments will completely replace the command parser
+    # defaults and values even if not specified on the command line
+    common_parser = argparse.ArgumentParser(add_help=False)
+    command_parser = argparse.ArgumentParser()
+    for common_arg in common_args:
+        args, kwargs = common_arg['args'], common_arg['kwargs']
+        global_kwargs = kwargs.copy()
 
-    subparsers = global_parser.add_subparsers(help='commands')
+        # subcommands args must not have defaults for the global args and
+        # potentially their defaults to be queried
+        kwargs.pop('default', None)
+        common_parser.add_argument(*args, **kwargs)
+
+        # again, dest can not be the same because the subparser arguments will
+        # completely replace the command parser value and defaults even if not
+        # specified on the command line
+        dest = kwargs.get('dest')
+        if dest is None:
+            dest = args[1].lstrip('-').replace('-', '_')
+        common_arg['dest'] = dest
+        global_kwargs['dest'] = "global_%s" % dest
+        command_parser.add_argument(*args, **global_kwargs)
+
+    command_parser.set_defaults(func=PeekabooUtil.ping)
+
+    subparsers = command_parser.add_subparsers(help='commands')
     scan_file_parser = subparsers.add_parser(
-        'scan-file', help='Scan a file and report it', parents=[parser])
+        'scan-file', help='Scan a file and report it', parents=[common_parser])
     scan_file_parser.add_argument('-f', '--filename', action='append', required=True,
                                   help='Path to the file to scan. Can be given more '
                                        'than once to scan multiple files.')
@@ -186,10 +233,20 @@ def main():
     scan_file_parser.set_defaults(func=PeekabooUtil.scan_file)
 
     ping_parser = subparsers.add_parser(
-        'ping', help='Ping the daemon', parents=[parser])
+        'ping', help='Ping the daemon', parents=[common_parser])
     ping_parser.set_defaults(func=PeekabooUtil.ping)
 
-    args = global_parser.parse_args()
+    args = command_parser.parse_args()
+
+    # merge down global values or defaults
+    for common_arg in common_args:
+        dest = common_arg['dest']
+
+        # dest is not present if no subcommand was specified, so check with
+        # hasattr as well
+        if not hasattr(args, dest) or getattr(args, dest) is None:
+            global_value = getattr(args, "global_%s" % dest)
+            setattr(args, dest, global_value)
 
     logger.setLevel(logging.ERROR)
     if args.verbose:
