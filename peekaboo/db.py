@@ -35,6 +35,7 @@ from sqlalchemy import Column, Integer, String, Text, DateTime, \
         Enum, Index
 import sqlalchemy.sql.expression
 import sqlalchemy.ext.asyncio
+import sqlalchemy.pool
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.engine import create_engine
 from sqlalchemy.orm import sessionmaker, scoped_session
@@ -161,6 +162,7 @@ class PeekabooDatabase:
                              auto-detection
         """
         logging.getLogger('sqlalchemy.engine').setLevel(log_level)
+        logging.getLogger('sqlalchemy.pool').setLevel(log_level)
         # aiosqlite picks up the global log level unconditionally so we need to
         # override it as well and explicitly
         logging.getLogger('aiosqlite').setLevel(log_level)
@@ -169,7 +171,6 @@ class PeekabooDatabase:
         session_factory = sessionmaker(bind=self.__engine)
         self.__session = scoped_session(session_factory)
         self.__lock = threading.RLock()
-        self.__async_lock = asyncio.Lock()
 
         asyncio_drivers = {
             'sqlite': ['aiosqlite'],
@@ -189,6 +190,7 @@ class PeekabooDatabase:
                     'Unknown database backend configured: %s' % backend)
 
         async_engine = None
+        async_db_url = None
         for driver in drivers:
             # replace backend and driver with our asyncio alternative
             scheme = "%s+%s" % (backend, driver)
@@ -213,6 +215,18 @@ class PeekabooDatabase:
             bind=async_engine,
             class_=sqlalchemy.ext.asyncio.AsyncSession)
         # no scoping necessary as we're not using asyncio across threads
+
+        # special handling for sqlite: since it does not respond well to
+        # multiple modify operations in parallel to the same database, we
+        # serialise them through a QueuePool with only one connection
+        self.__async_session_factory_modify = self.__async_session_factory
+        if backend in ['sqlite']:
+            async_engine_modify = sqlalchemy.ext.asyncio.create_async_engine(
+                async_db_url, poolclass=sqlalchemy.pool.AsyncAdaptedQueuePool,
+                pool_size=1, max_overflow=0)
+            self.__async_session_factory_modify = sessionmaker(
+                bind=async_engine_modify,
+                class_=sqlalchemy.ext.asyncio.AsyncSession)
 
         self.instance_id = instance_id
         self.stale_in_flight_threshold = stale_in_flight_threshold
@@ -315,26 +329,26 @@ class PeekabooDatabase:
         attempt = 1
         delay = 0
         while attempt <= self.retries:
-            async with self.__async_lock:
-                async with self.__async_session_factory() as session:
-                    session.add(sample_info)
-                    try:
-                        # flush to retrieve the automatically assigned primary
-                        # key value
-                        await session.flush()
-                        job_id = sample_info.id
-                        await session.commit()
-                        break
-                    except (OperationalError, DBAPIError,
-                            SQLAlchemyError) as error:
-                        await session.rollback()
+            async with self.__async_session_factory_modify() as session:
+                session.add(sample_info)
+                try:
+                    # flush to retrieve the automatically assigned primary
+                    # key value
+                    await session.flush()
+                    job_id = sample_info.id
+                    await session.commit()
+                    break
+                except (OperationalError, DBAPIError,
+                        SQLAlchemyError) as error:
+                    await session.rollback()
 
-                        attempt, delay = self.was_transient_error(
-                            error, attempt, 'adding analysis')
+                    attempt, delay = self.was_transient_error(
+                       error, attempt, 'adding analysis')
 
-                        if attempt < 0:
-                            raise PeekabooDatabaseError(
-                                'Failed to add analysis task to the database: %s' % error)
+                    if attempt < 0:
+                        raise PeekabooDatabaseError(
+                            'Failed to add analysis task to the database: %s' %
+                            error)
 
             await asyncio.sleep(delay)
 
