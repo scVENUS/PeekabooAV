@@ -385,10 +385,9 @@ class Sample:
         self.__knowntools_report = report
 
     def __str__(self):
-        return ("<Sample(filename='%s',"
-                " result='%s', sha256sum='%s')>"
-                % (self.__filename,
-                   self.__result,
-                   self.sha256sum))
+        """ A string representation with selected information for positive
+        identification. ID should be enough but may be uninitialised. Should
+        not modify object state, i.e. should not use properties. """
+        return f"<Sample(id='{self.__id}')>"
 
     __repr__ = __str__
