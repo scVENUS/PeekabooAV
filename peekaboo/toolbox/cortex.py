@@ -697,7 +697,7 @@ class Cortex:
                            'invalid data: %s', error)
             job.sample.mark_cortex_failure()
 
-        self.job_queue.submit(job.sample, self.__class__)
+        self.job_queue.submit(job.sample)
         return None
 
     def resubmit_as_failed(self, job_id):
@@ -712,7 +712,7 @@ class Cortex:
             logger.warning("Dropped job %s because it has failed in Cortex",
                            job_id)
             job.sample.mark_cortex_failure()
-            self.job_queue.submit(job.sample, self.__class__)
+            self.job_queue.submit(job.sample)
 
     def resubmit_as_failed_if_too_old(self, job_id, max_age):
         """ Resubmit a sample to the job queue with a failure report if the
@@ -728,7 +728,7 @@ class Cortex:
             logger.warning("Dropped job %s because it has been running for "
                            "too long", job_id)
             job.sample.mark_cortex_failure()
-            self.job_queue.submit(job.sample, self.__class__)
+            self.job_queue.submit(job.sample)
 
     def submit(self, sample, analyzer):
         """ Submit a sample to Cortex for analysis.

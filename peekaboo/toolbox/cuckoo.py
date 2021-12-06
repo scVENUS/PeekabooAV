@@ -280,7 +280,7 @@ class Cuckoo:
                                'invalid data: %s', err)
                 sample.mark_cuckoo_failure()
 
-        self.job_queue.submit(sample, self.__class__)
+        self.job_queue.submit(sample)
         return None
 
     def resubmit_as_failed_if_too_old(self, job_id, max_age):
@@ -297,7 +297,7 @@ class Cuckoo:
             logger.warning("Dropped job %d because it has been running for "
                            "too long", job_id)
             sample.mark_cuckoo_failure()
-            self.job_queue.submit(sample, self.__class__)
+            self.job_queue.submit(sample)
 
     def submit(self, sample):
         """ Submit a sample to Cuckoo for analysis.

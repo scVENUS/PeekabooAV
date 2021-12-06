@@ -134,15 +134,13 @@ class JobQueue:
             self.close_down()
             raise PeekabooConfigException(error)
 
-    def submit(self, sample, submitter):
+    def submit(self, sample):
         """
         Adds a Sample object to the job queue.
         If the queue is full, we block for 300 seconds and then throw an
         exception.
 
         @param sample: The Sample object to add to the queue.
-        @param submitter: The name of the class / module that wants to submit
-                          the sample.
         @raises Full: if the queue is full.
         """
         sample_hash = sample.sha256sum
@@ -194,20 +192,16 @@ class JobQueue:
 
         if duplicate is not None:
             logger.debug(
-                "%d: Sample from %s is duplicate and waiting for running "
-                "analysis to finish", duplicate, submitter)
+                "%d: Sample is duplicate and waiting for running analysis "
+                "to finish", duplicate)
         elif cluster_duplicate is not None:
             logger.debug(
-                "%d: Sample from %s is concurrently processed by another "
-                "instance and held", cluster_duplicate, submitter)
+                "%d: Sample is concurrently processed by another instance "
+                "and held", cluster_duplicate)
         elif resubmit is not None:
-            logger.debug(
-                "%d: Resubmitted sample to job queue for %s",
-                resubmit, submitter)
+            logger.debug("%d: Resubmitted sample to job queue", resubmit)
         else:
-            logger.debug(
-                "%d: New sample submitted to job queue by %s.",
-                sample.id, submitter)
+            logger.debug("%d: New sample submitted to job queue", sample.id)
 
         return True
 
