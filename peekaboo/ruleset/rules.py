@@ -485,7 +485,7 @@ class CuckooEvilSigRule(CuckooRule):
                                _("No signature suggesting malware detected"),
                                True)
 
-        matched = ''.ljust(8).join(["%s\n" % s for s in matched_bad_sigs])
+        matched = ", ".join(matched_bad_sigs)
         return self.result(Result.bad,
                            _("The following signatures have been recognized: "
                              "%s") % matched,
