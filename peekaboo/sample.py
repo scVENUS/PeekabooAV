@@ -170,8 +170,9 @@ class Sample:
         """ Add a rule result to the sample. This also adds a message about
         this to the report and updates the overall analysis result (so far).
         """
-        logger.debug("%d: Adding rule result %s", self.__id, res)
-        self.__report.append(_("File \"%s\": %s") % (self.__filename, res))
+        res_str = "%s" % res
+        logger.debug("%d: Adding rule result %s", self.__id, res_str)
+        self.__report.append(res_str)
 
         logger.debug("%d: Current overall result: %s, new rule result: %s",
                      self.__id, self.__result, res.result)
