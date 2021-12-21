@@ -133,16 +133,36 @@ class PeekabooUtil:
         print(response)
         return 0
 
-    def scan_file(self, filenames):
+    def scan_file(self, filenames, content_types, content_dispositions):
         """ Scan the supplied filenames with peekaboo and output result """
         jobs = []
         for filename in filenames:
+            logger.debug('Submitting file %s', filename)
+
+            content_type = None
+            if content_types:
+                ct_popped = content_types.pop(0)
+                # empty string is treated as no selection to allow specificaion
+                # for later file arguments still
+                if ct_popped:
+                    content_type = ct_popped
+                    logger.debug('Using content type %s', content_type)
+
+            content_disposition = None
+            if content_dispositions:
+                cd_popped = content_dispositions.pop(0)
+                if cd_popped:
+                    content_disposition = cd_popped
+                    logger.debug(
+                        'Using content disposition %s', content_disposition)
+
             with open(filename, 'rb') as upload_file:
                 submit_name = os.path.basename(filename)
-                files = {'file': (submit_name, upload_file)}
+                files = {'file': (submit_name, upload_file, content_type)}
+                headers = {'x-content-disposition': content_disposition}
 
                 response = requests.post(urllib.parse.urljoin(
-                    self.url, '/v1/scan'), files=files)
+                    self.url, '/v1/scan'), files=files, headers=headers)
 
             json_resp = response.json()
             job_id = json_resp['job_id']
@@ -200,6 +220,15 @@ def main():
     scan_file_parser.add_argument('-f', '--filename', action='append', required=True,
                                   help='Path to the file to scan. Can be given more '
                                        'than once to scan multiple files.')
+    scan_file_parser.add_argument(
+        '-c', '--content-type', action='append', required=False,
+        help='Content type of file to scan. Can be given more than once and '
+        'has to match the file list in order.')
+    scan_file_parser.add_argument(
+        '-o', '--content-disposition', action='append', required=False,
+        help='Content disposition of file to scan. Can be given more than '
+        'once and has to match the file list in order.')
+
     scan_file_parser.set_defaults(func=command_scan_file)
 
     ping_parser = subparsers.add_parser('ping', help='Ping the daemon')
@@ -233,7 +262,8 @@ def main():
 
 def command_scan_file(util, args):
     """ Handler for command scan_file """
-    return util.scan_file(args.filename)
+    return util.scan_file(
+        args.filename, args.content_type, args.content_disposition)
 
 
 def command_ping(util, _):
