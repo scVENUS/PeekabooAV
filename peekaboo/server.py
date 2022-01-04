@@ -57,7 +57,12 @@ class PeekabooServer:
         @type request_queue_size: int
         """
         logger.debug('Starting up server.')
-        self.app = sanic.Sanic("PeekabooAV")
+        self.app = sanic.Sanic("PeekabooAV", configure_logging=False)
+
+        # silence sanic to a reasonable amount
+        logging.getLogger('sanic.root').setLevel(logging.WARNING)
+        logging.getLogger('sanic.access').setLevel(logging.WARNING)
+
         self.loop = asyncio.get_event_loop()
         self.server_coroutine = self.app.create_server(
             host=host, port=port, return_asyncio_server=True,
