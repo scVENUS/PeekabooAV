@@ -167,7 +167,15 @@ class PeekabooDatabase:
         # override it as well and explicitly
         logging.getLogger('aiosqlite').setLevel(log_level)
 
-        self.__engine = create_engine(db_url, future=True)
+        # <backend>[+<driver>]:// -> <backend>
+        backend = db_url.split(':')[0].split('+')[0]
+
+        connect_args = {}
+        if backend == 'sqlite':
+            connect_args['timeout'] = 0
+
+        self.__engine = create_engine(
+            db_url, future=True, connect_args=connect_args)
         session_factory = sessionmaker(bind=self.__engine)
         self.__session = scoped_session(session_factory)
         self.__lock = threading.RLock()
@@ -177,9 +185,6 @@ class PeekabooDatabase:
             'mysql': ['asyncmy', 'aiomysql'],
             'postgresql': ['asyncpg'],
         }
-
-        # <backend>[+<driver>]:// -> <backend>
-        backend = db_url.split(':')[0].split('+')[0]
 
         if async_driver is not None:
             drivers = [async_driver]
@@ -198,7 +203,7 @@ class PeekabooDatabase:
 
             try:
                 async_engine = sqlalchemy.ext.asyncio.create_async_engine(
-                    async_db_url)
+                    async_db_url, connect_args=connect_args)
             except ModuleNotFoundError:
                 continue
 
@@ -299,7 +304,9 @@ class PeekabooDatabase:
 
         # (MySQLdb._exceptions.OperationalError) (1213, 'Deadlock
         # found when trying to get lock; try restarting transaction')
-        if (isinstance(args, tuple) and len(args) > 0 and args[0] in [1213]):
+        # (sqlite3.OperationalError) database is locked
+        if (isinstance(args, tuple) and len(args) > 0 and
+                args[0] in [1213, 'database is locked']):
             # sleep some millisecs
             maxmsecs = self.deadlock_backoff_base * 2**attempt
             backoff = random.randint(maxmsecs/2, maxmsecs)
