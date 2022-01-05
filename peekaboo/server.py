@@ -67,7 +67,6 @@ class PeekabooServer:
         logging.getLogger('sanic.root').setLevel(logging.WARNING)
         logging.getLogger('sanic.access').setLevel(logging.WARNING)
 
-        self.loop = asyncio.get_event_loop()
         self.server_coroutine = self.app.create_server(
             host=host, port=port, return_asyncio_server=True,
             backlog=request_queue_size,
@@ -227,7 +226,7 @@ class PeekabooServer:
             return sanic.response.json(
                 {'message': 'Failed to add analysis to database'}, 500)
 
-        if not self.job_queue.submit(sample):
+        if not await self.job_queue.submit(sample):
             logger.error('Error submitting sample to job queue')
             return sanic.response.json(
                 {'message': 'Error submitting sample to job queue'}, 500)
@@ -270,19 +269,19 @@ class PeekabooServer:
             # 'report': report,
             }, 200)
 
-    def serve(self):
+    async def serve(self):
         """ Serves requests until shutdown is requested from the outside. """
-        self.server = self.loop.run_until_complete(self.server_coroutine)
+        self.server = await self.server_coroutine
 
         # sanic 21.9 introduced an explicit startup that finalizes the app,
         # particularly the request routing. So we need to run it if present.
         if hasattr(self.server, 'startup'):
-            self.loop.run_until_complete(self.server.startup())
+            await self.server.startup()
 
-        self.loop.run_until_complete(self.server.start_serving())
+        await self.server.start_serving()
         logger.info('Peekaboo server is now listening on %s:%d',
                     self.host, self.port)
-        self.loop.run_until_complete(self.server.wait_closed())
+        await self.server.wait_closed()
         logger.debug('Server shut down.')
 
     def shut_down(self):

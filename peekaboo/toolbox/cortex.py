@@ -25,12 +25,12 @@
 
 """ Interface to Cortex. """
 
+import asyncio
 import datetime
 import http.cookiejar
 import json
 import logging
 import os
-import threading
 import urllib.parse
 import enum
 
@@ -595,11 +595,7 @@ class Cortex:
         @type backoff: float
         """
         self.job_queue = job_queue
-        self.shutdown_requested = threading.Event()
-        self.shutdown_requested.clear()
         self.running_jobs = {}
-        # reentrant because we're doing nested calls within critical sections
-        self.running_jobs_lock = threading.RLock()
         self.url = url
         self.tlp = tlp
         self.poll_interval = poll_interval
@@ -659,17 +655,16 @@ class Cortex:
 
         @returns: None
         @raises: CortexSubmitFailedException on job id collision """
-        with self.running_jobs_lock:
-            if (job_id in self.running_jobs and
-                    self.running_jobs[job_id] is not job):
-                logger.warning(
-                    '%d: A job with ID %s already registered as running '
-                    'for different sample %d will be marked failed',
-                    job.sample.id, job_id,
-                    self.running_jobs[job_id].sample.id)
-                self.resubmit_as_failed(job_id)
+        if (job_id in self.running_jobs and
+                self.running_jobs[job_id] is not job):
+            logger.warning(
+                '%d: A job with ID %s already registered as running '
+                'for different sample %d will be marked failed',
+                job.sample.id, job_id,
+                self.running_jobs[job_id].sample.id)
+            self.resubmit_as_failed(job_id)
 
-            self.running_jobs[job_id] = job
+        self.running_jobs[job_id] = job
 
     def deregister_running_job(self, job_id):
         """ Deregister a running job by job id.
@@ -677,8 +672,7 @@ class Cortex:
         @param job_id: Cortex job ID of the job do deregister.
         @type job_id: string
         @returns: Sample object of the job or None if job not found. """
-        with self.running_jobs_lock:
-            return self.running_jobs.pop(job_id, None)
+        return self.running_jobs.pop(job_id, None)
 
     def deregister_running_job_if_too_old(self, job_id, max_age):
         """ Check if a job has gotten too old and remove it from the list of
@@ -687,13 +681,12 @@ class Cortex:
         @param job_id: Cortex job ID of the job do deregister.
         @type job_id: string
         @returns: Sample object of the job or None if job not found. """
-        with self.running_jobs_lock:
-            if self.running_jobs[job_id].is_older_than(max_age):
-                return self.deregister_running_job(job_id)
+        if self.running_jobs[job_id].is_older_than(max_age):
+            return self.deregister_running_job(job_id)
 
         return None
 
-    def resubmit_with_analyzer_report(self, job_id, report):
+    async def resubmit_with_analyzer_report(self, job_id, report):
         """ Resubmit a sample to the job queue after an analyzer report became
         available.
 
@@ -719,10 +712,10 @@ class Cortex:
                            'invalid data: %s', error)
             job.sample.mark_cortex_failure()
 
-        self.job_queue.submit(job.sample)
+        await self.job_queue.submit(job.sample)
         return None
 
-    def resubmit_as_failed(self, job_id):
+    async def resubmit_as_failed(self, job_id):
         """ Resubmit a sample to the job queue with a failure report if the
         Cortex job has failed for some reason.
 
@@ -732,9 +725,9 @@ class Cortex:
         job = self.deregister_running_job(job_id)
         if job is not None:
             job.sample.mark_cortex_failure()
-            self.job_queue.submit(job.sample)
+            await self.job_queue.submit(job.sample)
 
-    def resubmit_as_failed_if_too_old(self, job_id, max_age):
+    async def resubmit_as_failed_if_too_old(self, job_id, max_age):
         """ Resubmit a sample to the job queue with a failure report if the
         Cortex job has been running for too long.
 
@@ -748,7 +741,7 @@ class Cortex:
             logger.warning("Dropped job %s because it has been running for "
                            "too long", job_id)
             job.sample.mark_cortex_failure()
-            self.job_queue.submit(job.sample)
+            await self.job_queue.submit(job.sample)
 
     def submit(self, sample, analyzer):
         """ Submit a sample to Cortex for analysis.
@@ -818,16 +811,15 @@ class Cortex:
         self.register_running_job(job_id, CortexJob(sample, analyzer))
         return job_id
 
-    def start_tracker(self):
+    async def start_tracker(self):
         """ Start tracking running jobs in a separate thread. """
-        self.tracker = threading.Thread(target=self.track,
-                                        name="CortexJobTracker")
-        self.tracker.start()
+        self.tracker = asyncio.ensure_future(self.track())
+        self.tracker.set_name("CortexJobTracker")
         return True
 
-    def track(self):
+    async def track(self):
         """ Do the polling for finished jobs. """
-        while not self.shutdown_requested.wait(self.poll_interval):
+        while True:
             # no lock, atomic, copy() because keys() returns an iterable view
             # instead of a fresh new list in python3
             running_jobs = self.running_jobs.copy().keys()
@@ -889,16 +881,22 @@ class Cortex:
                 # same sample.
                 self.resubmit_as_failed_if_too_old(job_id, self.max_job_age)
 
+            await asyncio.sleep(self.poll_interval)
+
         logger.debug("Cortex job tracker shut down.")
 
     def shut_down(self):
         """ Request the module to shut down, used by the signal handler. """
         logger.debug("Cortex job tracker shutdown requested.")
-        self.shutdown_requested.set()
+        if self.tracker is not None:
+            self.tracker.cancel()
 
-    def close_down(self):
-        """ Close down tracker resources, particularly, wait for the thread to
+    async def close_down(self):
+        """ Close down tracker resources, particularly, wait for the task to
         terminate. """
-        if self.tracker:
-            self.tracker.join()
-            self.tracker = None
+        if self.tracker is not None:
+            try:
+                await self.tracker
+            # we cancelled the task so a CancelledError is expected
+            except asyncio.CancelledError:
+                pass

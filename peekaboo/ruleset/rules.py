@@ -80,7 +80,7 @@ class Rule:
         return RuleResult(self.rule_name, result=result, reason=reason,
                           further_analysis=further_analysis)
 
-    def evaluate(self, sample):
+    async def evaluate(self, sample):
         """ Evaluate a rule agaimst a sample. Findings are recorded in the
         sample or returned in the rule result. *Must not* change the rule
         object's internal state because it will be called by multiple workers
@@ -238,11 +238,11 @@ class KnownRule(Rule):
     a previous record of an identical sample sample. """
     rule_name = 'known'
 
-    def evaluate(self, sample):
+    async def evaluate(self, sample):
         """ Try to get information about the sample from the database. Return
         the old result and reason if found and advise the engine to stop
         processing. """
-        ktreport = self.get_knowntools_report(sample)
+        ktreport = await self.get_knowntools_report(sample)
         if ktreport.known:
             result, reason = ktreport.worst()
             return self.result(result, reason, False)
@@ -260,7 +260,7 @@ class FileLargerThanRule(Rule):
     def get_config(self):
         self.size_threshold = self.get_config_value('bytes', 5)
 
-    def evaluate(self, sample):
+    async def evaluate(self, sample):
         """ Evaluate whether the sample is larger than a certain threshold.
         Advise the engine to stop processing if the size is below the
         threshold. """
@@ -297,7 +297,7 @@ class FileTypeOnWhitelistRule(Rule):
 
         self.whitelist = set(whitelist)
 
-    def evaluate(self, sample):
+    async def evaluate(self, sample):
         """ Ignore the file only if *all* of its mime types are on the
         whitelist and we could determine at least one. """
         filereport = self.get_filetools_report(sample)
@@ -327,7 +327,7 @@ class FileTypeOnGreylistRule(Rule):
 
         self.greylist = set(greylist)
 
-    def evaluate(self, sample):
+    async def evaluate(self, sample):
         """ Continue analysis if any of the sample's MIME types are on the
         greylist or in case we don't have one. """
         filereport = self.get_filetools_report(sample)
@@ -348,7 +348,7 @@ class FileTypeOnGreylistRule(Rule):
 
 class OleRule(Rule):
     """ A common base class for rules that evaluate the Ole report. """
-    def evaluate(self, sample):
+    async def evaluate(self, sample):
         """ Report the sample as bad if it contains a macro. """
         # we always get a report, albeit a maybe empty one
         return self.evaluate_report(self.get_oletools_report(sample))
@@ -409,7 +409,7 @@ class CuckooRule(Rule):
     """ A common base class for rules that evaluate the Cuckoo report. """
     uses_cuckoo = True
 
-    def evaluate(self, sample):
+    async def evaluate(self, sample):
         """ If a report is present for the sample in question we call method
         evaluate_report() implemented by subclasses to evaluate it for
         findings. Otherwise we submit the sample to Cuckoo and raise
@@ -724,7 +724,7 @@ class ExpressionRule(Rule):
         context['variables'][identifier] = value
         return None
 
-    def evaluate(self, sample):
+    async def evaluate(self, sample):
         """ Match what rules report against our known result status names. """
         for ruleno, expression in enumerate(self.expressions):
             result = None
@@ -788,7 +788,7 @@ class FinalRule(Rule):
     """ A catch-all rule. """
     rule_name = 'final_rule'
 
-    def evaluate(self, sample):
+    async def evaluate(self, sample):
         """ Report an unknown analysis result indicating that nothing much can
         be said about the sample. """
         return self.result(Result.unknown,

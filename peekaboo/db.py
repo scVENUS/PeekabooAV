@@ -27,8 +27,6 @@ SQLAlchemy. """
 
 import asyncio
 import random
-import time
-import threading
 import logging
 from datetime import datetime, timedelta
 from sqlalchemy import Column, Integer, String, Text, DateTime, \
@@ -141,8 +139,7 @@ class PeekabooDatabase:
     """ Peekaboo's database. """
     def __init__(self, db_url, instance_id=0,
                  stale_in_flight_threshold=15*60,
-                 log_level=logging.WARNING,
-                 async_driver=None):
+                 log_level=logging.WARNING):
         """
         Initialize the Peekaboo database handler.
 
@@ -158,8 +155,6 @@ class PeekabooDatabase:
                           idea is for the database to be silent by default and
                           only emit log messages if switched on explictly and
                           independently of the Peekaboo log level.
-        @param async_driver: last resort override of the asyncio driver
-                             auto-detection
         """
         logging.getLogger('sqlalchemy.engine').setLevel(log_level)
         logging.getLogger('sqlalchemy.pool').setLevel(log_level)
@@ -168,17 +163,25 @@ class PeekabooDatabase:
         logging.getLogger('aiosqlite').setLevel(log_level)
 
         # <backend>[+<driver>]:// -> <backend>
-        backend = db_url.split(':')[0].split('+')[0]
+        url_parts = db_url.split(':')
+        scheme_parts = url_parts[0].split('+')
+        backend = scheme_parts[0]
 
-        connect_args = {}
+        engine_kwargs = {}
         if backend == 'sqlite':
-            connect_args['timeout'] = 0
+            engine_kwargs.update(dict(
+                poolclass=sqlalchemy.pool.AsyncAdaptedQueuePool,
+                pool_size=1, max_overflow=0, connect_args={'timeout': 0}))
 
-        self.__engine = create_engine(
-            db_url, future=True, connect_args=connect_args)
-        session_factory = sessionmaker(bind=self.__engine)
-        self.__session = scoped_session(session_factory)
-        self.__lock = threading.RLock()
+        # if there is no driver specified or its a known non-asyncio driver,
+        # try to find to a known-good asyncio driver
+        sync_drivers = {
+            'sqlite': ['pysqlite'],
+            'mysql': ['mysqldb', 'pymysql'],
+            'postgresql': [
+                'psycopg2', 'pg8000', 'psycopg2cffi', 'pypostgresql',
+                'pygresql'],
+        }
 
         asyncio_drivers = {
             'sqlite': ['aiosqlite'],
@@ -186,52 +189,50 @@ class PeekabooDatabase:
             'postgresql': ['asyncpg'],
         }
 
-        if async_driver is not None:
-            drivers = [async_driver]
-        else:
-            drivers = asyncio_drivers.get(backend)
-            if drivers is None:
-                raise PeekabooDatabaseError(
-                    'Unknown database backend configured: %s' % backend)
+        backend_async_drivers = asyncio_drivers.get(backend)
 
-        async_engine = None
-        async_db_url = None
-        for driver in drivers:
-            # replace backend and driver with our asyncio alternative
-            scheme = "%s+%s" % (backend, driver)
-            async_db_url = ':'.join([scheme] + db_url.split(':')[1:])
+        # if there seems to be a driver specified, look more closely
+        if len(scheme_parts) > 1:
+            driver = scheme_parts[1]
+
+            backend_sync_drivers = sync_drivers.get(backend)
+            if (backend_sync_drivers is not None and
+                    driver in backend_sync_drivers):
+                logger.warning(
+                    'Configuration specifies a synchronous database driver '
+                    '"%s". Please update your configuration to use an '
+                    'asynchronous driver, preferably out of: %s', driver,
+                    backend_async_drivers)
+            elif driver not in backend_async_drivers:
+                logger.warning(
+                    'Configuration specifies unknown asynchronous driver "%s". '
+                    'Trying to use anyway.', driver)
+                backend_async_drivers = [driver]
+
+        self.__engine = None
+        for driver in backend_async_drivers:
+            scheme = f'{backend}+{driver}'
+            db_url = ':'.join([scheme] + url_parts[1:])
 
             try:
-                async_engine = sqlalchemy.ext.asyncio.create_async_engine(
-                    async_db_url, connect_args=connect_args)
+                logger.debug('Trying SQLAlchemy backend+driver "%s"', scheme)
+                self.__engine = sqlalchemy.ext.asyncio.create_async_engine(
+                    db_url, **engine_kwargs)
             except ModuleNotFoundError:
                 continue
 
-            logger.debug('Auto-detected %s SQLAlchemy backend+driver for '
-                         'asyncio database accesses', scheme)
+            logger.info('Using "%s" SQLAlchemy backend+driver for '
+                        'database accesses', scheme)
             break
 
-        if async_engine is None:
+        if self.__engine is None:
             raise PeekabooDatabaseError(
-                'None of the asyncio drivers for backend %s could be '
-                'found: %s' % (backend, drivers))
+                f'None of the drivers for backend "{backend}" could be found: '
+                f'{backend_async_drivers}')
 
-        self.__async_session_factory = sessionmaker(
-            bind=async_engine,
+        self.__session_factory = sessionmaker(
+            bind=self.__engine,
             class_=sqlalchemy.ext.asyncio.AsyncSession)
-        # no scoping necessary as we're not using asyncio across threads
-
-        # special handling for sqlite: since it does not respond well to
-        # multiple modify operations in parallel to the same database, we
-        # serialise them through a QueuePool with only one connection
-        self.__async_session_factory_modify = self.__async_session_factory
-        if backend in ['sqlite']:
-            async_engine_modify = sqlalchemy.ext.asyncio.create_async_engine(
-                async_db_url, poolclass=sqlalchemy.pool.AsyncAdaptedQueuePool,
-                pool_size=1, max_overflow=0)
-            self.__async_session_factory_modify = sessionmaker(
-                bind=async_engine_modify,
-                class_=sqlalchemy.ext.asyncio.AsyncSession)
 
         self.instance_id = instance_id
         self.stale_in_flight_threshold = stale_in_flight_threshold
@@ -244,12 +245,13 @@ class PeekabooDatabase:
         self.deadlock_backoff_base = 10
         self.connect_backoff_base = 2000
 
+    async def start(self):
         attempt = 1
         delay = 0
         while attempt <= self.retries:
-            with self.__lock:
+            async with self.__engine.begin() as conn:
                 try:
-                    Base.metadata.create_all(self.__engine)
+                    await conn.run_sync(Base.metadata.create_all)
                     break
                 except (OperationalError, DBAPIError,
                         SQLAlchemyError) as error:
@@ -260,7 +262,7 @@ class PeekabooDatabase:
                         raise PeekabooDatabaseError(
                             'Failed to create schema in database: %s' % error)
 
-            time.sleep(delay)
+            await asyncio.sleep(delay)
 
     def was_transient_error(self, error, attempt, action):
         """ Decide if an exception signals a transient error condition and
@@ -336,7 +338,7 @@ class PeekabooDatabase:
         attempt = 1
         delay = 0
         while attempt <= self.retries:
-            async with self.__async_session_factory_modify() as session:
+            async with self.__session_factory() as session:
                 session.add(sample_info)
                 try:
                     # flush to retrieve the automatically assigned primary
@@ -362,7 +364,7 @@ class PeekabooDatabase:
         sample.update_id(job_id)
         return job_id
 
-    def analysis_update(self, sample):
+    async def analysis_update(self, sample):
         """
         Update an analysis task in the analysis journal in the database.
 
@@ -377,27 +379,26 @@ class PeekabooDatabase:
         attempt = 1
         delay = 0
         while attempt <= self.retries:
-            with self.__lock:
-                with self.__session() as session:
-                    try:
-                        session.execute(statement)
-                        session.commit()
-                        break
-                    except (OperationalError, DBAPIError,
-                            SQLAlchemyError) as error:
-                        session.rollback()
+            async with self.__session_factory() as session:
+                try:
+                    await session.execute(statement)
+                    await session.commit()
+                    break
+                except (OperationalError, DBAPIError,
+                        SQLAlchemyError) as error:
+                    await session.rollback()
 
-                        attempt, delay = self.was_transient_error(
-                            error, attempt, 'updating analysis')
+                    attempt, delay = self.was_transient_error(
+                        error, attempt, 'updating analysis')
 
-                        if attempt < 0:
-                            raise PeekabooDatabaseError(
-                                'Failed to update analysis task in the database: %s' %
-                                error)
+                    if attempt < 0:
+                        raise PeekabooDatabaseError(
+                            'Failed to update analysis task in the database: %s' %
+                            error)
 
-            time.sleep(delay)
+            await asyncio.sleep(delay)
 
-    def analysis_journal_fetch_journal(self, sample):
+    async def analysis_journal_fetch_journal(self, sample):
         """
         Fetch information stored in the database about a given sample object.
 
@@ -420,13 +421,14 @@ class PeekabooDatabase:
         attempt = 1
         delay = 0
         while attempt <= self.retries:
-            with self.__session() as session:
+            async with self.__session_factory() as session:
                 try:
-                    sample_journal = session.execute(statement).all()
+                    proxy = await session.execute(statement)
+                    sample_journal = proxy.all()
                     break
                 except (OperationalError, DBAPIError,
                         SQLAlchemyError) as error:
-                    session.rollback()
+                    await session.rollback()
 
                     attempt, delay = self.was_transient_error(
                         error, attempt, 'fetching analysis journal')
@@ -436,7 +438,7 @@ class PeekabooDatabase:
                             'Failed to fetch analysis journal from the database: %s' %
                             error)
 
-            time.sleep(delay)
+            await asyncio.sleep(delay)
 
         return sample_journal
 
@@ -456,7 +458,7 @@ class PeekabooDatabase:
         attempt = 1
         delay = 0
         while attempt <= self.retries:
-            async with self.__async_session_factory() as session:
+            async with self.__session_factory() as session:
                 try:
                     proxy = await session.execute(statement)
                     result = proxy.first()
@@ -477,7 +479,7 @@ class PeekabooDatabase:
 
         return result
 
-    def mark_sample_in_flight(self, sample, instance_id=None, start_time=None):
+    async def mark_sample_in_flight(self, sample, instance_id=None, start_time=None):
         """
         Mark a sample as in flight, i.e. being worked on by an instance.
 
@@ -506,24 +508,24 @@ class PeekabooDatabase:
         delay = 0
         while attempt <= self.retries:
             # a new session needs to be constructed on each attempt
-            with self.__session() as session:
+            async with self.__session_factory() as session:
                 # try to mark this sample as in flight in an atomic insert
                 # operation (modulo possible deadlocks with various RDBMS)
                 session.add(in_flight_marker)
 
                 try:
-                    session.commit()
+                    await session.commit()
                     logger.debug('%d: Marked sample in flight', sample.id)
                     return True
                 # duplicate primary key == entry already exists
                 except IntegrityError:
-                    session.rollback()
+                    await session.rollback()
                     logger.debug('%d: Sample is already in flight on another '
                                  'instance', sample.id)
                     return False
                 except (OperationalError, DBAPIError,
                         SQLAlchemyError) as error:
-                    session.rollback()
+                    await session.rollback()
 
                     attempt, delay = self.was_transient_error(
                         error, attempt, 'marking sample %d in flight' %
@@ -534,11 +536,11 @@ class PeekabooDatabase:
                             '%d: Unable to mark sample as in flight: %s' % (
                                 sample.id, error))
 
-            time.sleep(delay)
+            await asyncio.sleep(delay)
 
         return False
 
-    def clear_sample_in_flight(self, sample, instance_id=None):
+    async def clear_sample_in_flight(self, sample, instance_id=None):
         """
         Clear the mark that a sample is being processed by an instance.
 
@@ -563,16 +565,16 @@ class PeekabooDatabase:
         attempt = 1
         cleared = 0
         while attempt <= self.retries:
-            with self.__session() as session:
+            async with self.__session_factory() as session:
                 try:
                     # clear in-flight marker from database
-                    marker = session.execute(statement)
-                    session.commit()
+                    marker = await session.execute(statement)
+                    await session.commit()
                     cleared = marker.rowcount
                     break
                 except (OperationalError, DBAPIError,
                         SQLAlchemyError) as error:
-                    session.rollback()
+                    await session.rollback()
 
                     attempt, delay = self.was_transient_error(
                         error, attempt, 'clearing in-flight status of '
@@ -583,7 +585,7 @@ class PeekabooDatabase:
                             '%d: Unable to clear in-flight status of sample: '
                             '%s' % (sample.id, error))
 
-            time.sleep(delay)
+            await asyncio.sleep(delay)
 
         if cleared == 0:
             raise PeekabooDatabaseError(
@@ -595,7 +597,7 @@ class PeekabooDatabase:
                 'in-flight status cleared against database constraints!?' %
                 sample.id)
 
-    def clear_in_flight_samples(self, instance_id=None):
+    async def clear_in_flight_samples(self, instance_id=None):
         """
         Clear all in-flight markers left over by previous runs or other
         instances by removing them from the lock table.
@@ -630,14 +632,14 @@ class PeekabooDatabase:
 
         attempt = 1
         while attempt <= self.retries:
-            with self.__session() as session:
+            async with self.__session_factory() as session:
                 try:
-                    session.execute(statement)
-                    session.commit()
+                    await session.execute(statement)
+                    await session.commit()
                     break
                 except (OperationalError, DBAPIError,
                         SQLAlchemyError) as error:
-                    session.rollback()
+                    await session.rollback()
 
                     attempt, delay = self.was_transient_error(
                         error, attempt,
@@ -648,9 +650,9 @@ class PeekabooDatabase:
                             'Unable to clear the database of in-flight '
                             'samples: %s' % error)
 
-            time.sleep(delay)
+            await asyncio.sleep(delay)
 
-    def clear_stale_in_flight_samples(self):
+    async def clear_stale_in_flight_samples(self):
         """
         Clear all in-flight markers that are too old and therefore stale. This
         detects instances which are locked up, crashed or shut down.
@@ -676,7 +678,7 @@ class PeekabooDatabase:
         attempt = 1
         cleared = 0
         while attempt <= self.retries:
-            with self.__session() as session:
+            async with self.__session_factory() as session:
                 try:
                     # only do the query if debugging is enabled
                     if logger.isEnabledFor(logging.DEBUG):
@@ -684,13 +686,13 @@ class PeekabooDatabase:
                         # delete here, use with caution, compare with actual
                         # number of markers cleared below before relying on it
                         # for debugging
-                        markers = session.execute(select_statement)
+                        markers = await session.execute(select_statement)
                         for stale in markers:
                             logger.debug(
                                 'Stale in-flight marker to clear: %s', stale)
 
-                    markers = session.execute(delete_statement)
-                    session.commit()
+                    markers = await session.execute(delete_statement)
+                    await session.commit()
 
                     cleared = markers.rowcount
                     if cleared > 0:
@@ -700,7 +702,7 @@ class PeekabooDatabase:
                     break
                 except (OperationalError, DBAPIError,
                         SQLAlchemyError) as error:
-                    session.rollback()
+                    await session.rollback()
 
                     attempt, delay = self.was_transient_error(
                         error, attempt,
@@ -711,14 +713,6 @@ class PeekabooDatabase:
                             'Unable to clear the database of stale in-flight '
                             'samples: %s' % error)
 
-            time.sleep(delay)
+            await asyncio.sleep(delay)
 
         return cleared > 0
-
-    def drop(self):
-        """ Drop all tables of the database. """
-        try:
-            Base.metadata.drop_all(self.__engine)
-        except SQLAlchemyError as error:
-            raise PeekabooDatabaseError(
-                'Unable to drop all tables of the database: %s' % error)

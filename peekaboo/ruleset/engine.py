@@ -85,7 +85,7 @@ class RulesetEngine:
 
         self.shutdown_requested = False
 
-    def start(self):
+    async def start(self):
         """ Initialise the engine, validate its and the individual rules'
         configuration.
 
@@ -143,7 +143,7 @@ class RulesetEngine:
                         self.analyzer_config.cuckoo_submit_original_filename,
                         self.analyzer_config.cuckoo_maximum_job_age)
 
-                    if not self.cuckoo.start_tracker():
+                    if not await self.cuckoo.start_tracker():
                         raise PeekabooRulesetConfigError(
                             "Failure to initialize Cuckoo job tracker")
 
@@ -163,7 +163,7 @@ class RulesetEngine:
                         self.analyzer_config.cortex_submit_original_filename,
                         self.analyzer_config.cortex_maximum_job_age)
 
-                    if not self.cortex.start_tracker():
+                    if not await self.cortex.start_tracker():
                         raise PeekabooRulesetConfigError(
                             "Failure to initialize Cortex job tracker")
 
@@ -181,7 +181,7 @@ class RulesetEngine:
         if self.shutdown_requested:
             self.shut_down_resources()
 
-    def run(self, sample):
+    async def run(self, sample):
         """ Run all the rules in the ruleset against a given sample
 
         @param sample: sample to evaluate ruleset against
@@ -191,7 +191,7 @@ class RulesetEngine:
             logger.debug("%d: Processing rule '%s'", sample.id, rule_name)
 
             try:
-                result = rule.evaluate(sample)
+                result = await rule.evaluate(sample)
                 sample.add_rule_result(result)
             except PeekabooAnalysisDeferred:
                 # in case the Sample is requesting the Cuckoo report
@@ -228,10 +228,10 @@ class RulesetEngine:
         self.shutdown_requested = True
         self.shut_down_resources()
 
-    def close_down(self):
+    async def close_down(self):
         """ Finalize ruleset engine shutdown synchronously. """
         if self.cuckoo is not None:
-            self.cuckoo.close_down()
+            await self.cuckoo.close_down()
 
         if self.cortex is not None:
-            self.cortex.close_down()
+            await self.cortex.close_down()

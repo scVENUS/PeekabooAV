@@ -66,13 +66,9 @@
 # SQLite
 #url              :    sqlite:////var/lib/peekaboo/peekaboo.db
 # MySQL (recommended)
-# url             :    mysql+mysqldb://user:password@host/database
+# url             :    mysql://user:password@host/database
 # PostgreSQL
 # url             :    postgresql://user:password@host:port/database
-
-# as a last resort it's possible to override the driver for asyncio database
-# accesses if auto-detection fails.
-# async_driver: aiosqlite
 
 # Enable additional logging by the SQLAlchemy database module beyond Peekaboo's
 # own logging. Can be considered another set of debug logging even beyond

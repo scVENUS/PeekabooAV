@@ -25,10 +25,10 @@
 
 """ Interface to Cuckoo. """
 
+import asyncio
 import datetime
 import os
 import logging
-import threading
 
 import requests
 import schema
@@ -126,11 +126,7 @@ class Cuckoo:
         @type backoff: float
         """
         self.job_queue = job_queue
-        self.shutdown_requested = threading.Event()
-        self.shutdown_requested.clear()
         self.running_jobs = {}
-        # reentrant because we're doing nested calls within critical sections
-        self.running_jobs_lock = threading.RLock()
         self.url = url
         self.api_token = api_token
         self.poll_interval = poll_interval
@@ -216,26 +212,24 @@ class Cuckoo:
 
         @returns: None
         @raises: CuckooSubmitFailedException on job id collision """
-        with self.running_jobs_lock:
-            if (job_id in self.running_jobs and
-                    self.running_jobs[job_id] is not sample):
-                logger.warning(
-                    '%d: A job with ID %d already registered as running '
-                    'for different sample %d will be marked failed',
-                    sample.id, job_id,
-                    self.running_jobs[job_id].sample.id)
-                self.resubmit_as_failed(job_id)
+        if (job_id in self.running_jobs and
+                self.running_jobs[job_id] is not sample):
+            logger.warning(
+                '%d: A job with ID %d already registered as running '
+                'for different sample %d will be marked failed',
+                sample.id, job_id,
+                self.running_jobs[job_id].sample.id)
+            self.resubmit_as_failed(job_id)
 
-            self.running_jobs[job_id] = CuckooJob(sample)
+        self.running_jobs[job_id] = CuckooJob(sample)
 
     def deregister_running_job(self, job_id):
         """ Deregister a running job by job id.
 
         @returns: Sample object of the job or None if job not found. """
-        with self.running_jobs_lock:
-            job = self.running_jobs.pop(job_id, None)
-            if job is not None:
-                return job.sample
+        job = self.running_jobs.pop(job_id, None)
+        if job is not None:
+            return job.sample
 
         return None
 
@@ -244,13 +238,12 @@ class Cuckoo:
         running jobs if so.
 
         @returns: Sample object of the job or None if job not found. """
-        with self.running_jobs_lock:
-            if self.running_jobs[job_id].is_older_than(max_age):
-                return self.deregister_running_job(job_id)
+        if self.running_jobs[job_id].is_older_than(max_age):
+            return self.deregister_running_job(job_id)
 
         return None
 
-    def resubmit_with_report(self, job_id):
+    async def resubmit_with_report(self, job_id):
         """ Resubmit a sample to the job queue after the report became
         available. Retrieves the report from Cuckoo.
 
@@ -281,10 +274,10 @@ class Cuckoo:
                                'invalid data: %s', err)
                 sample.mark_cuckoo_failure()
 
-        self.job_queue.submit(sample)
+        await self.job_queue.submit(sample)
         return None
 
-    def resubmit_as_failed(self, job_id):
+    async def resubmit_as_failed(self, job_id):
         """ Resubmit a sample to the job queue with a failure report if the
         Cuckoo job has failed for some reason.
 
@@ -294,9 +287,9 @@ class Cuckoo:
         sample = self.deregister_running_job(job_id)
         if sample is not None:
             sample.mark_cuckoo_failure()
-            self.job_queue.submit(sample)
+            await self.job_queue.submit(sample)
 
-    def resubmit_as_failed_if_too_old(self, job_id, max_age):
+    async def resubmit_as_failed_if_too_old(self, job_id, max_age):
         """ Resubmit a sample to the job queue with a failure report if the
         Cuckoo job has been running for too long.
 
@@ -310,7 +303,7 @@ class Cuckoo:
             logger.warning("Dropped job %d because it has been running for "
                            "too long", job_id)
             sample.mark_cuckoo_failure()
-            self.job_queue.submit(sample)
+            await self.job_queue.submit(sample)
 
     def submit(self, sample):
         """ Submit a sample to Cuckoo for analysis.
@@ -365,16 +358,15 @@ class Cuckoo:
         self.register_running_job(task_id, sample)
         return task_id
 
-    def start_tracker(self):
+    async def start_tracker(self):
         """ Start tracking running jobs in a separate thread. """
-        self.tracker = threading.Thread(target=self.track,
-                                        name="CuckooJobTracker")
-        self.tracker.start()
+        self.tracker = asyncio.ensure_future(self.track())
+        self.tracker.set_name("CuckooJobTracker")
         return True
 
-    def track(self):
+    async def track(self):
         """ Do the polling for finished jobs. """
-        while not self.shutdown_requested.wait(self.poll_interval):
+        while True:
             # no lock, atomic, copy() because keys() returns an iterable view
             # instead of a fresh new list in python3
             running_jobs = self.running_jobs.copy().keys()
@@ -402,7 +394,7 @@ class Cuckoo:
                     continue
 
                 if job["task"]["status"] == "reported":
-                    self.resubmit_with_report(job_id)
+                    await self.resubmit_with_report(job_id)
                     continue
 
                 # drop jobs which have been running for too long. This is
@@ -411,21 +403,27 @@ class Cuckoo:
                 # even though our client might not be interested any more so
                 # that we have the result cached for the next time we get the
                 # same sample.
-                self.resubmit_as_failed_if_too_old(job_id, self.max_job_age)
+                await self.resubmit_as_failed_if_too_old(job_id, self.max_job_age)
+
+            await asyncio.sleep(self.poll_interval)
 
         logger.debug("Cuckoo job tracker shut down.")
 
     def shut_down(self):
         """ Request the module to shut down, used by the signal handler. """
         logger.debug("Cuckoo job tracker shutdown requested.")
-        self.shutdown_requested.set()
+        if self.tracker is not None:
+            self.tracker.cancel()
 
-    def close_down(self):
-        """ Close down tracker resources, particularly, wait for the thread to
+    async def close_down(self):
+        """ Close down tracker resources, particularly, wait for the task to
         terminate. """
-        if self.tracker:
-            self.tracker.join()
-            self.tracker = None
+        if self.tracker is not None:
+            try:
+                await self.tracker
+            # we cancelled the task so a CancelledError is expected
+            except asyncio.CancelledError:
+                pass
 
 
 class CuckooReport:
