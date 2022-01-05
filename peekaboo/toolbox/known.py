@@ -38,13 +38,13 @@ class Knowntools:
         self.sample = sample
         self.db_con = db_con
 
-    def get_report(self):
+    async def get_report(self):
         """ Return knowntools report or create if not already cached. """
         if self.sample.knowntools_report is not None:
             return self.sample.knowntools_report
 
         ktreport = KnowntoolsReport(
-            self.db_con.analysis_journal_fetch_journal(self.sample)
+            await self.db_con.analysis_journal_fetch_journal(self.sample)
         )
 
         self.sample.register_knowntools_report(ktreport)

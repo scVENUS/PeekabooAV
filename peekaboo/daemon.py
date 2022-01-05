@@ -78,7 +78,6 @@ class SignalHandler:
             logger.debug("SIGINT/TERM")
             self.shutdown_requested = True
 
-            # these should take serious care about being called across threads
             for listener in self.listeners:
                 listener.shut_down()
 
@@ -223,7 +222,7 @@ class PeekabooDaemonInfrastructure:
                            self.pid_file, oserror)
 
 
-def run():
+async def async_main():
     """ Runs the Peekaboo daemon. """
     arg_parser = ArgumentParser(
         description='Peekaboo Extended Email Attachment Behavior Observation Owl'
@@ -284,7 +283,8 @@ def run():
         db_con = PeekabooDatabase(
             db_url=config.db_url, instance_id=config.cluster_instance_id,
             stale_in_flight_threshold=config.cluster_stale_in_flight_threshold,
-            log_level=config.db_log_level, async_driver=config.db_async_driver)
+            log_level=config.db_log_level)
+        await db_con.start()
     except PeekabooDatabaseError as error:
         logging.critical(error)
         sys.exit(1)
@@ -301,8 +301,8 @@ def run():
 
     # clear all our in flight samples and all instances' stale in flight
     # samples
-    db_con.clear_in_flight_samples()
-    db_con.clear_stale_in_flight_samples()
+    await db_con.clear_in_flight_samples()
+    await db_con.clear_stale_in_flight_samples()
 
     # a cluster duplicate interval of 0 disables the handler thread which is
     # what we want if we don't have an instance_id and therefore are alone
@@ -315,7 +315,7 @@ def run():
                            "interval to %d seconds.",
                            cldup_check_interval)
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     sig_handler = SignalHandler(loop)
 
     # read in the analyzer and ruleset configuration and start the job queue
@@ -327,7 +327,7 @@ def run():
             db_con=db_con, analyzer_config=analyzer_config,
             cluster_duplicate_check_interval=cldup_check_interval)
         sig_handler.register_listener(job_queue)
-        job_queue.start()
+        await job_queue.start()
     except PeekabooConfigException as error:
         logging.critical(error)
         sys.exit(1)
@@ -357,7 +357,7 @@ def run():
 
     sig_handler.register_listener(server)
     SystemdNotifier().notify("READY=1")
-    server.serve()
+    await server.serve()
 
     # trigger shutdowns of other components (if not already ongoing triggered
     # by e.g. the signal handler), server will already be shut down at this
@@ -365,16 +365,19 @@ def run():
     job_queue.shut_down()
 
     # close down components after they've shut down
-    job_queue.close_down()
+    await job_queue.close_down()
 
     # do a final cleanup pass through the database
     try:
-        db_con.clear_in_flight_samples()
-        db_con.clear_stale_in_flight_samples()
+        await db_con.clear_in_flight_samples()
+        await db_con.clear_stale_in_flight_samples()
     except PeekabooDatabaseError as dberr:
         logger.error(dberr)
 
     sys.exit(0)
+
+def run():
+    asyncio.run(async_main())
 
 if __name__ == '__main__':
     run()

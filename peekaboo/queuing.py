@@ -22,13 +22,11 @@
 #                                                                             #
 ###############################################################################
 
-""" The main job queue and worker threads. """
+""" The main job queue with workers and a cluster duplicate handler. """
 
 
+import asyncio
 import logging
-import queue
-import threading
-import time
 
 from peekaboo.ruleset import Result, RuleResult
 from peekaboo.ruleset.engine import RulesetEngine
@@ -41,26 +39,18 @@ logger = logging.getLogger(__name__)
 
 class JobQueue:
     """ Peekaboo's queuing system. """
-    def __init__(self, ruleset_config, db_con, analyzer_config, worker_count=4,
-                 queue_timeout=300, shutdown_timeout=60,
-                 cluster_duplicate_check_interval=5):
-        """ Initialise job queue by creating n Peekaboo worker threads to
-        process samples.
+    def __init__(self, ruleset_config, db_con, analyzer_config,
+                 worker_count=4, cluster_duplicate_check_interval=5):
+        """ Initialise job queue by creating n Peekaboo workers to process
+        samples.
 
         @param ruleset_config: the ruleset configuration
         @type ruleset_config: PeekabooConfigParser
         @param db_con: Database connection object for cluster instance
                        coordination, i.e. saving sample info.
         @type db_con: PeekabooDatabase
-        @param worker_count: The amount of worker threads to create. Defaults
-                             to 4.
+        @param worker_count: The number of workers to create. Defaults to 4.
         @type worker_count: int
-        @param queue_timeout: How long to block before considering queueing
-                              failed.
-        @type queue_timeout: int
-        @param shutdown_timeout: How long to block before considering shutdown
-                                 failed.
-        @type shutdown_timeout: int
         @param cluster_duplicate_check_interval: How long to wait inbetween
                                                  checks for stale cluster
                                                  duplicate locks.
@@ -68,18 +58,16 @@ class JobQueue:
         @raises PeekabooConfigException: if an error occured in configuration.
         """
         self.db_con = db_con
-        self.jobs = queue.Queue()
+        self.jobs = asyncio.Queue()
         self.workers = []
         self.worker_count = worker_count
-        self.queue_timeout = queue_timeout
-        self.shutdown_timeout = shutdown_timeout
 
         # keep a backlog of samples with hashes identical to samples currently
         # in analysis to avoid analysing multiple identical samples
         # simultaneously. Once one analysis has finished, we can submit the
         # others and the ruleset will notice that we already know the result.
         self.duplicates = {}
-        self.duplock = threading.Lock()
+        self.duplock = asyncio.Lock()
 
         # keep a similar backlog of samples currently being processed by
         # other instances so we can regularly try to resubmit them and re-use
@@ -103,38 +91,38 @@ class JobQueue:
         self.cluster_duplicate_handler = None
         if cluster_duplicate_check_interval:
             logger.debug(
-                "Starting cluster duplicate handler thread with check "
+                "Creating cluster duplicate handler with check "
                 "interval %d.", cluster_duplicate_check_interval)
             self.cluster_duplicate_handler = ClusterDuplicateHandler(
                 self, cluster_duplicate_check_interval)
         else:
-            logger.debug("Disabling cluster duplicate handler thread.")
+            logger.debug("Disabling cluster duplicate handler.")
 
-    def start(self):
+    async def start(self):
         """ Start up the job queue including resource initialisation. """
         for worker in self.workers:
-            worker.start()
+            await worker.start()
 
         if self.cluster_duplicate_handler:
-            self.cluster_duplicate_handler.start()
+            await self.cluster_duplicate_handler.start()
 
         # create a single ruleset engine for all workers, instantiates all the
         # rules based on the ruleset configuration, may start up long-lived
         # analyzer instances which are shared as well, is otherwise stateless
-        # to allow concurrent use by multiple worker threads
+        # to allow concurrent use by multiple worker
         try:
-            self.ruleset_engine.start()
+            await self.ruleset_engine.start()
         except (KeyError, ValueError, PeekabooConfigException) as error:
             self.shut_down()
-            self.close_down()
+            await self.close_down()
             raise PeekabooConfigException(
                 'Ruleset configuration error: %s' % error)
         except PeekabooRulesetConfigError as error:
             self.shut_down()
-            self.close_down()
+            await self.close_down()
             raise PeekabooConfigException(error)
 
-    def submit(self, sample):
+    async def submit(self, sample):
         """
         Adds a Sample object to the job queue.
         If the queue is full, we block for 300 seconds and then throw an
@@ -147,9 +135,10 @@ class JobQueue:
         duplicate = None
         cluster_duplicate = None
         resubmit = None
-        # we have to lock this down because apart from callbacks from our
-        # Workers we're also called from the ThreadingUnixStreamServer
-        with self.duplock:
+
+        # we have to lock this down because async routines called from here may
+        # allow us to be called again concurrently from the event loop
+        async with self.duplock:
             # check if a sample with same hash is currently in flight
             duplicates = self.duplicates.get(sample_hash)
             if duplicates is not None:
@@ -159,7 +148,7 @@ class JobQueue:
                 # same sample.
                 if duplicates['master'] == sample:
                     resubmit = sample.id
-                    self.jobs.put(sample, True, self.queue_timeout)
+                    await self.jobs.put(sample)
                 else:
                     # record the to-be-submitted sample as duplicate and do
                     # nothing
@@ -169,7 +158,7 @@ class JobQueue:
                 # are we the first of potentially multiple instances working on
                 # this sample?
                 try:
-                    locked = self.db_con.mark_sample_in_flight(sample)
+                    locked = await self.db_con.mark_sample_in_flight(sample)
                 except PeekabooDatabaseError as dberr:
                     logger.error(dberr)
                     return False
@@ -181,7 +170,7 @@ class JobQueue:
                         'master': sample,
                         'duplicates': [],
                     }
-                    self.jobs.put(sample, True, self.queue_timeout)
+                    await self.jobs.put(sample)
                 else:
                     # another instance is working on this
                     if self.cluster_duplicates.get(sample_hash) is None:
@@ -205,7 +194,7 @@ class JobQueue:
 
         return True
 
-    def submit_cluster_duplicates(self):
+    async def submit_cluster_duplicates(self):
         """ Submit samples held while being processed by another cluster
         instance back into the job queue if they have finished processing. """
         if not self.cluster_duplicates.keys():
@@ -213,7 +202,7 @@ class JobQueue:
 
         submitted_cluster_duplicates = []
 
-        with self.duplock:
+        async with self.duplock:
             # try to submit *all* samples which have been marked as being
             # processed by another instance concurrently
             # get the items view on a copy of the cluster duplicate backlog
@@ -223,7 +212,7 @@ class JobQueue:
             for sample_hash, sample_duplicates in cluster_duplicates:
                 # try to mark as in-flight
                 try:
-                    locked = self.db_con.mark_sample_in_flight(
+                    locked = await self.db_con.mark_sample_in_flight(
                         sample_duplicates[0])
                 except PeekabooDatabaseError as dberr:
                     logger.error(dberr)
@@ -249,7 +238,7 @@ class JobQueue:
                         'duplicates': sample_duplicates,
                     }
                     submitted_cluster_duplicates.append(sample.id)
-                    self.jobs.put(sample, True, self.queue_timeout)
+                    await self.jobs.put(sample)
                     del self.cluster_duplicates[sample_hash]
 
         if len(submitted_cluster_duplicates) > 0:
@@ -259,17 +248,17 @@ class JobQueue:
 
         return True
 
-    def clear_stale_in_flight_samples(self):
+    async def clear_stale_in_flight_samples(self):
         """ Clear any stale in-flight sample logs from the database. """
         try:
-            cleared = self.db_con.clear_stale_in_flight_samples()
+            cleared = await self.db_con.clear_stale_in_flight_samples()
         except PeekabooDatabaseError as dberr:
             logger.error(dberr)
             cleared = False
 
         return cleared
 
-    def submit_duplicates(self, sample_hash):
+    async def submit_duplicates(self, sample_hash):
         """ Check if any samples have been held from processing as duplicates
         and submit them now. Clear the original sample whose duplicates have
         been submitted from the in-flight list.
@@ -277,7 +266,8 @@ class JobQueue:
         @param sample_hash: Hash of sample to check for duplicates
         """
         submitted_duplicates = []
-        with self.duplock:
+
+        async with self.duplock:
             # duplicates which have been submitted from the backlog still
             # report done but do not get registered as potentially having
             # duplicates because we expect the ruleset to identify them as
@@ -290,11 +280,11 @@ class JobQueue:
             # submit all samples which have accumulated in the backlog
             for sample in self.duplicates[sample_hash]['duplicates']:
                 submitted_duplicates.append(sample.id)
-                self.jobs.put(sample, True, self.queue_timeout)
+                await self.jobs.put(sample)
 
             sample = self.duplicates[sample_hash]['master']
             try:
-                self.db_con.clear_sample_in_flight(sample)
+                await self.db_con.clear_sample_in_flight(sample)
             except PeekabooDatabaseError as dberr:
                 logger.error(dberr)
 
@@ -305,20 +295,18 @@ class JobQueue:
             logger.debug(
                 "Submitted duplicates from backlog: %s", submitted_duplicates)
 
-    def done(self, sample):
+    async def done(self, sample):
         """ Perform cleanup actions after sample processing is done:
         1. Submit held duplicates and
-        2. notify request handler thread that sample processing is done.
+        2. notify request handler that sample processing is done.
 
         @param sample: The Sample object to post-process. """
-        self.submit_duplicates(sample.sha256sum)
+        await self.submit_duplicates(sample.sha256sum)
 
-    def dequeue(self):
+    async def dequeue(self):
         """ Remove a sample from the queue. Used by the workers to get their
-        work. Blocks indefinitely until some work is available. If we want to
-        wake the workers for some other reason, we send them a None item as
-        ping. """
-        return self.jobs.get(True)
+        work. Blocks indefinitely until some work is available. """
+        return await self.jobs.get()
 
     def shut_down(self):
         """ Trigger a shutdown of the queue including the workers. """
@@ -334,99 +322,87 @@ class JobQueue:
         for worker in self.workers:
             worker.shut_down()
 
-        # put a ping for each worker on the queue. Since they already all know
-        # that they're supposed to shut down, each of them will only remove
-        # one item from the queue and then exit, leaving the others for their
-        # colleagues. For this reason this loop can't be folded into the above!
-        for worker in self.workers:
-            self.jobs.put(None)
-
-    def close_down(self, timeout=None):
+    async def close_down(self):
         """ Wait for workers to stop and free up resources. """
-        if not timeout:
-            timeout = self.shutdown_timeout
+        logger.info("Closing down.")
 
-        logger.info("Closing down. Giving workers %d seconds to stop", timeout)
-
-        # wait for workers to end
-        interval = 1
-        for attempt in range(1, timeout // interval + 1):
-            still_running = []
-            for worker in self.workers:
-                if worker.is_alive():
-                    still_running.append(worker)
-
-            self.workers = still_running
-            if len(self.workers) == 0:
-                break
-
-            time.sleep(interval)
-            logger.debug('%d: %d workers still running', attempt,
-                         len(self.workers))
-
-        if len(self.workers) > 0:
-            logger.error("Some workers refused to stop.")
+        for worker in self.workers:
+            await worker.close_down()
 
         if self.cluster_duplicate_handler is not None:
-            self.cluster_duplicate_handler.join()
+            await self.cluster_duplicate_handler.close_down()
+
         if self.ruleset_engine is not None:
-            self.ruleset_engine.close_down()
+            await self.ruleset_engine.close_down()
 
-
-class ClusterDuplicateHandler(threading.Thread):
-    """ A housekeeping thread handling submission and cleanup cluster
-    duplicates. """
+class ClusterDuplicateHandler:
+    """ A housekeeper handling submission and cleanup of cluster duplicates.
+    """
     def __init__(self, job_queue, interval=5):
-        self.shutdown_requested = threading.Event()
-        self.shutdown_requested.clear()
         self.job_queue = job_queue
         self.interval = interval
-        super().__init__(name="ClusterDuplicateHandler")
+        self.task = None
+        self.task_name = "ClusterDuplicateHandler"
 
-    def run(self):
+    async def start(self):
+        self.task = asyncio.ensure_future(self.run())
+        self.task.set_name(self.task_name)
+
+    async def run(self):
         logger.debug("Cluster duplicate handler started.")
 
-        while not self.shutdown_requested.wait(self.interval):
+        while True:
+            await asyncio.sleep(self.interval)
+
             logger.debug("Checking for samples in processing by other "
                          "instances to submit")
+
             # TODO: Error handling: How do we cause Peekaboo to exit with an
             # error from here? For now just keep trying and hope (database)
             # failure is transient.
-            self.job_queue.clear_stale_in_flight_samples()
-            self.job_queue.submit_cluster_duplicates()
+            await self.job_queue.clear_stale_in_flight_samples()
+            await self.job_queue.submit_cluster_duplicates()
 
         logger.debug("Cluster duplicate handler shut down.")
 
     def shut_down(self):
         """ Asynchronously initiate cluster duplicate handler shutdown. """
-        self.shutdown_requested.set()
+        logger.debug("Cluster duplicate handler shutdown requested.")
+        if self.task is not None:
+            self.task.cancel()
+
+    async def close_down(self):
+        """ Wait for the cluster duplicate handler to close down and retrieve
+        any exceptions thrown. """
+        if self.task is not None:
+            try:
+                await self.task
+            # we cancelled the task so a CancelledError is expected
+            except asyncio.CancelledError:
+                pass
 
 
-class Worker(threading.Thread):
-    """ A Worker thread to process a sample. """
+class Worker:
+    """ A Worker to process a sample. """
     def __init__(self, wid, job_queue, ruleset_engine, db_con):
         # whether we should run
-        self.shutdown_requested = threading.Event()
-        self.shutdown_requested.clear()
+        self.task = None
         self.worker_id = wid
+        self.worker_name = "Worker-%d" % wid
         self.job_queue = job_queue
         self.ruleset_engine = ruleset_engine
         self.db_con = db_con
-        super().__init__(name="Worker-%d" % wid)
 
-    def run(self):
-        while not self.shutdown_requested.is_set():
+    async def start(self):
+        self.task = asyncio.ensure_future(self.run())
+        self.task.set_name(self.worker_name)
+
+    async def run(self):
+        while True:
             logger.debug('Worker %d: Ready', self.worker_id)
 
-            try:
-                # wait blocking for next job (thread safe) with timeout
-                sample = self.job_queue.dequeue()
-            except queue.Empty:
-                continue
-
-            if sample is None:
-                # we just got pinged
-                continue
+            # wait blocking for next job
+            sample = await self.job_queue.dequeue()
 
             logger.info('%d: Worker %d: Processing sample',
                         sample.id, self.worker_id)
@@ -440,7 +416,7 @@ class Worker(threading.Thread):
             # in the subroutines causing it.
 
             try:
-                self.ruleset_engine.run(sample)
+                await self.ruleset_engine.run(sample)
             except PeekabooAnalysisDeferred:
                 logger.debug('%d: Report still pending', sample.id)
                 continue
@@ -452,16 +428,27 @@ class Worker(threading.Thread):
 
             logger.debug('%d: Saving results to database', sample.id)
             try:
-                self.db_con.analysis_update(sample)
+                await self.db_con.analysis_update(sample)
             except PeekabooDatabaseError as dberr:
                 logger.error('%d: Failed to save analysis result to '
                              'database: %s', sample.id, dberr)
                 # no showstopper, we can limp on without caching in DB
 
-            self.job_queue.done(sample)
+            await self.job_queue.done(sample)
 
         logger.info('Worker %d: Stopped', self.worker_id)
 
     def shut_down(self):
         """ Asynchronously initiate worker shutdown. """
-        self.shutdown_requested.set()
+        if self.task is not None:
+            self.task.cancel()
+
+    async def close_down(self):
+        """ Wait for the worker to close down and retrieve any exceptions
+        thrown. """
+        if self.task is not None:
+            try:
+                await self.task
+            # we cancelled the task so a CancelledError is expected
+            except asyncio.CancelledError:
+                pass
