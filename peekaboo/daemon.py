@@ -25,6 +25,7 @@
 """ The main peekaboo module, starting up and managing all the various
 components. """
 
+import asyncio
 import errno
 import gettext
 import os
@@ -50,15 +51,16 @@ from peekaboo.exceptions import (
 
 logger = logging.getLogger(__name__)
 
-
 class SignalHandler:
     """ Signal handler. """
-    def __init__(self):
+    def __init__(self, loop):
         """ register custom signal handler """
         self.listeners = []
 
-        signal.signal(signal.SIGINT, self.signal_handler)
-        signal.signal(signal.SIGTERM, self.signal_handler)
+        loop.add_signal_handler(
+            signal.SIGINT, self.signal_handler, signal.SIGINT)
+        loop.add_signal_handler(
+            signal.SIGTERM, self.signal_handler, signal.SIGTERM)
 
         self.shutdown_requested = False
 
@@ -69,7 +71,7 @@ class SignalHandler:
         """
         self.listeners.append(listener)
 
-    def signal_handler(self, sig, _):
+    def signal_handler(self, sig):
         """ catch signal and call appropriate methods in registered listener
         classes """
         if sig in [signal.SIGINT, signal.SIGTERM]:
@@ -313,7 +315,8 @@ def run():
                            "interval to %d seconds.",
                            cldup_check_interval)
 
-    sig_handler = SignalHandler()
+    loop = asyncio.get_event_loop()
+    sig_handler = SignalHandler(loop)
 
     # read in the analyzer and ruleset configuration and start the job queue
     try:
