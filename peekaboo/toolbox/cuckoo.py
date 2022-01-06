@@ -305,7 +305,7 @@ class Cuckoo:
             sample.mark_cuckoo_failure()
             await self.job_queue.submit(sample)
 
-    def submit(self, sample):
+    async def submit(self, sample):
         """ Submit a sample to Cuckoo for analysis.
         @param sample: Sample to submit.
         @type sample: Sample
@@ -313,7 +313,7 @@ class Cuckoo:
         @raises: CuckooSubmitFailedException if submission failed
         @returns: ID of the submitted Cuckoo job.
         """
-        filename = sample.sha256sum
+        filename = await sample.sha256sum
 
         # append file extension to aid cuckoo in file type detection
         if sample.file_extension:

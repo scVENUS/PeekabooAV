@@ -328,7 +328,7 @@ class PeekabooDatabase:
         """
         sample_info = SampleInfo(
             state=sample.state,
-            sha256sum=sample.sha256sum,
+            sha256sum=await sample.sha256sum,
             file_extension=sample.file_extension,
             analysis_time=datetime.now(),
             result=sample.result,
@@ -413,7 +413,7 @@ class PeekabooDatabase:
                 SampleInfo.id != sample.id).where(
                     SampleInfo.result != Result.failed).filter_by(
                         state=JobState.FINISHED,
-                        sha256sum=sample.sha256sum,
+                        sha256sum=await sample.sha256sum,
                         file_extension=sample.file_extension).order_by(
                             SampleInfo.analysis_time)
 
@@ -501,7 +501,7 @@ class PeekabooDatabase:
         if start_time is None:
             start_time = datetime.utcnow()
 
-        in_flight_marker = InFlightSample(sha256sum=sample.sha256sum,
+        in_flight_marker = InFlightSample(sha256sum=await sample.sha256sum,
                                           instance_id=instance_id,
                                           start_time=start_time)
         attempt = 1
@@ -559,7 +559,7 @@ class PeekabooDatabase:
 
         statement = sqlalchemy.sql.expression.delete(
             InFlightSample).where(
-                InFlightSample.sha256sum == sample.sha256sum).where(
+                InFlightSample.sha256sum == await sample.sha256sum).where(
                     InFlightSample.instance_id == instance_id)
 
         attempt = 1

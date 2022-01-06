@@ -26,6 +26,7 @@
 components. """
 
 import asyncio
+import concurrent.futures
 import errno
 import gettext
 import os
@@ -318,6 +319,16 @@ async def async_main():
     loop = asyncio.get_running_loop()
     sig_handler = SignalHandler(loop)
 
+    # separate threadpool for CPU- and I/O-bound blocking tasks (hashlib,
+    # oletools, magic, requests, processing info dumping). This effectively
+    # gives each of our asyncio Worker tasks an OS thread to execute blocking
+    # operations on. The Queue might use them as well for stuff like
+    # calculating samples' sha256sums, speeding up sample reception and
+    # submission from the server. So maybe we should have some more threads
+    # here...
+    threadpool = concurrent.futures.ThreadPoolExecutor(
+        config.worker_count, 'ThreadPool-')
+
     # read in the analyzer and ruleset configuration and start the job queue
     try:
         ruleset_config = PeekabooConfigParser(config.ruleset_config)
@@ -325,7 +336,8 @@ async def async_main():
         job_queue = JobQueue(
             worker_count=config.worker_count, ruleset_config=ruleset_config,
             db_con=db_con, analyzer_config=analyzer_config,
-            cluster_duplicate_check_interval=cldup_check_interval)
+            cluster_duplicate_check_interval=cldup_check_interval,
+            threadpool=threadpool)
         sig_handler.register_listener(job_queue)
         await job_queue.start()
     except PeekabooConfigException as error:
@@ -336,7 +348,7 @@ async def async_main():
     # config values and references to other objects they need, such as database
     # connection and connection map.
     sample_factory = SampleFactory(
-        config.processing_info_dir)
+        config.processing_info_dir, threadpool)
 
     try:
         server = PeekabooServer(
@@ -348,7 +360,7 @@ async def async_main():
     except Exception as error:
         logger.critical('Failed to start Peekaboo Server: %s', error)
         job_queue.shut_down()
-        job_queue.close_down()
+        await job_queue.close_down()
         sys.exit(1)
 
     # abort startup if shutdown was requested meanwhile
