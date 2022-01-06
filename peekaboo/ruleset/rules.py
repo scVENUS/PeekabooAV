@@ -26,6 +26,7 @@
 """ Classes implementing the Ruleset """
 
 
+import asyncio
 import re
 import logging
 from peekaboo.ruleset import Result, RuleResult
@@ -52,7 +53,7 @@ class Rule:
     uses_cuckoo = False
     uses_cortex = False
 
-    def __init__(self, config, db_con):
+    def __init__(self, config, db_con, threadpool=None):
         """ Initialize common configuration and resources.
 
         @param config: the ruleset configuration
@@ -62,6 +63,7 @@ class Rule:
         """
         self.config = config
         self.db_con = db_con
+        self.threadpool = threadpool
 
         self.cuckoo = None
         self.cortex = None
@@ -142,7 +144,7 @@ class Rule:
         """
         self.cortex = cortex
 
-    def get_cuckoo_report(self, sample):
+    async def get_cuckoo_report(self, sample):
         """ Get the samples cuckoo_report or submit the sample for analysis by
             Cuckoo.
 
@@ -157,7 +159,7 @@ class Rule:
 
         logger.debug("%d: Submitting to Cuckoo", sample.id)
         try:
-            job_id = self.cuckoo.submit(sample)
+            job_id = await self.cuckoo.submit(sample)
         except CuckooSubmitFailedException as failed:
             logger.error("%d: Submit to Cuckoo failed: %s", sample.id, failed)
             return None
@@ -166,26 +168,30 @@ class Rule:
                     sample.id, job_id)
         raise PeekabooAnalysisDeferred()
 
-    def get_oletools_report(self, sample):
+    async def get_oletools_report(self, sample):
         """ Get an Oletools report on the sample.
 
         @returns: OletoolsReport
         """
-        return Oletools(sample).get_report()
+        oletools = Oletools(sample)
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(self.threadpool, oletools.get_report)
 
-    def get_filetools_report(self, sample):
+    async def get_filetools_report(self, sample):
         """ Get a Filetools report on the sample.
 
         @returns: FiletoolsReport
         """
-        return Filetools(sample).get_report()
+        filetools = Filetools(sample)
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(self.threadpool, filetools.get_report)
 
-    def get_knowntools_report(self, sample):
+    async def get_knowntools_report(self, sample):
         """ Get a Knowntools report on the sample.
 
         @returns: KnowntoolsReport
         """
-        return Knowntools(sample, self.db_con).get_report()
+        return await Knowntools(sample, self.db_con).get_report()
 
     def get_cortex_report(self, sample):
         """ Get the sample's Cortex report.
@@ -208,7 +214,7 @@ class Rule:
 
         return report
 
-    def submit_to_cortex(self, sample, analyzer):
+    async def submit_to_cortex(self, sample, analyzer):
         """ Submit the sample to an actual Cortex analyzer to augment the
         report.
 
@@ -223,7 +229,7 @@ class Rule:
         """
         logger.debug("%d: Submitting to Cortex", sample.id)
         try:
-            job_id = self.cortex.submit(sample, analyzer)
+            job_id = await self.cortex.submit(sample, analyzer)
         except CortexSubmitFailedException as failed:
             logger.error("%d: Submit to Cortex failed: %s", sample.id, failed)
             return None
@@ -300,7 +306,7 @@ class FileTypeOnWhitelistRule(Rule):
     async def evaluate(self, sample):
         """ Ignore the file only if *all* of its mime types are on the
         whitelist and we could determine at least one. """
-        filereport = self.get_filetools_report(sample)
+        filereport = await self.get_filetools_report(sample)
         mimetypes = filereport.mime_types
         if sample.type_declared is not None:
             mimetypes.add(sample.type_declared)
@@ -330,7 +336,7 @@ class FileTypeOnGreylistRule(Rule):
     async def evaluate(self, sample):
         """ Continue analysis if any of the sample's MIME types are on the
         greylist or in case we don't have one. """
-        filereport = self.get_filetools_report(sample)
+        filereport = await self.get_filetools_report(sample)
         mimetypes = filereport.mime_types
         if sample.type_declared is not None:
             mimetypes.add(sample.type_declared)
@@ -351,7 +357,7 @@ class OleRule(Rule):
     async def evaluate(self, sample):
         """ Report the sample as bad if it contains a macro. """
         # we always get a report, albeit a maybe empty one
-        return self.evaluate_report(self.get_oletools_report(sample))
+        return self.evaluate_report(await self.get_oletools_report(sample))
 
     def evaluate_report(self, report):
         """ Evaluate an Ole report.
@@ -421,7 +427,7 @@ class CuckooRule(Rule):
         @raises PeekabooAnalysisDeferred: if the sample was submitted to Cuckoo
         @returns: RuleResult containing verdict.
         """
-        report = self.get_cuckoo_report(sample)
+        report = await self.get_cuckoo_report(sample)
         if report is None:
             # exception message intentionally not present in message
             # delivered back to client as to not disclose internal
@@ -681,7 +687,7 @@ class ExpressionRule(Rule):
         class variable with a dynamic determination. """
         return self.uses_identifier("cortexreport")
 
-    def resolve_identifier(self, identifier, context, sample):
+    async def resolve_identifier(self, identifier, context, sample):
         """ Resolves a missing identifer into an object.
 
         @param identifer: Name of identifer to resolve.
@@ -690,7 +696,7 @@ class ExpressionRule(Rule):
         """
         if identifier == "cuckooreport":
             logger.debug("Expression requests cuckoo report")
-            value = self.get_cuckoo_report(sample)
+            value = await self.get_cuckoo_report(sample)
             if value is None:
                 return self.result(
                     Result.failed,
@@ -699,13 +705,13 @@ class ExpressionRule(Rule):
                     False)
         elif identifier == "olereport":
             logger.debug("Expression requests oletools report")
-            value = self.get_oletools_report(sample)
+            value = await self.get_oletools_report(sample)
         elif identifier == "filereport":
             logger.debug("Expression requests filetools report")
-            value = self.get_filetools_report(sample)
+            value = await self.get_filetools_report(sample)
         elif identifier == "knownreport":
             logger.debug("Expression requests knowntools report")
-            value = self.get_knowntools_report(sample)
+            value = await self.get_knowntools_report(sample)
         elif identifier == "cortexreport":
             logger.debug("Expression requests cortex report")
             value = self.get_cortex_report(sample)
@@ -744,13 +750,13 @@ class ExpressionRule(Rule):
                     cortex_analyzer = missing.analyzer
 
                 if identifier is not None:
-                    result = self.resolve_identifier(
+                    result = await self.resolve_identifier(
                         identifier, context, sample)
                     if result is not None:
                         return result
 
                 if cortex_analyzer is not None:
-                    self.submit_to_cortex(sample, cortex_analyzer)
+                    await self.submit_to_cortex(sample, cortex_analyzer)
                     # submission either raises an exception or has failed, so
                     # getting here is an error
                     return self.result(

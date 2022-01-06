@@ -59,7 +59,8 @@ class RulesetEngine:
         FinalRule
     ]
 
-    def __init__(self, config, job_queue, db_con, analyzer_config):
+    def __init__(self, config, job_queue, db_con, analyzer_config,
+                 threadpool=None):
         """ Create the engine and store its config. Postpone lengthy
         initialisation for later so that it can be registered quickly for
         shutdown requests.
@@ -79,6 +80,7 @@ class RulesetEngine:
         self.job_queue = job_queue
         self.db_con = db_con
         self.analyzer_config = analyzer_config
+        self.threadpool = threadpool
         self.cuckoo = None
         self.cortex = None
         self.rules = []
@@ -127,7 +129,8 @@ class RulesetEngine:
         # user-defined rule order is preserved in enabled_rules and through
         # ordered append() in self.rules
         for rule_name in enabled_rules:
-            rule = rule_classes[rule_name](self.config, self.db_con)
+            rule = rule_classes[rule_name](
+                self.config, self.db_con, self.threadpool)
 
             # check if the rule requires any common, long lived logic and
             # instantiate now

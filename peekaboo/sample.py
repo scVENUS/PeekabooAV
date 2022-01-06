@@ -23,20 +23,20 @@
 ###############################################################################
 
 
+import asyncio
 import datetime
 import enum
-import os
 import hashlib
 import json
+import os.path
 import random
 import re
 import shutil
 import string
 import logging
 import tempfile
-# python 3's open with encoding parameter and implicit usage of the system
-# locale-specified encoding
-from builtins import open
+import aiofiles
+import aiofiles.os
 from peekaboo.ruleset import Result
 
 
@@ -48,16 +48,17 @@ class SampleFactory:
     Contains all the global configuration data and object references each
     sample needs and thus serves as a registry of potential API breakage
     perhaps deserving looking into. """
-    def __init__(self, processing_info_dir):
+    def __init__(self, processing_info_dir, threadpool):
         # configuration
         self.processing_info_dir = processing_info_dir
+        self.threadpool = threadpool
 
     def make_sample(self, content, name=None, content_type=None,
                     content_disposition=None):
         """ Create a new Sample object based on the factory's configured
         defaults and variable parameters. """
         return Sample(content, name, content_type, content_disposition,
-                      self.processing_info_dir)
+                      self.processing_info_dir, threadpool=self.threadpool)
 
 
 @enum.unique
@@ -78,7 +79,7 @@ class Sample:
     """
     def __init__(self, content, filename=None, content_type=None,
                  content_disposition=None,
-                 processing_info_dir=None, job_id=None):
+                 processing_info_dir=None, job_id=None, threadpool=None):
         # we do neither need nor accept for path traversal attack avoidance
         # full paths
         if filename is not None:
@@ -103,6 +104,7 @@ class Sample:
         self.__sha256sum = None
         self.__file_extension = None
         self.__processing_info_dir = processing_info_dir
+        self.__threadpool = threadpool
 
     @property
     def filename(self):
@@ -180,7 +182,7 @@ class Sample:
             self.__result = res.result
             self.__reason = res.reason
 
-    def dump_processing_info(self):
+    async def dump_processing_info(self):
         """
         Saves the Cuckoo report as HTML + JSON
         to a directory named after the job hash.
@@ -192,10 +194,12 @@ class Sample:
 
         now = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
         dump_dir = os.path.join(
-            self.__processing_info_dir, "%s-%s" % (now, self.sha256sum))
-        if not os.path.isdir(dump_dir):
+            self.__processing_info_dir, "%s-%s" % (now, await self.sha256sum))
+        if not await aiofiles.os.path.isdir(
+                dump_dir, executor=self.__threadpool):
             try:
-                os.makedirs(dump_dir, 0o770)
+                await aiofiles.os.makedirs(
+                    dump_dir, 0o770, executor=self.__threadpool)
             except OSError as oserr:
                 logger.error('Failed to create dump directory %s: %s',
                              dump_dir, oserr)
@@ -207,15 +211,18 @@ class Sample:
         # Peekaboo's report
         peekaboo_report = os.path.join(dump_dir, 'report.txt')
         try:
-            with open(peekaboo_report, 'w+') as pr_file:
-                pr_file.write('Declared file name: %s\n' % self.__filename)
-                pr_file.write(
+            async with aiofiles.open(
+                    peekaboo_report, 'w+',
+                    executor=self.__threadpool) as pr_file:
+                await pr_file.write(
+                    'Declared file name: %s\n' % self.__filename)
+                await pr_file.write(
                     'Declared content type: %s\n' % self.__content_type)
-                pr_file.write(
+                await pr_file.write(
                     'Declared content disposition: %s\n' %
                     self.__content_disposition)
                 if self.__report:
-                    pr_file.write('\n'.join(self.__report + [""]))
+                    await pr_file.write('\n'.join(self.__report + [""]))
         except (OSError, IOError) as error:
             logger.error('Failure to write report file %s: %s',
                          peekaboo_report, error)
@@ -225,8 +232,10 @@ class Sample:
         if self.__result == Result.bad:
             sample_dump = os.path.join(dump_dir, 'sample.bin')
             try:
-                with open(sample_dump, 'wb') as dump_file:
-                    dump_file.write(self.__content)
+                async with aiofiles.open(
+                        sample_dump, 'wb',
+                        executor=self.__threadpool) as dump_file:
+                    await dump_file.write(self.__content)
             except (shutil.Error, IOError, OSError) as error:
                 logger.error('Failure to dump sample file to dump '
                              'directory: %s', error)
@@ -236,21 +245,35 @@ class Sample:
         if self.__cuckoo_report:
             cuckoo_report = os.path.join(dump_dir, 'cuckoo_report.json')
             try:
-                with open(cuckoo_report, 'wb+') as cr_json_file:
+                async with aiofiles.open(
+                        cuckoo_report, 'wb+',
+                        executor=self.__threadpool) as cr_json_file:
                     cr_json = json.dumps(self.__cuckoo_report.dump,
                                          indent=1, ensure_ascii=True)
-                    cr_json_file.write(cr_json.encode('ascii'))
+                    await cr_json_file.write(cr_json.encode('ascii'))
             except (OSError, IOError) as error:
                 logger.error('Failure to dump json report to %s: %s',
                              cuckoo_report, error)
                 return
 
+    def __sha256sum_internal(self):
+        """ Actual calculation of the SHA256 checksum called by wrapper
+        routines. """
+        return hashlib.sha256(self.__content).hexdigest()
+
     @property
-    def sha256sum(self):
+    async def sha256sum(self):
         """ Returns the SHA256 checksum/fingerprint of this sample. Determines
         it automatically on first call. """
-        if not self.__sha256sum:
-            self.__sha256sum = hashlib.sha256(self.__content).hexdigest()
+        if self.__sha256sum is not None:
+            return self.__sha256sum
+
+        if self.__threadpool is not None:
+            loop = asyncio.get_running_loop()
+            self.__sha256sum = await loop.run_in_executor(
+                self.__threadpool, self.__sha256sum_internal)
+        else:
+            self.__sha256sum = self.__sha256sum_internal()
 
         return self.__sha256sum
 

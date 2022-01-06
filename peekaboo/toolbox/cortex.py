@@ -137,7 +137,7 @@ class CortexAnalyzer:
 class CortexFileAnalyzer:
     """ An analyzer which accepts a file as main input. """
     @staticmethod
-    def get_submit_parameters(sample, sample_tlp):
+    async def get_submit_parameters(sample, sample_tlp):
         """ Return this analyzer's submit parameters for a given sample. """
         del sample
 
@@ -151,11 +151,11 @@ class CortexFileAnalyzer:
         }
 
     @staticmethod
-    def get_submit_files(sample, submit_original_filename=True):
+    async def get_submit_files(sample, submit_original_filename=True):
         """ Return this analyzer's list of files to submit for a given sample
         in the format expected by requests.post() potentially including the
         original file name. """
-        filename = sample.sha256sum
+        filename = await sample.sha256sum
 
         # append file extension to aid backend analyzers in file type detection
         if sample.file_extension:
@@ -172,17 +172,17 @@ class CortexFileAnalyzer:
 class CortexHashAnalyzer(CortexAnalyzer):
     """ An analyzer which accepts hashes as main input. """
     @staticmethod
-    def get_submit_parameters(sample, sample_tlp):
+    async def get_submit_parameters(sample, sample_tlp):
         """ Return this analyzer's submit parameters for a given sample. """
         return {
-            'data': sample.sha256sum,
+            'data': await sample.sha256sum,
             'dataType': 'hash',
             'tlp': sample_tlp.value,
             # 'pap' ?
         }
 
     @staticmethod
-    def get_submit_files(sample, submit_original_filename=True):
+    async def get_submit_files(sample, submit_original_filename=True):
         """ Return this analyzer's list of files to submit for a given sample
         in the format expected by requests.post() potentially including the
         original file name. """
@@ -743,7 +743,7 @@ class Cortex:
             job.sample.mark_cortex_failure()
             await self.job_queue.submit(job.sample)
 
-    def submit(self, sample, analyzer):
+    async def submit(self, sample, analyzer):
         """ Submit a sample to Cortex for analysis.
         @param sample: Sample to submit.
         @type sample: Sample
@@ -787,8 +787,9 @@ class Cortex:
         analyzer_id = analyzers[0]['id']
         request_url = urllib.parse.urljoin(
             self.url, f'/api/analyzer/{analyzer_id}/run')
-        data = analyzer.get_submit_parameters(sample, self.tlp)
-        files = analyzer.get_submit_files(sample, self.submit_original_filename)
+        data = await analyzer.get_submit_parameters(sample, self.tlp)
+        files = await analyzer.get_submit_files(
+            sample, self.submit_original_filename)
 
         logger.debug("Creating Cortex job with analyzer %s and "
                      "parameters %s", analyzer.name, data)

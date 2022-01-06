@@ -40,7 +40,8 @@ logger = logging.getLogger(__name__)
 class JobQueue:
     """ Peekaboo's queuing system. """
     def __init__(self, ruleset_config, db_con, analyzer_config,
-                 worker_count=4, cluster_duplicate_check_interval=5):
+                 worker_count=4, cluster_duplicate_check_interval=5,
+                 threadpool=None):
         """ Initialise job queue by creating n Peekaboo workers to process
         samples.
 
@@ -61,6 +62,7 @@ class JobQueue:
         self.jobs = asyncio.Queue()
         self.workers = []
         self.worker_count = worker_count
+        self.threadpool = threadpool
 
         # keep a backlog of samples with hashes identical to samples currently
         # in analysis to avoid analysing multiple identical samples
@@ -75,7 +77,7 @@ class JobQueue:
         self.cluster_duplicates = {}
 
         self.ruleset_engine = RulesetEngine(
-            ruleset_config, self, db_con, analyzer_config)
+            ruleset_config, self, db_con, analyzer_config, threadpool)
 
         # we start these here because they do no lengthy init and starting can
         # not fail. We need this here to avoid races in startup vs. shutdown by
@@ -131,7 +133,7 @@ class JobQueue:
         @param sample: The Sample object to add to the queue.
         @raises Full: if the queue is full.
         """
-        sample_hash = sample.sha256sum
+        sample_hash = await sample.sha256sum
         duplicate = None
         cluster_duplicate = None
         resubmit = None
@@ -301,7 +303,7 @@ class JobQueue:
         2. notify request handler that sample processing is done.
 
         @param sample: The Sample object to post-process. """
-        await self.submit_duplicates(sample.sha256sum)
+        await self.submit_duplicates(await sample.sha256sum)
 
     async def dequeue(self):
         """ Remove a sample from the queue. Used by the workers to get their
@@ -422,7 +424,7 @@ class Worker:
                 continue
 
             if sample.result >= Result.failed:
-                sample.dump_processing_info()
+                await sample.dump_processing_info()
 
             sample.mark_done()
 
