@@ -1,5 +1,7 @@
 aiofiles>=0.8.0
+aiohttp
 sqlalchemy[asyncio]>=1.4.24
+tenacity
 python-magic>=0.4.17
 oletools>=0.54
 sdnotify>=0.3.1

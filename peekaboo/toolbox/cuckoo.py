@@ -30,9 +30,9 @@ import datetime
 import os
 import logging
 
-import requests
+import aiohttp
 import schema
-import urllib3.util.retry
+import tenacity
 
 from peekaboo.exceptions import PeekabooException
 
@@ -63,41 +63,21 @@ class CuckooJob:
         return self.__sample
 
 
-class AllowedStatusRetry(urllib3.util.retry.Retry):
-    """ A Retry class which has a list of allowed status codes, allowing to
-    retry all status codes not explicitly allowed in a hard-core, catch-all
-    manner. """
-    def __init__(self, allowed_statuses=None, abort=None, **kwargs):
-        super().__init__(**kwargs)
-        self.allowed_statuses = allowed_statuses or set()
-        # Event that is set if we're not to retry
-        self.abort = abort
+class PickyClientResponse(aiohttp.ClientResponse):
+    """ A picky client response that only considers status 200 as ok. """
+    @property
+    def ok(self) -> bool:
+        """ Accept only status 200 as ok because we expect all our requests to
+        return that code. """
+        return self.status == 200
 
-    def new(self, **kwargs):
-        """ Adjusted shallow copy method to carry our parameters over into our
-        copy. """
-        if 'allowed_statuses' not in kwargs:
-            kwargs['allowed_statuses'] = self.allowed_statuses
-        if 'abort' not in kwargs:
-            kwargs['abort'] = self.abort
-        return super().new(**kwargs)
 
-    def is_exhausted(self):
-        """ Allow to abort a retry chain through an external signal. """
-        if self.abort and self.abort.is_set():
-            return True
-
-        return super().is_exhausted()
-
-    def is_retry(self, method, status_code, has_retry_after=False):
-        """ Override Retry's is_retry to introduce our allowed statuses logic.
-        """
-        # we retry all methods so no check if method is retryable here
-
-        if self.allowed_statuses and status_code not in self.allowed_statuses:
-            return True
-
-        return super().is_retry(method, status_code, has_retry_after)
+def log_retry(retry_state):
+    """ Log a warning message on retries of requests. """
+    exception = retry_state.outcome.exception()
+    wait = retry_state.next_action.sleep
+    logger.log(logging.WARNING, "%s. Retrying in %.2f seconds.",
+               exception, wait)
 
 
 class Cuckoo:
@@ -128,37 +108,20 @@ class Cuckoo:
         self.job_queue = job_queue
         self.running_jobs = {}
         self.url = url
-        self.api_token = api_token
         self.poll_interval = poll_interval
         self.submit_original_filename = submit_original_filename
         self.max_job_age = max_job_age
 
-        # urrlib3 backoff formula:
-        # <backoff factor> * (2 ^ (<retry count so far> - 1))
-        # with second try intentionally having no sleep,
-        # e.g. with retry count==5 and backoff factor==0.5:
-        # try 1: fail, sleep(0.5*2^(1-1)==0.5*2^0==0.5*1==0.5->intentionally
-        #   overridden to 0)
-        # try 2: fail, sleep(0.5*2^(2-1)==0.5*2^1==1)
-        # try 3: fail, sleep(0.5*2^(3-1)==0.5*2^2==2)
-        # try 4: fail, sleep(0.5*2^(4-1)==0.5*2^3==4)
-        # try 5: fail, abort, sleep would've been 8 before try 6
-        #
-        # Also, use allowed_methods=None to enable POST and other methods for
-        # retry which aren't by default because they're not considered
-        # idempotent. We assume that with the REST API a request either
-        # succeeds or fails without residual effects, making them atomic and
-        # idempotent.
-        #
-        # And finally we retry everything but a 200 response, which admittedly
-        # is a bit hard-core but serves our purposes for now.
-        retry_config = AllowedStatusRetry(
-            total=retries, backoff_factor=backoff, allowed_methods=None,
-            allowed_statuses=set([200]), abort=self.shutdown_requested)
-        retry_adapter = requests.adapters.HTTPAdapter(max_retries=retry_config)
-        self.session = requests.session()
-        self.session.mount('http://', retry_adapter)
-        self.session.mount('https://', retry_adapter)
+        self.retrier = tenacity.AsyncRetrying(
+                stop=tenacity.stop_after_attempt(retries),
+                wait=tenacity.wait_exponential(multiplier=backoff),
+                retry=tenacity.retry_if_exception_type(aiohttp.ClientError),
+                before_sleep=log_retry)
+
+        headers = {"Authorization": f"Bearer {api_token}"}
+        self.session = aiohttp.ClientSession(
+            raise_for_status=True, response_class=PickyClientResponse,
+            headers=headers)
 
         self.tracker = None
 
@@ -173,30 +136,52 @@ class Cuckoo:
         """
         return "%s/%s" % (self.url, path)
 
-    def __get(self, path):
+    # tried backoff decorators here but they're basically not
+    # runtime-configurable
+    async def get(self, path):
+        """ Do a GET request to a path relative to our configured URL with
+        retries. """
         request_url = self.request_url(path)
         logger.debug("Getting %s", request_url)
-        headers = {"Authorization": "Bearer %s" % self.api_token}
-
         try:
-            response = self.session.get(request_url, headers=headers)
-        # all requests exceptions are derived from RequestsException, including
-        # RetryError, TooManyRedirects and Timeout
-        except requests.exceptions.RequestException as error:
-            logger.error('Request to REST API failed: %s', error)
-            return None
-
-        # no check for status code here since we retry all but 200
-        # responses and raise an exception if retries fail
-        try:
-            json_resp = response.json()
+            async for attempt in self.retrier:
+                with attempt:
+                    async with self.session.get(request_url) as response:
+                        # no check for status code here since we retry all but
+                        # 200 responses and raise an exception if retries fail
+                        return await response.json()
         except ValueError as error:
             logger.error(
-                'Invalid JSON in response when getting %s: %s',
+                "Invalid JSON in response when getting %s: %s",
                 request_url, error)
-            return None
+        except tenacity.RetryError:
+            # retries expired
+            pass
 
-        return json_resp
+        return None
+
+    async def post(self, path, data):
+        """ Do a POST request to a path relative to our configured URL with
+        retries. """
+        request_url = self.request_url(path)
+        logger.debug("Posting to %s", request_url)
+        try:
+            async for attempt in self.retrier:
+                with attempt:
+                    async with self.session.post(
+                            request_url, data=data) as response:
+                        # no check for status code here since we retry all but
+                        # 200 responses and raise an exception if retries fail
+                        return await response.json()
+        except ValueError as error:
+            logger.error(
+                "Invalid JSON in response when posting to "
+                "%s: %s", request_url, error)
+        except tenacity.RetryError:
+            # retries expired
+            pass
+
+        return None
 
     def register_running_job(self, job_id, sample):
         """ Register a job as running. Detect if another sample has already
@@ -260,7 +245,7 @@ class Cuckoo:
 
         logger.debug('%d: Requesting Cuckoo report', sample.id)
         report_path = "tasks/report/%d" % job_id
-        report = self.__get(report_path)
+        report = await self.get(report_path)
         if report is None:
             # mark analysis as failed if we could not get the report e.g.
             # because it was corrupted or the API connection failed.
@@ -323,25 +308,17 @@ class Cuckoo:
         if self.submit_original_filename and sample.filename:
             filename = sample.filename
 
-        files = {"file": (filename, sample.content)}
         logger.debug("Creating Cuckoo task with filename %s", filename)
-        headers = {"Authorization": "Bearer %s" % self.api_token}
 
-        try:
-            response = self.session.post(
-                "%s/tasks/create/file" % self.url,
-                headers=headers, files=files)
-        except requests.exceptions.RequestException as error:
+        payload = aiohttp.FormData()
+        payload.add_field("file", sample.content, filename=filename)
+
+        # calling the callable FormData finalises it into a BytesPayload and
+        # makes it reusable across retries
+        json_resp = await self.post("tasks/create/file", payload())
+        if json_resp is None:
             raise CuckooSubmitFailedException(
-                'Error creating Cuckoo task: %s' % error)
-
-        try:
-            json_resp = response.json()
-        except ValueError as error:
-            raise CuckooSubmitFailedException(
-                'Invalid JSON in response when creating Cuckoo task: %s'
-                % error)
-
+                "Error creating Cuckoo task")
         if "task_id" not in json_resp:
             raise CuckooSubmitFailedException(
                 'No job ID present in API response')
@@ -383,7 +360,7 @@ class Cuckoo:
             # only meant to iterate over the job list in blocks but not to
             # return data about a specific range of job IDs from that list.
             for job_id in running_jobs:
-                job = self.__get("tasks/view/%i" % job_id)
+                job = await self.get(f"tasks/view/{job_id}")
                 if job is None:
                     # ignore and retry on next polling run
                     continue
@@ -424,6 +401,8 @@ class Cuckoo:
             # we cancelled the task so a CancelledError is expected
             except asyncio.CancelledError:
                 pass
+
+        await self.session.close()
 
 
 class CuckooReport:
