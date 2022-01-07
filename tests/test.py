@@ -69,6 +69,27 @@ from peekaboo.toolbox.cortex import CortexReport, VirusTotalQuery, \
 # pylint: enable=wrong-import-position
 
 
+# unittest.IsolatedAsyncioTestCase exists only in Python 3.8+. Since earlier
+# versions do not allow for easily overriding the test execution by subclassing
+# we go the route of adding a decorator that handles asynchronous execution in
+# those versions.
+if sys.version_info[0] < 4 and sys.version_info[1] < 8:
+    AsyncioTestCase = unittest.TestCase
+
+    def asynctest(func):
+        """ decorator executing async test through the loop """
+        def wrapper(*args, **kwargs):
+            loop = asyncio.get_event_loop()
+            return loop.run_until_complete(func(*args, **kwargs))
+
+        return wrapper
+else:
+    AsyncioTestCase = unittest.IsolatedAsyncioTestCase
+
+    def asynctest(func):
+        """ no-op async test decorator """
+        return func
+
 class CreatingConfigMixIn:
     """ A class for adding config file creation logic to any other class. """
     def create_config(self, content):
@@ -377,7 +398,7 @@ api_token: tok2''')
         self.assertEqual(self.config.cortex_api_token, 'tok2')
 
 
-class TestDatabase(unittest.TestCase):
+class TestDatabase(AsyncioTestCase):
     """ Unittests for Peekaboo's database module. """
     @classmethod
     def setUpClass(cls):
@@ -395,12 +416,11 @@ class TestDatabase(unittest.TestCase):
                             'This is just a test case.',
                             further_analysis=False)
         cls.sample.add_rule_result(result)
-        cls.loop = asyncio.get_event_loop()
 
-    def test_1_analysis_add(self):
+    @asynctest
+    async def test_1_analysis_add(self):
         """ Test adding a new analysis. """
-        self.loop.run_until_complete(
-            self.db_con.analysis_add(self.sample))
+        await self.db_con.analysis_add(self.sample)
         # sample now contains a job ID
 
     def test_2_analysis_update(self):
@@ -409,10 +429,10 @@ class TestDatabase(unittest.TestCase):
         self.sample.mark_done()
         self.db_con.analysis_update(self.sample)
 
-    def test_3_analysis_journal_fetch_journal(self):
+    @asynctest
+    async def test_3_analysis_journal_fetch_journal(self):
         """ Test retrieval of analysis results. """
-        self.loop.run_until_complete(
-            self.db_con.analysis_add(self.sample))
+        await self.db_con.analysis_add(self.sample)
         # sample now contains another, new job ID
         # mark sample done so journal and result retrieval tests can work
         self.sample.mark_done()
@@ -424,8 +444,7 @@ class TestDatabase(unittest.TestCase):
                             'This is just a test case.',
                             further_analysis=False)
         self.sample.add_rule_result(result)
-        self.loop.run_until_complete(
-            self.db_con.analysis_add(self.sample))
+        await self.db_con.analysis_add(self.sample)
         self.sample.mark_done()
         self.db_con.analysis_update(self.sample)
 
@@ -444,13 +463,12 @@ class TestDatabase(unittest.TestCase):
         # does not contain the failed result
         self.assertEqual(len(journal), 2)
 
-    def test_4_analysis_retrieve(self):
+    @asynctest
+    async def test_4_analysis_retrieve(self):
         """ Test retrieval of analysis results. """
-        self.loop.run_until_complete(
-            self.db_con.analysis_add(self.sample))
+        await self.db_con.analysis_add(self.sample)
         # sample now contains a job ID
-        reason, result = self.loop.run_until_complete(
-            self.db_con.analysis_retrieve(self.sample.id))
+        reason, result = await self.db_con.analysis_retrieve(self.sample.id)
         # does not ignore failed analyses like the journal above
         self.assertEqual(result, Result.failed)
         self.assertEqual(reason, 'This is just a test case.')
@@ -966,7 +984,7 @@ class CuckooReportSample:  # pylint: disable=too-few-public-methods
         self.cuckoo_failed = failed
 
 
-class TestRules(unittest.TestCase):
+class TestRules(AsyncioTestCase):
     """ Unittests for Rules. """
     @classmethod
     def setUpClass(cls):
@@ -985,7 +1003,6 @@ success.1: analysis completed successfully''')
 
         cls.tests_data_dir = os.path.join(TESTSDIR, "test-data")
         cls.office_data_dir = os.path.join(cls.tests_data_dir, 'office')
-        cls.loop = asyncio.get_event_loop()
 
     def test_config_known(self):  # pylint: disable=no-self-use
         """ Test the known rule configuration. """
@@ -1290,7 +1307,8 @@ unknown : baz'''
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.ignored)
 
-    def test_rule_expression_knowntools(self):
+    @asynctest
+    async def test_rule_expression_knowntools(self):
         """ Test generic rule on knowntoolsreport. """
         config = r'''[expressions]
             expression.0  : sample.filename == "first.a" and knownreport.known -> bad
@@ -1311,8 +1329,7 @@ unknown : baz'''
             'Unittest', Result.good, 'This is just a test case.',
             further_analysis=False)
         sample.add_rule_result(good_result)
-        self.loop.run_until_complete(
-            db_con.analysis_add(sample))
+        await db_con.analysis_add(sample)
         sample.mark_done()
         db_con.analysis_update(sample)
 
@@ -1322,8 +1339,7 @@ unknown : baz'''
                             'This is just a test case.',
                             further_analysis=False)
         sample.add_rule_result(result)
-        self.loop.run_until_complete(
-            db_con.analysis_add(sample))
+        await db_con.analysis_add(sample)
         sample.mark_done()
         db_con.analysis_update(sample)
 
@@ -1339,8 +1355,7 @@ unknown : baz'''
         self.assertEqual(result.result, Result.ignored)
 
         sample.add_rule_result(result)
-        self.loop.run_until_complete(
-            db_con.analysis_add(sample))
+        await db_con.analysis_add(sample)
         sample.mark_done()
         db_con.analysis_update(sample)
 
@@ -1353,8 +1368,7 @@ unknown : baz'''
         self.assertEqual(result.result, Result.ignored)
 
         sample.add_rule_result(result)
-        self.loop.run_until_complete(
-            db_con.analysis_add(sample))
+        await db_con.analysis_add(sample)
         sample.mark_done()
         db_con.analysis_update(sample)
 
@@ -1363,8 +1377,7 @@ unknown : baz'''
         self.assertEqual(result.result, Result.ignored)
 
         sample.add_rule_result(good_result)
-        self.loop.run_until_complete(
-            db_con.analysis_add(sample))
+        await db_con.analysis_add(sample)
         sample.mark_done()
         db_con.analysis_update(sample)
 
