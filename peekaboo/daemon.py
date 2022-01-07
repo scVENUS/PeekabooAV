@@ -388,7 +388,20 @@ async def async_main():
 
     sys.exit(0)
 
+
+def get_running_loop():
+    """ provide asyncio.get_running_loop in Python 3.6 """
+    loop = asyncio._get_running_loop()
+    if loop is None:
+        raise RuntimeError('no running event loop')
+    return loop
+
+
 def run():
+    # provide asyncio.get_running_loop in Python 3.6
+    if not hasattr(asyncio, "get_running_loop"):
+        asyncio.get_running_loop = get_running_loop
+
     asyncio.run(async_main())
 
 if __name__ == '__main__':
