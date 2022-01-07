@@ -76,10 +76,12 @@ from peekaboo.toolbox.cortex import CortexReport, VirusTotalQuery, \
 if sys.version_info[0] < 4 and sys.version_info[1] < 8:
     AsyncioTestCase = unittest.TestCase
 
+    import functools
     def asynctest(func):
-        """ decorator executing async test through the loop """
+        """ decorator executing async test through an event loop """
+        @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            loop = asyncio.get_event_loop()
+            loop = asyncio.new_event_loop()
             return loop.run_until_complete(func(*args, **kwargs))
 
         return wrapper
@@ -420,7 +422,6 @@ class TestDefaultConfig(unittest.TestCase):
             self.config.log_format, '%(asctime)s - %(name)s - '
             '(%(threadName)s) - %(levelname)s - %(message)s')
         self.assertEqual(self.config.db_url, 'sqlite:////var/lib/peekaboo/peekaboo.db')
-        self.assertEqual(self.config.db_async_driver, None)
         self.assertEqual(self.config.db_log_level, logging.WARNING)
         self.assertEqual(self.config.cluster_instance_id, 0)
         self.assertEqual(self.config.cluster_stale_in_flight_threshold, 15*60)
@@ -450,7 +451,6 @@ log_format       :    format%%(foo1)s
 
 [db]
 url              :    sqlite:////peekaboo.db1
-async_driver     :    async
 log_level        :    INFO
 
 [cluster]
@@ -474,7 +474,6 @@ duplicate_check_interval: 61
         self.assertEqual(self.config.log_level, logging.DEBUG)
         self.assertEqual(self.config.log_format, 'format%(foo1)s')
         self.assertEqual(self.config.db_url, 'sqlite:////peekaboo.db1')
-        self.assertEqual(self.config.db_async_driver, 'async')
         self.assertEqual(self.config.db_log_level, logging.INFO)
         self.assertEqual(self.config.cluster_instance_id, 12)
         self.assertEqual(self.config.cluster_stale_in_flight_threshold, 31)
@@ -618,8 +617,13 @@ class TestDatabase(AsyncioTestCase):
         cls.db_con = PeekabooDatabase('sqlite:///' + cls.test_db,
                                       instance_id=1,
                                       stale_in_flight_threshold=10)
+        # IsolatedAsyncoiTestCase zaps the thread-level event loop after each
+        # test, so we need to create our own here.
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(cls.db_con.start())
         cls.no_cluster_db = PeekabooDatabase('sqlite:///' + cls.test_db,
                                              instance_id=0)
+        loop.run_until_complete(cls.no_cluster_db.start())
         cls.sample = Sample(b'test', 'test.py')
         result = RuleResult('Unittest',
                             Result.good,
@@ -633,11 +637,12 @@ class TestDatabase(AsyncioTestCase):
         await self.db_con.analysis_add(self.sample)
         # sample now contains a job ID
 
-    def test_2_analysis_update(self):
+    @asynctest
+    async def test_2_analysis_update(self):
         """ Test updating of analysis results. """
         # mark sample done so journal and result retrieval tests can work
         self.sample.mark_done()
-        self.db_con.analysis_update(self.sample)
+        await self.db_con.analysis_update(self.sample)
 
     @asynctest
     async def test_3_analysis_journal_fetch_journal(self):
@@ -646,7 +651,7 @@ class TestDatabase(AsyncioTestCase):
         # sample now contains another, new job ID
         # mark sample done so journal and result retrieval tests can work
         self.sample.mark_done()
-        self.db_con.analysis_update(self.sample)
+        await self.db_con.analysis_update(self.sample)
 
         # add a failed analysis to check that it is ignored
         result = RuleResult('Unittest',
@@ -656,13 +661,13 @@ class TestDatabase(AsyncioTestCase):
         self.sample.add_rule_result(result)
         await self.db_con.analysis_add(self.sample)
         self.sample.mark_done()
-        self.db_con.analysis_update(self.sample)
+        await self.db_con.analysis_update(self.sample)
 
         # reset the job id so this sample is not ignored when fetching the
         # journal
         self.sample.update_id(None)
 
-        journal = self.db_con.analysis_journal_fetch_journal(self.sample)
+        journal = await self.db_con.analysis_journal_fetch_journal(self.sample)
         self.assertEqual(journal[0].result, Result.good)
         self.assertEqual(journal[0].reason, 'This is just a test case.')
         self.assertIsNotNone(journal[0].analysis_time)
@@ -683,107 +688,126 @@ class TestDatabase(AsyncioTestCase):
         self.assertEqual(result, Result.failed)
         self.assertEqual(reason, 'This is just a test case.')
 
-    def test_5_in_flight_no_cluster(self):
+    @asynctest
+    async def test_5_in_flight_no_cluster(self):
         """ Test that marking of samples as in-flight on a non-cluster-enabled
         database are no-ops. """
-        self.assertTrue(self.no_cluster_db.mark_sample_in_flight(self.sample))
-        self.assertTrue(self.no_cluster_db.mark_sample_in_flight(self.sample))
-        self.assertIsNone(self.no_cluster_db.clear_sample_in_flight(self.sample))
-        self.assertIsNone(self.no_cluster_db.clear_sample_in_flight(self.sample))
-        self.assertIsNone(self.no_cluster_db.clear_in_flight_samples())
+        self.assertTrue(await self.no_cluster_db.mark_sample_in_flight(
+            self.sample))
+        self.assertTrue(await self.no_cluster_db.mark_sample_in_flight(
+            self.sample))
+        self.assertIsNone(await self.no_cluster_db.clear_sample_in_flight(
+            self.sample))
+        self.assertIsNone(await self.no_cluster_db.clear_sample_in_flight(
+            self.sample))
+        self.assertIsNone(await self.no_cluster_db.clear_in_flight_samples())
 
-    def test_6_in_flight_cluster(self):
+    @asynctest
+    async def test_6_in_flight_cluster(self):
         """ Test marking of samples as in-flight. """
-        self.assertTrue(self.db_con.mark_sample_in_flight(self.sample, 1))
+        self.assertTrue(await self.db_con.mark_sample_in_flight(
+            self.sample, 1))
         # re-locking the same sample should fail
-        self.assertFalse(self.db_con.mark_sample_in_flight(self.sample, 1))
-        self.assertIsNone(self.db_con.clear_sample_in_flight(self.sample, 1))
+        self.assertFalse(await self.db_con.mark_sample_in_flight(
+            self.sample, 1))
+        self.assertIsNone(await self.db_con.clear_sample_in_flight(
+            self.sample, 1))
         # unlocking twice should fail
-        self.assertRaisesRegex(
-            PeekabooDatabaseError, "Unexpected inconsistency: Sample not "
-            "recorded as in-flight upon clearing flag",
-            self.db_con.clear_sample_in_flight, self.sample, 1)
+        with self.assertRaisesRegex(
+                PeekabooDatabaseError, "Unexpected inconsistency: Sample not "
+                "recorded as in-flight upon clearing flag"):
+            await self.db_con.clear_sample_in_flight(self.sample, 1)
 
-    def test_7_in_flight_clear(self):
+    @asynctest
+    async def test_7_in_flight_clear(self):
         """ Test clearing of in-flight markers. """
         sample2 = Sample(b'foo', 'foo.pyc')
         sample3 = Sample(b'bar', 'bar.pyc')
 
-        self.assertTrue(self.db_con.mark_sample_in_flight(self.sample, 1))
-        self.assertTrue(self.db_con.mark_sample_in_flight(sample2, 1))
-        self.assertTrue(self.db_con.mark_sample_in_flight(sample3, 2))
+        self.assertTrue(await self.db_con.mark_sample_in_flight(self.sample, 1))
+        self.assertTrue(await self.db_con.mark_sample_in_flight(sample2, 1))
+        self.assertTrue(await self.db_con.mark_sample_in_flight(sample3, 2))
 
         # should only clear samples of instance 1
-        self.assertIsNone(self.db_con.clear_in_flight_samples(1))
-        self.assertTrue(self.db_con.mark_sample_in_flight(self.sample, 1))
-        self.assertTrue(self.db_con.mark_sample_in_flight(sample2, 1))
-        self.assertFalse(self.db_con.mark_sample_in_flight(sample3, 2))
+        self.assertIsNone(await self.db_con.clear_in_flight_samples(1))
+        self.assertTrue(await self.db_con.mark_sample_in_flight(self.sample, 1))
+        self.assertTrue(await self.db_con.mark_sample_in_flight(sample2, 1))
+        self.assertFalse(await self.db_con.mark_sample_in_flight(sample3, 2))
 
         # should only clear samples of instance 2
-        self.assertIsNone(self.db_con.clear_in_flight_samples(2))
-        self.assertFalse(self.db_con.mark_sample_in_flight(self.sample, 1))
-        self.assertFalse(self.db_con.mark_sample_in_flight(sample2, 1))
-        self.assertTrue(self.db_con.mark_sample_in_flight(sample3, 2))
+        self.assertIsNone(await self.db_con.clear_in_flight_samples(2))
+        self.assertFalse(await self.db_con.mark_sample_in_flight(
+            self.sample, 1))
+        self.assertFalse(await self.db_con.mark_sample_in_flight(sample2, 1))
+        self.assertTrue(await self.db_con.mark_sample_in_flight(sample3, 2))
 
         # should clear all samples
-        self.assertIsNone(self.db_con.clear_in_flight_samples(-1))
-        self.assertTrue(self.db_con.mark_sample_in_flight(self.sample, 1))
-        self.assertTrue(self.db_con.mark_sample_in_flight(sample2, 1))
-        self.assertTrue(self.db_con.mark_sample_in_flight(sample3, 2))
+        self.assertIsNone(await self.db_con.clear_in_flight_samples(-1))
+        self.assertTrue(await self.db_con.mark_sample_in_flight(self.sample, 1))
+        self.assertTrue(await self.db_con.mark_sample_in_flight(sample2, 1))
+        self.assertTrue(await self.db_con.mark_sample_in_flight(sample3, 2))
 
         # should be a no-op because there will never be any entries of instance
         # 0
-        self.assertIsNone(self.db_con.clear_in_flight_samples(0))
-        self.assertFalse(self.db_con.mark_sample_in_flight(self.sample, 1))
-        self.assertFalse(self.db_con.mark_sample_in_flight(sample2, 1))
-        self.assertFalse(self.db_con.mark_sample_in_flight(sample3, 2))
+        self.assertIsNone(await self.db_con.clear_in_flight_samples(0))
+        self.assertFalse(await self.db_con.mark_sample_in_flight(
+            self.sample, 1))
+        self.assertFalse(await self.db_con.mark_sample_in_flight(sample2, 1))
+        self.assertFalse(await self.db_con.mark_sample_in_flight(sample3, 2))
 
         # should be a no-op because this database is not cluster-enabled
-        self.assertIsNone(self.no_cluster_db.clear_in_flight_samples())
-        self.assertFalse(self.db_con.mark_sample_in_flight(self.sample, 1))
-        self.assertFalse(self.db_con.mark_sample_in_flight(sample2, 1))
-        self.assertFalse(self.db_con.mark_sample_in_flight(sample3, 2))
+        self.assertIsNone(await self.no_cluster_db.clear_in_flight_samples())
+        self.assertFalse(await self.db_con.mark_sample_in_flight(
+            self.sample, 1))
+        self.assertFalse(await self.db_con.mark_sample_in_flight(sample2, 1))
+        self.assertFalse(await self.db_con.mark_sample_in_flight(sample3, 2))
 
         # leave as found
-        self.assertIsNone(self.db_con.clear_in_flight_samples(-1))
+        self.assertIsNone(await self.db_con.clear_in_flight_samples(-1))
 
-    def test_8_stale_in_flight(self):
+    @asynctest
+    async def test_8_stale_in_flight(self):
         """ Test the cleaning of stale in-flight markers. """
         stale = datetime.utcnow() - timedelta(seconds=20)
-        self.assertTrue(self.db_con.mark_sample_in_flight(
+        self.assertTrue(await self.db_con.mark_sample_in_flight(
             self.sample, 1, stale))
         sample2 = Sample(b'baz', 'baz.pyc')
-        self.assertTrue(self.db_con.mark_sample_in_flight(sample2, 1))
+        self.assertTrue(await self.db_con.mark_sample_in_flight(sample2, 1))
 
         # should not clear anything because the database is not cluster-enabled
-        self.assertTrue(self.no_cluster_db.clear_stale_in_flight_samples())
-        self.assertFalse(self.db_con.mark_sample_in_flight(self.sample, 1))
-        self.assertFalse(self.db_con.mark_sample_in_flight(sample2, 1))
+        self.assertTrue(
+            await self.no_cluster_db.clear_stale_in_flight_samples())
+        self.assertFalse(await self.db_con.mark_sample_in_flight(
+            self.sample, 1))
+        self.assertFalse(await self.db_con.mark_sample_in_flight(sample2, 1))
 
         # should clear sample marker because it is stale but not sample2
-        self.assertTrue(self.db_con.clear_stale_in_flight_samples())
-        self.assertTrue(self.db_con.mark_sample_in_flight(self.sample, 1))
-        self.assertFalse(self.db_con.mark_sample_in_flight(sample2, 1))
+        self.assertTrue(await self.db_con.clear_stale_in_flight_samples())
+        self.assertTrue(await self.db_con.mark_sample_in_flight(self.sample, 1))
+        self.assertFalse(await self.db_con.mark_sample_in_flight(sample2, 1))
 
         # should not clear anything because all markers are fresh
-        self.assertFalse(self.db_con.clear_stale_in_flight_samples())
-        self.assertFalse(self.db_con.mark_sample_in_flight(self.sample, 1))
-        self.assertFalse(self.db_con.mark_sample_in_flight(sample2, 1))
+        self.assertFalse(await self.db_con.clear_stale_in_flight_samples())
+        self.assertFalse(await self.db_con.mark_sample_in_flight(
+            self.sample, 1))
+        self.assertFalse(await self.db_con.mark_sample_in_flight(sample2, 1))
 
         # set up new constellation
-        self.assertIsNone(self.db_con.clear_in_flight_samples(-1))
-        self.assertTrue(self.db_con.mark_sample_in_flight(
+        self.assertIsNone(await self.db_con.clear_in_flight_samples(-1))
+        self.assertTrue(await self.db_con.mark_sample_in_flight(
             self.sample, 1, stale))
-        self.assertTrue(self.db_con.mark_sample_in_flight(sample2, 1, stale))
+        self.assertTrue(await self.db_con.mark_sample_in_flight(
+            sample2, 1, stale))
 
         # should clear all markers because all are stale
-        self.assertTrue(self.db_con.clear_stale_in_flight_samples())
-        self.assertTrue(self.db_con.mark_sample_in_flight(
+        self.assertTrue(await self.db_con.clear_stale_in_flight_samples())
+        self.assertTrue(await self.db_con.mark_sample_in_flight(
             self.sample, 1, stale))
-        self.assertTrue(self.db_con.mark_sample_in_flight(sample2, 1, stale))
+        self.assertTrue(await self.db_con.mark_sample_in_flight(
+            sample2, 1, stale))
 
         # leave as found
-        self.assertTrue(self.db_con.clear_stale_in_flight_samples())
+        self.assertTrue(await self.db_con.clear_stale_in_flight_samples())
 
     @classmethod
     def tearDownClass(cls):
@@ -791,7 +815,7 @@ class TestDatabase(AsyncioTestCase):
         os.unlink(cls.test_db)
 
 
-class TestSample(unittest.TestCase):
+class TestSample(AsyncioTestCase):
     """ Unittests for Samples. """
     @classmethod
     def setUpClass(cls):
@@ -799,10 +823,13 @@ class TestSample(unittest.TestCase):
         cls.test_db = os.path.abspath('./test.db')
         cls.conf = CreatingPeekabooConfig()
         cls.db_con = PeekabooDatabase('sqlite:///' + cls.test_db)
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(cls.db_con.start())
         cls.sample = Sample(
             b'test', 'test.py', 'text/x-python', 'inline', 'dump', 11)
 
-    def test_3_sample_attributes(self):
+    @asynctest
+    async def test_3_sample_attributes(self):
         """ Test the various sample attribute getters. """
         self.assertEqual(self.sample.content, b'test')
         self.assertEqual(self.sample.filename, 'test.py')
@@ -810,7 +837,7 @@ class TestSample(unittest.TestCase):
         self.assertEqual(self.sample.file_extension, 'py')
         self.assertEqual(self.sample.type_declared, 'text/x-python')
         self.assertEqual(
-            self.sample.sha256sum,
+            await self.sample.sha256sum,
             '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08')
         self.assertEqual(self.sample.result, Result.unchecked)
         self.assertEqual(self.sample.reason, None)
@@ -1133,26 +1160,29 @@ class TestCuckoo(unittest.TestCase):
             CuckooReport({"debug": {"cuckoo": [1]}})
 
 
-class TestRulesetEngine(unittest.TestCase):
+class TestRulesetEngine(AsyncioTestCase):
     """ Unittests for the Ruleset Engine. """
-    def test_no_rules_configured(self):
+    @asynctest
+    async def test_no_rules_configured(self):
         """ Test that correct error is shown if no rules are configured. """
         config = CreatingConfigParser()
         with self.assertRaisesRegex(
                 PeekabooRulesetConfigError,
                 r'No enabled rules found, check ruleset config.'):
-            RulesetEngine(config, None, None, None).start()
+            await RulesetEngine(config, None, None, None).start()
 
-    def test_unknown_rule_enabled(self):
+    @asynctest
+    async def test_unknown_rule_enabled(self):
         """ Test that correct error is shown if an unknown rule is enabled. """
         config = CreatingConfigParser('''[rules]
 rule.1: foo''')
         with self.assertRaisesRegex(
                 PeekabooRulesetConfigError,
                 r'Unknown rule\(s\) enabled: foo'):
-            RulesetEngine(config, None, None, None).start()
+            await RulesetEngine(config, None, None, None).start()
 
-    def test_invalid_type(self):
+    @asynctest
+    async def test_invalid_type(self):
         """ Test that correct error is shown if rule config option has wrong
         type. """
 
@@ -1164,9 +1194,10 @@ higher_than: foo''')
         with self.assertRaisesRegex(
                 ValueError,
                 r"could not convert string to float: '?foo'?"):
-            RulesetEngine(config, None, None, None).start()
+            await RulesetEngine(config, None, None, None).start()
 
-    def test_disabled_config(self):
+    @asynctest
+    async def test_disabled_config(self):
         """ Test that no error is shown if disabled rule has config. """
 
         config = CreatingConfigParser('''[rules]
@@ -1175,7 +1206,7 @@ rule.1: known
 
 [cuckoo_score]
 higher_than: 4.0''')
-        RulesetEngine(config, None, None, None).start()
+        await RulesetEngine(config, None, None, None).start()
 
 
 class MimetypeSample:  # pylint: disable=too-few-public-methods
@@ -1239,7 +1270,8 @@ unknown : baz'''
                 r'file_larger_than: unknown'):
             FileLargerThanRule(CreatingConfigParser(config), None)
 
-    def test_rule_file_type_on_whitelist(self):
+    @asynctest
+    async def test_rule_file_type_on_whitelist(self):
         """ Test whitelist rule. """
         combinations = [
             [False, {'type_by_content': 'text/plain'}],
@@ -1257,11 +1289,12 @@ unknown : baz'''
         ]
         rule = FileTypeOnWhitelistRule(self.config, None)
         for expected, types in combinations:
-            result = rule.evaluate(MimetypeSample(types))
+            result = await rule.evaluate(MimetypeSample(types))
             self.assertEqual(result.further_analysis, expected,
                              "FiletoolsReport: %s" % types)
 
-    def test_rule_office_ole(self):
+    @asynctest
+    async def test_rule_office_ole(self):
         """ Test rule office_ole. """
         config = '''[office_macro_with_suspicious_keyword]
             keyword.1 : AutoOpen
@@ -1289,7 +1322,7 @@ unknown : baz'''
         ]
         rule = OfficeMacroWithSuspiciousKeyword(parsed_config, None)
         for expected, sample in combinations:
-            result = rule.evaluate(sample)
+            result = await rule.evaluate(sample)
             self.assertEqual(result.result, expected)
 
         # test if macro present
@@ -1311,10 +1344,11 @@ unknown : baz'''
         ]
         rule = OfficeMacroRule(parsed_config, None)
         for expected, sample in combinations:
-            result = rule.evaluate(sample)
+            result = await rule.evaluate(sample)
             self.assertEqual(result.result, expected)
 
-    def test_rule_ignore_generic_whitelist(self):
+    @asynctest
+    async def test_rule_ignore_generic_whitelist(self):
         """ Test rule to ignore file types on whitelist. """
         config = '''[expressions]
             expression.4: {sample.type_declared}|filereport.mime_types <= {
@@ -1326,19 +1360,20 @@ unknown : baz'''
         rule = ExpressionRule(parsed_config, None)
 
         sample = Sample(b'abc', 'file.txt')
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.ignored)
 
         sample = Sample(b'<html', 'file.html')
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
         # bzip2 compressed data
         sample = Sample(b'BZh91AY=', 'file.txt')
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
-    def test_rule_ignore_no_name_declared(self):
+    @asynctest
+    async def test_rule_ignore_no_name_declared(self):
         """ Test rule to ignore file with no name_declared. """
         config = '''[expressions]
             expression.3  : not sample.name_declared -> ignore
@@ -1352,11 +1387,11 @@ unknown : baz'''
         rule = ExpressionRule(parsed_config, None)
 
         sample = Sample(b'GIF87...', 'file1.gif', **sample_kwargs)
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
         sample = Sample(b'GIF87...')
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.ignored)
 
         config = '''[expressions]
@@ -1367,10 +1402,11 @@ unknown : baz'''
         rule = ExpressionRule(parsed_config, None)
 
         sample = Sample(b'GIF87...')
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.ignored)
 
-    def test_rule_ignore_mail_signatures(self):
+    @asynctest
+    async def test_rule_ignore_mail_signatures(self):
         """ Test rule to ignore cryptographic mail signatures. """
         config = '''[expressions]
             expression.1  : sample.name_declared == /smime.p7[mcs]/
@@ -1390,7 +1426,7 @@ unknown : baz'''
         rule = ExpressionRule(parsed_config, None)
 
         sample = Sample(None, 'file.1')
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
         # test smime signatures
@@ -1399,45 +1435,46 @@ unknown : baz'''
         }
 
         sample = Sample(None, filename='smime.p7s', **sample_kwargs)
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.ignored)
 
         sample = Sample(None, filename='asmime.p7s', **sample_kwargs)
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
         sample = Sample(None, filename='smime.p7m', **sample_kwargs)
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.ignored)
 
         sample = Sample(None, filename='smime.p7o', **sample_kwargs)
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
         sample = Sample(None, filename='smime.p7', **sample_kwargs)
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
         sample = Sample(None, filename='smime.p7sm', **sample_kwargs)
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
         sample = Sample(None, filename='file', **sample_kwargs)
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
         # test gpg signatures
         # test with wrong content type
         sample = Sample(None, filename='signature.asc', **sample_kwargs)
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
         sample = Sample(None, filename='signature.asc',
                         content_type="application/pgp-signature")
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.ignored)
 
-    def test_rule_expressions(self):
+    @asynctest
+    async def test_rule_expressions(self):
         """ Test generic rule on cuckoo report. """
         config = '''[expressions]
             expression.1  : /DDE/ in cuckooreport.signature_descriptions -> bad
@@ -1454,10 +1491,11 @@ unknown : baz'''
         sample.register_cuckoo_report(cuckooreport)
         parsed_config = CreatingConfigParser(config)
         rule = ExpressionRule(parsed_config, None)
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
-    def test_rule_expressions_empty_set(self):
+    @asynctest
+    async def test_rule_expressions_empty_set(self):
         """ Test generic rule with empty set. """
         config = '''[expressions]
             expression.5: {sample.type_declared} & {
@@ -1468,14 +1506,15 @@ unknown : baz'''
         rule = ExpressionRule(parsed_config, None)
 
         sample = Sample(None, content_type="text/plain")
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.ignored)
 
         sample = Sample(None, content_type="text/plan")
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
-    def test_rule_expressions_rtf(self):
+    @asynctest
+    async def test_rule_expressions_rtf(self):
         """ Test generic rule on rtf docs and types. """
         config = r'''[expressions]
             expression.0  : sample.file_extension in {"doc", "docx"}
@@ -1493,15 +1532,16 @@ unknown : baz'''
 
         path = os.path.join(self.office_data_dir, 'blank.doc')
         sample = FileSample(path, **kwargs)
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
         path = os.path.join(self.office_data_dir, 'example.rtf')
         sample = FileSample(path, **kwargs)
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
-    def test_rule_expression_filetools(self):
+    @asynctest
+    async def test_rule_expression_filetools(self):
         """ Test generic rule on filetoolsreport. """
         config = r'''[expressions]
             expression.0  : filereport.type_as_text
@@ -1521,26 +1561,26 @@ unknown : baz'''
 
         path = os.path.join(self.office_data_dir, 'blank.doc')
         sample = FileSample(path, **sample_kwargs)
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
         path = os.path.join(self.office_data_dir, 'example.rtf')
         sample = FileSample(path, **sample_kwargs)
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
         path = os.path.join(
             self.office_data_dir,
             'AppleDoubleencodedMacintoshfileCheckVM.xls')
         sample = FileSample(path, **sample_kwargs)
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.ignored)
 
         # expression.2 should not raise a 'NoneType not iterable' exception due
         # to type_by_name being None (and it should not match). This happens if
         # the file name is empty, for example.
         sample = Sample(b'dummy')
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
     @asynctest
@@ -1559,6 +1599,7 @@ unknown : baz'''
         db_con = PeekabooDatabase('sqlite:///' + test_db,
                                       instance_id=1,
                                       stale_in_flight_threshold=10)
+        await db_con.start()
 
         sample = Sample(b'test', 'test.py')
         good_result = RuleResult(
@@ -1567,7 +1608,7 @@ unknown : baz'''
         sample.add_rule_result(good_result)
         await db_con.analysis_add(sample)
         sample.mark_done()
-        db_con.analysis_update(sample)
+        await db_con.analysis_update(sample)
 
         # add a failed analysis to check that it is ignored
         result = RuleResult('Unittest',
@@ -1577,53 +1618,54 @@ unknown : baz'''
         sample.add_rule_result(result)
         await db_con.analysis_add(sample)
         sample.mark_done()
-        db_con.analysis_update(sample)
+        await db_con.analysis_update(sample)
 
         parsed_config = CreatingConfigParser(config)
         rule = ExpressionRule(parsed_config, db_con)
 
         sample = Sample(b'test', 'test.py')
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.good)
 
         sample = Sample(b'firsttest', 'first.a')
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.ignored)
 
         sample.add_rule_result(result)
         await db_con.analysis_add(sample)
         sample.mark_done()
-        db_con.analysis_update(sample)
+        await db_con.analysis_update(sample)
 
         sample = Sample(b'firsttest', 'first.a')
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
         sample = Sample(b'secondtest', 'second.b')
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.ignored)
 
         sample.add_rule_result(result)
         await db_con.analysis_add(sample)
         sample.mark_done()
-        db_con.analysis_update(sample)
+        await db_con.analysis_update(sample)
 
         sample = Sample(b'secondtest', 'second.b')
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.ignored)
 
         sample.add_rule_result(good_result)
         await db_con.analysis_add(sample)
         sample.mark_done()
-        db_con.analysis_update(sample)
+        await db_con.analysis_update(sample)
 
         sample = Sample(b'secondtest', 'second.b')
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.good)
 
         os.unlink(test_db)
 
-    def test_rule_expressions_cuckooreport_context(self):
+    @asynctest
+    async def test_rule_expressions_cuckooreport_context(self):
         """ Test generic rule cuckooreport context """
         config = '''[expressions]
             expression.3  : "EVIL" in cuckooreport.signature_descriptions
@@ -1642,10 +1684,11 @@ unknown : baz'''
         sample.register_cuckoo_report(CuckooReport(report))
         parsed_config = CreatingConfigParser(config)
         rule = ExpressionRule(parsed_config, None)
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
-    def test_rule_expressions_cortexreport_fileinfoanalyzerreport_context(self):
+    @asynctest
+    async def test_rule_expressions_cortexreport_fileinfoanalyzerreport_context(self):
         """ Test generic rule cortexreport.FileInfoAnalyzerReport context """
         config = '''[expressions]
                 expression.2  : cortexreport.FileInfoReport.md5sum == '78576e618aff135f320601e49bd8fe7e' -> good
@@ -1723,7 +1766,7 @@ unknown : baz'''
 
         parsed_config = CreatingConfigParser(config)
         rule = ExpressionRule(parsed_config, None)
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.good)
 
         report["full"]["results"][0]["results"][0]["submodule_section_content"]["md5"] = "a"*32
@@ -1739,7 +1782,7 @@ unknown : baz'''
         sample.register_cortex_report(cortexreport)
 
         # re-use rule
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
         report["artifacts"] = [{
@@ -1750,7 +1793,7 @@ unknown : baz'''
         cortexreport.register_report(FileInfoAnalyzer, report)
         sample = FileSample(blank_doc)
         sample.register_cortex_report(cortexreport)
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
         report["full"]["results"][0]["results"][0]["submodule_section_content"]["md5"] = ""
@@ -1758,7 +1801,8 @@ unknown : baz'''
         with self.assertRaises(schema.SchemaError):
             cortexreport.register_report(FileInfoAnalyzer, report)
 
-    def test_rule_expressions_cortexreport_virustotalqueryreport_context(self):
+    @asynctest
+    async def test_rule_expressions_cortexreport_virustotalqueryreport_context(self):
         """ Test generic rule cortexreport.VirusTotalQueryReport context """
         config = '''[expressions]
             expression.5  : cortexreport.VirusTotalQueryReport.n_of_all > 0
@@ -1796,7 +1840,7 @@ unknown : baz'''
 
         parsed_config = CreatingConfigParser(config)
         rule = ExpressionRule(parsed_config, None)
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
 
         self.assertEqual(result.result, Result.bad)
 
@@ -1811,7 +1855,7 @@ unknown : baz'''
         # re-use rule
         sample = FileSample(blank_doc)
         sample.register_cortex_report(cortexreport)
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
         # patch report for different outcome
@@ -1823,7 +1867,7 @@ unknown : baz'''
         # re-use rule
         sample = FileSample(blank_doc)
         sample.register_cortex_report(cortexreport)
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
 
         self.assertEqual(result.result, Result.unknown)
 
@@ -1832,7 +1876,8 @@ unknown : baz'''
             cortexreport = CortexReport()
             cortexreport.register_report(VirusTotalQuery, report)
 
-    def test_rule_expressions_olereport_context(self):
+    @asynctest
+    async def test_rule_expressions_olereport_context(self):
         """ Test generic rule olereport context """
         config = '''[expressions]
             expression.3: sample.file_extension in {'doc', 'rtf', 'rtx'}
@@ -1844,37 +1889,37 @@ unknown : baz'''
 
         path = os.path.join(self.office_data_dir, 'empty.doc')
         sample = FileSample(path)
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
         path = os.path.join(self.office_data_dir, 'file.txt')
         sample = FileSample(path)
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
         path = os.path.join(self.office_data_dir, 'blank.doc')
         sample = FileSample(path)
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
         path = os.path.join(self.office_data_dir, 'example.rtf')
         sample = FileSample(path)
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
         path = os.path.join(self.office_data_dir, 'suspiciousMacro.rtf')
         sample = FileSample(path)
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
         path = os.path.join(self.office_data_dir, 'suspiciousMacro.doc')
         sample = FileSample(path)
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
         path = os.path.join(self.office_data_dir, 'suspiciousMacro.doc')
         sample = FileSample(path, filename='foo.rtx')
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
         config = '''[expressions]
@@ -1883,10 +1928,11 @@ unknown : baz'''
 
         parsed_config = CreatingConfigParser(config)
         rule = ExpressionRule(parsed_config, None)
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
-    def test_rule_expressions_olereport_autoexec_suspicious(self):
+    @asynctest
+    async def test_rule_expressions_olereport_autoexec_suspicious(self):
         """ Test generic rule olereport with autoexec and suspicious """
         config = '''[expressions]
             expression.3  : olereport.has_autoexec == True -> bad
@@ -1899,37 +1945,37 @@ unknown : baz'''
 
         path = os.path.join(self.office_data_dir, 'empty.doc')
         sample = FileSample(path)
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
         path = os.path.join(self.office_data_dir, 'file.txt')
         sample = FileSample(path)
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
         path = os.path.join(self.office_data_dir, 'blank.doc')
         sample = FileSample(path)
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
         path = os.path.join(self.office_data_dir, 'example.rtf')
         sample = FileSample(path)
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.unknown)
 
         path = os.path.join(self.office_data_dir, 'suspiciousMacro.rtf')
         sample = FileSample(path)
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
         path = os.path.join(self.office_data_dir, 'suspiciousMacro.doc')
         sample = FileSample(path)
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
         path = os.path.join(self.office_data_dir, 'CheckVM.xls')
         sample = FileSample(path)
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
         config = '''[expressions]
@@ -1940,7 +1986,7 @@ unknown : baz'''
         sample = FileSample(path)
         parsed_config = CreatingConfigParser(config)
         rule = ExpressionRule(parsed_config, None)
-        result = rule.evaluate(sample)
+        result = await rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
     def test_config_file_type_on_whitelist(self):
@@ -1959,7 +2005,8 @@ unknown : baz'''
                 r'file_type_on_whitelist: unknown'):
             FileTypeOnWhitelistRule(CreatingConfigParser(config), None)
 
-    def test_rule_file_type_on_greylist(self):
+    @asynctest
+    async def test_rule_file_type_on_greylist(self):
         """ Test greylist rule. """
         combinations = [
             [False, {'type_by_content': 'text/plain'}],
@@ -1980,7 +2027,7 @@ unknown : baz'''
         ]
         rule = FileTypeOnGreylistRule(self.config, None)
         for expected, types in combinations:
-            result = rule.evaluate(MimetypeSample(types))
+            result = await rule.evaluate(MimetypeSample(types))
             self.assertEqual(result.further_analysis, expected,
                              "FiletoolsReport: %s" % types)
 
@@ -2000,7 +2047,8 @@ unknown : baz'''
                 r'file_type_on_greylist: unknown'):
             FileTypeOnGreylistRule(CreatingConfigParser(config), None)
 
-    def test_rule_analysis_failed(self):
+    @asynctest
+    async def test_rule_analysis_failed(self):
         """ Test the Cuckoo analysis failed rule """
         # create some test samples
         successful_sample = CuckooReportSample(
@@ -2017,31 +2065,31 @@ unknown : baz'''
 
         # test defaults
         rule = CuckooAnalysisFailedRule(CreatingConfigParser(''), None)
-        result = rule.evaluate(successful_sample)
+        result = await rule.evaluate(successful_sample)
         self.assertEqual(result.result, Result.unknown)
         self.assertEqual(result.further_analysis, True)
-        result = rule.evaluate(reached_sample)
+        result = await rule.evaluate(reached_sample)
         self.assertEqual(result.result, Result.failed)
         self.assertEqual(result.further_analysis, False)
-        result = rule.evaluate(failed_sample)
+        result = await rule.evaluate(failed_sample)
         self.assertEqual(result.result, Result.failed)
         self.assertEqual(result.further_analysis, False)
-        result = rule.evaluate(everything_sample)
+        result = await rule.evaluate(everything_sample)
         self.assertEqual(result.result, Result.unknown)
         self.assertEqual(result.further_analysis, True)
 
         # test with config
         rule = CuckooAnalysisFailedRule(self.config, None)
-        result = rule.evaluate(successful_sample)
+        result = await rule.evaluate(successful_sample)
         self.assertEqual(result.result, Result.unknown)
         self.assertEqual(result.further_analysis, True)
-        result = rule.evaluate(reached_sample)
+        result = await rule.evaluate(reached_sample)
         self.assertEqual(result.result, Result.failed)
         self.assertEqual(result.further_analysis, False)
-        result = rule.evaluate(failed_sample)
+        result = await rule.evaluate(failed_sample)
         self.assertEqual(result.result, Result.failed)
         self.assertEqual(result.further_analysis, False)
-        result = rule.evaluate(everything_sample)
+        result = await rule.evaluate(everything_sample)
         self.assertEqual(result.result, Result.failed)
         self.assertEqual(result.further_analysis, False)
 
@@ -2252,8 +2300,20 @@ def enable_debug():
     _logger.setLevel(logging.DEBUG)
 
 
+def get_running_loop():
+    """ provide asyncio.get_running_loop in Python 3.6 """
+    loop = asyncio._get_running_loop()
+    if loop is None:
+        raise RuntimeError('no running event loop')
+    return loop
+
+
 def main():
     """ Run the testsuite. """
+    # provide asyncio.get_running_loop in Python 3.6
+    if not hasattr(asyncio, "get_running_loop"):
+        asyncio.get_running_loop = get_running_loop
+
     gettext.NullTranslations().install()
 
     suite = unittest.TestSuite()
