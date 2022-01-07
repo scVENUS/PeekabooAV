@@ -4,6 +4,11 @@ See documentation for details.
 
 ## devel
 
+- Peekaboo now provides a REST API. The old UNIX domain socket is gone and
+  there's no longer a long-lived client connection providing a summary report
+  on multiple samples. Samples are now submitted individually, yielding a job ID
+  for subsequent attempts at retrieving a report. Both inputs and outputs of
+  the API are JSON. The AMaViS plugin and peekaboo-util are updated to match.
 - Breaking change: Equality operators in expressions using regexes do now need
   to match the whole string up to the end.
 - New database schema version 8.
