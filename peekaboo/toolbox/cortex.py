@@ -634,11 +634,12 @@ class Cortex:
         with self.running_jobs_lock:
             if (job_id in self.running_jobs and
                     self.running_jobs[job_id] is not job):
-                raise CortexSubmitFailedException(
-                    '%d: A job with ID %s is already registered as running '
-                    'for different sample %d' % (
-                        job.sample.id, job_id,
-                        self.running_jobs[job_id].sample.id))
+                logger.warning(
+                    '%d: A job with ID %s already registered as running '
+                    'for different sample %d will be marked failed',
+                    job.sample.id, job_id,
+                    self.running_jobs[job_id].sample.id)
+                self.resubmit_as_failed(job_id)
 
             self.running_jobs[job_id] = job
 
@@ -710,8 +711,6 @@ class Cortex:
         """
         job = self.deregister_running_job(job_id)
         if job is not None:
-            logger.warning("Dropped job %s because it has failed in Cortex",
-                           job_id)
             job.sample.mark_cortex_failure()
             self.job_queue.submit(job.sample)
 
@@ -804,6 +803,8 @@ class Cortex:
                     continue
 
                 if cortexjob.status in ['Failure', 'Deleted']:
+                    logger.warning("Dropping job %s because it has failed "
+                                   "in Cortex", job_id)
                     self.resubmit_as_failed(job_id)
                     continue
 
