@@ -135,10 +135,10 @@ class PeekabooUtil:
 
                 json_resp = response.json()
                 if json_resp['result'] == 'bad':
-                    print("The file has been categorized 'bad'")
+                    print(f"{job}: The file has been categorized 'bad'")
                     exit_code = 1
 
-                logger.info(json_resp['reason'])
+                logger.info("%d: %s", job, json_resp['reason'])
 
             if not jobs_left:
                 break
