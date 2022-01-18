@@ -223,7 +223,8 @@ class Cuckoo:
                 raise CuckooSubmitFailedException(
                     '%d: A job with ID %d is already registered as running '
                     'for different sample %d' % (
-                        sample.id, job_id, self.running_jobs[job_id].id))
+                        sample.id, job_id,
+                        self.running_jobs[job_id].sample.id))
 
             self.running_jobs[job_id] = CuckooJob(sample)
 
