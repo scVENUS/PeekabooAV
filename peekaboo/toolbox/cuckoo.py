@@ -220,11 +220,12 @@ class Cuckoo:
         with self.running_jobs_lock:
             if (job_id in self.running_jobs and
                     self.running_jobs[job_id] is not sample):
-                raise CuckooSubmitFailedException(
-                    '%d: A job with ID %d is already registered as running '
-                    'for different sample %d' % (
-                        sample.id, job_id,
-                        self.running_jobs[job_id].sample.id))
+                logger.warning(
+                    '%d: A job with ID %d already registered as running '
+                    'for different sample %d will be marked failed',
+                    sample.id, job_id,
+                    self.running_jobs[job_id].sample.id)
+                self.resubmit_as_failed(job_id)
 
             self.running_jobs[job_id] = CuckooJob(sample)
 
@@ -283,6 +284,18 @@ class Cuckoo:
 
         self.job_queue.submit(sample)
         return None
+
+    def resubmit_as_failed(self, job_id):
+        """ Resubmit a sample to the job queue with a failure report if the
+        Cuckoo job has failed for some reason.
+
+        @param job_id: ID of job that failed.
+        @type job_id: int
+        """
+        sample = self.deregister_running_job(job_id)
+        if sample is not None:
+            sample.mark_cuckoo_failure()
+            self.job_queue.submit(sample)
 
     def resubmit_as_failed_if_too_old(self, job_id, max_age):
         """ Resubmit a sample to the job queue with a failure report if the
