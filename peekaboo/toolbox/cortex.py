@@ -635,9 +635,10 @@ class Cortex:
             if (job_id in self.running_jobs and
                     self.running_jobs[job_id] is not job):
                 raise CortexSubmitFailedException(
-                    'A job with ID %s is already registered as running '
+                    '%d: A job with ID %s is already registered as running '
                     'for different sample %d' % (
-                        job_id, self.running_jobs[job_id].id))
+                        job.sample.id, job_id,
+                        self.running_jobs[job_id].sample.id))
 
             self.running_jobs[job_id] = job
 
