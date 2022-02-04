@@ -112,6 +112,18 @@ class PeekabooUtil:
                 files = {'file': (submit_name, upload_file, content_type)}
                 headers = {'x-content-disposition': content_disposition}
 
+                # NOTE: As of this writing, requests via urllib3 1.26.x encodes
+                # filenames according to a WHATWG HTML5 spec draft using
+                # percent encoding and backslash escaping. Peekaboo via sanic
+                # only supports part of the current WHATWG HTML5 spec (no
+                # longer draft) by reverting double quote escaping (%22 -> ").
+                # We cannot (without serious hacking) switch requests to use
+                # RFC2231 encoding from here. Therefore filenames containing
+                # special characters can not currently be correctly transferred
+                # using this command. urllib3 has already been adjusted to
+                # default to the current version of the HTML5 escaping scheme.
+                # So sanic hopefully doing the same there's a chance this will
+                # sort itself out by itself eventually.
                 response = requests.post(urllib.parse.urljoin(
                     self.url, '/v1/scan'), files=files, headers=headers,
                     timeout=self.timeout)
