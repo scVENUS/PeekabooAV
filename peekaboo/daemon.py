@@ -152,21 +152,30 @@ class PeekabooDaemonInfrastructure:
     def create_pid_file(self):
         """ Check for stale old and create a new PID file. Look at the socket
         as well. """
-        pid = None
+        ourpid = os.getpid()
         if os.path.exists(self.pid_file):
+            oldpid = None
             stale = False
             try:
                 with open(self.pid_file, 'r') as pidfile:
-                    pid = int(pidfile.read())
+                    oldpid = int(pidfile.read())
             except (OSError, IOError, ValueError) as error:
                 stale = True
                 logger.warning('PID file exists but cannot be read, '
                                'assuming it to be stale')
 
-            if pid is not None:
+            if oldpid == ourpid:
+                # pidfile contains our pid. There cannot be a process with the
+                # same PID in the same PID namespace. So either we're sharing
+                # PID files across namespaces/hosts or there's been PID re-use
+                # and collision, e.g. through container restart. The former is
+                # misconfiguration, the latter just a case of stale PID file.
+                logger.debug("Treating PID file with our PID in it as stale")
+                stale = True
+            elif oldpid is not None:
                 try:
                     # ping the process to see if it exists, sends no signal
-                    os.kill(pid, 0)
+                    os.kill(oldpid, 0)
                 except OSError as oserror:
                     # ESRCH == no such process
                     if oserror.errno == errno.ESRCH:
@@ -175,10 +184,10 @@ class PeekabooDaemonInfrastructure:
             if not stale:
                 logger.critical('Another instance of Peekaboo seems to be '
                                 'running as process %d. Please check PID '
-                                'file %s.', pid, self.pid_file)
+                                'file %s.', oldpid, self.pid_file)
                 sys.exit(1)
 
-            logger.warning('Removing stale PID file of process %d', pid)
+            logger.warning('Removing stale PID file of process %d', oldpid)
             try:
                 os.remove(self.pid_file)
             except OSError as error:
@@ -187,13 +196,12 @@ class PeekabooDaemonInfrastructure:
                 sys.exit(1)
 
         # write PID file
-        pid = os.getpid()
         with open(self.pid_file, "w") as pidfile:
-            pidfile.write("%d\n" % pid)
+            pidfile.write("%d\n" % ourpid)
 
         # remember that the PID file is ours - important on shutdown
         self.pid_file_created = True
-        logger.debug('PID %d written to %s', pid, self.pid_file)
+        logger.debug('PID %d written to %s', ourpid, self.pid_file)
 
     def check_stale_socket(self):
         """ Check if the socket file exists already/still and if it is stale or
