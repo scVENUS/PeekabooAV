@@ -26,9 +26,12 @@
 client. """
 
 import asyncio
+import email.utils
 import logging
+import urllib.parse
 
 import sanic
+import sanic.headers
 import sanic.response
 
 from peekaboo.db import PeekabooDatabaseError
@@ -103,16 +106,118 @@ class PeekabooServer:
         @type request: sanic.Request
         @returns: json response containing ID of newly created job
         """
-        sample_file = request.files.get('file')
-        if sample_file is None:
-            logger.error('File missing from request')
-            return sanic.response.json(
-                {'message': 'file missing from request'}, 400)
+        # this is sanic's multipart/form-data parser in a version that knows
+        # that our file field contains binary data. This allows transferring
+        # files without a filename. The generic parser would treat those as
+        # text fields and try to decode them using the form charset or UTF-8 as
+        # a fallback and cause errors such as: UnicodeDecodeError: 'utf-8'
+        # codec can't decode byte 0xc0 in position 1: invalid start byte
+        content_type, parameters = sanic.headers.parse_content_header(
+            request.content_type)
 
+        # application/x-www-form-urlencoded is inefficient at transporting
+        # binary data. Also it needs a separate field to transfer the filename.
+        # Make clear here that we do not support that format (yet).
+        if content_type != 'multipart/form-data':
+            logger.error('Invalid content type %s', content_type)
+            return sanic.response.json(
+                {'message': 'Invalid content type, use multipart/form-data'},
+                400)
+
+        boundary = parameters["boundary"].encode("utf-8")
+        form_parts = request.body.split(boundary)
+        # split above leaves preamble in form_parts[0] and epilogue in
+        # form_parts[2]
+        num_fields = len(form_parts) - 2
+        if num_fields <= 0:
+            logger.error('Invalid MIME structure in request, no fields '
+                         'or preamble or epilogue missing')
+            return sanic.response.json(
+                {'message': 'Invalid MIME structure in request'}, 400)
+
+        if num_fields != 1:
+            logger.error('Invalid number of fields in form: %d', num_fields)
+            return sanic.response.json(
+                {'message': 'Invalid number of fields in form, we accept '
+                    'only one field "file"'}, 400)
+
+        form_part = form_parts[1]
+        file_name = None
+        content_type = None
+        field_name = None
+        line_index = 2
+        line_end_index = 0
+        while line_end_index != -1:
+            line_end_index = form_part.find(b'\r\n', line_index)
+            # this constitutes a hard requirement for the multipart headers
+            # (and filenames therein) to be UTF-8-encoded. There are some
+            # obscure provisions for transferring an encoding in RFC7578
+            # section 5.1.2 for HTML forms which don't apply here so its
+            # fallback to UTF-8 applies. This is no problem for our field name
+            # (ASCII) and file names in RFC2231 encoding. For HTML5-style
+            # percent-encoded filenames it means that whatever isn't
+            # percent-encoded needs to be UTF-8 encoded. There are no rules in
+            # HTML5 currently to percent-encode any UTF-8 byte sequences.
+            form_line = form_part[line_index:line_end_index].decode('utf-8')
+            line_index = line_end_index + 2
+
+            if not form_line:
+                break
+
+            colon_index = form_line.index(':')
+            idx = colon_index + 2
+            form_header_field = form_line[0:colon_index].lower()
+
+            # parse_content_header() reverts some of the percent encoding as
+            # per HTML5 WHATWG spec. As it is a "living standard" (i.e. moving
+            # target), it has changed over the years. There used to be
+            # backslash doubling and explicit control sequence encoding. As of
+            # this writing this has been changed to escaping only newline,
+            # linefeed and double quote. Sanic only supports the double quote
+            # part of that: %22 are reverted back to %. Luckily this interacts
+            # reasonably well with RFC2231 decoding below since that would do
+            # the same.
+            #
+            # There is no way to tell what version of the standard (or draft
+            # thereof) the client was following when encoding. It seems accepted
+            # practice in the browser world to just require current versions of
+            # everything so their behaviour hopefully converges eventually.
+            # This is also the reason why we do not try to improve upon it here
+            # because it's bound to become outdated.
+            #
+            # NOTE: Since we fork the sanic code here we need to keep track of
+            # its changes, particularly how it interacts with RFC2231 encoding
+            # if escaping of the escape character %25 is ever added to the
+            # HTML5 WHATWG spec. In that case parse_content_header() would
+            # start breaking the RFC2231 encoding which would explain why its
+            # use is forbidden in RFC7578 section 4.2 via RFC5987.
+            form_header_value, form_parameters = sanic.headers.parse_content_header(
+                form_line[idx:]
+            )
+
+            if form_header_field == 'content-disposition':
+                field_name = form_parameters.get('name')
+                file_name = form_parameters.get('filename')
+
+                # non-ASCII filenames in RFC2231, "filename*" format
+                if file_name is None and form_parameters.get('filename*'):
+                    encoding, _, value = email.utils.decode_rfc2231(
+                        form_parameters['filename*']
+                    )
+                    file_name = urllib.parse.unquote(value, encoding=encoding)
+            elif form_header_field == 'content-type':
+                content_type = form_header_value
+
+        if field_name != 'file':
+            logger.error('Field file missing from request')
+            return sanic.response.json(
+                {'message': 'Field "file" missing from request'}, 400)
+
+        file_content = form_part[line_index:-4]
         content_disposition = request.headers.get('x-content-disposition')
         sample = self.sample_factory.make_sample(
-            sample_file.body, sample_file.name,
-            sample_file.type, content_disposition)
+            file_content, file_name,
+            content_type, content_disposition)
 
         try:
             await self.db_con.analysis_add(sample)
