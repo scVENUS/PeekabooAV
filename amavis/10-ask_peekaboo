@@ -32,6 +32,7 @@ use JSON::PP;
 # doesn't seem to do UTF-8 encoding correctly - everything ends up as latin1.
 
 use LWP::UserAgent;
+use URI::Escape;
 
 # monkey patch a content_disposition setter/getter into the Parts package
 *{Amavis::Unpackers::Part::content_disposition} = sub {
@@ -51,6 +52,28 @@ my $amavis_mime_traverse = \&Amavis::Unpackers::MIME::mime_traverse;
     $child->content_disposition($entity->head->mime_attr('content-disposition'));
   }
 };
+
+# stolen directly from mime_traverse() for reproducing its results
+sub peekaboo_decode_filename($) {
+  my($val_raw) = @_;
+
+  my $val_dec = '';  # decoded, represented as native Perl characters
+  eval {
+    my(@chunks) = MIME::Words::decode_mimewords($val_raw);
+    for my $pair (@chunks) {
+      my($data,$encoding) = @$pair;
+      if (!defined $encoding || $encoding eq '') {
+        $val_dec .= safe_decode_latin1($data);  # assumes ISO-8859-1
+      } else {
+        $encoding =~ s/\*[^*]*\z//s;  # strip RFC 2231 language suffix
+        $val_dec .= safe_decode($encoding,$data);
+      }
+    }
+    1;
+  };
+
+  return $val_dec;
+}
 
 sub ask_peekaboo {
   my($dummy, $names_to_parts, $dummy, $av_name, $dummy, $args, $dummy,
@@ -74,36 +97,118 @@ sub ask_peekaboo {
   my @jobs;
   my $result_text = "";
   foreach my $partname (keys %{$names_to_parts}) {
-    my $pmi = {};
-
     my $part = $names_to_parts->{$partname};
-    for my $field (qw( full_name name_declared type_declared content_disposition )) {
-      my $val = $part->$field();
+    my $name_declared = $part->name_declared();
 
-      # name_declared can be an array of names, if so use the last
-      $val = ref $val eq 'ARRAY' ? $val->[-1] : $val;
+    # let's put on our thinking caps here: In the case of MIME parts (as opposed
+    # to extracted archives which came from MIME parts), name_declared is
+    # extracted from MIME part headers Content-Disposition and Content-Type by
+    # sub mime_traverse() in that order.
+    #
+    # Decoding from MIME-encoding as per RFC1522/1867/2184/2231 is attempted.
+    # If it is successful, the decoded value is added to an array. The original
+    # raw value is added after that. Both are only added if they haven't been
+    # seen before. Finally, name_declared is turned into a scalar if it has only
+    # one element.
+    #
+    # A scalar name_declared will therefore always be a raw undecoded value
+    # from Content-Disposition or Content-Type (only one of them present or
+    # both with same value) that couldn't be decoded.
+    #
+    # An array is much more fluid because we can have a number of permutations
+    # in there without a means to distinguish them:
+    #
+    # [ fn_cd_dec, fn_cd_raw, fn_ct_dec, fn_ct_raw ]
+    # [ fn_cd_dec, fn_cd_raw ] # fn_ct_raw not present or == fn_cd_raw
+    # [ fn_ct_dec, fn_ct_raw ]
+    # [ fn_cd_dec, fn_cd_raw, fn_ct_raw ] # decoding failed or result == fn_cd_dec
+    # [ fn_cd_raw, fn_ct_dec, fn_ct_raw ]
+    # [ fn_cd_raw, fn_ct_raw ]
+    #
+    # What's the additional pity here is that a raw UTF-8 filename can (at least
+    # sometimes) be decoded by AMaViS using latin1 into something worse but we
+    # have no way to tell. :(
+    my $decoded_filename = $name_declared;
+    if (ref $name_declared eq 'ARRAY') {
+      # start out with a best-effort default for all cases and try to improve from
+      # there. First element either be decoded or raw:
+      # - for four elements it'll be decoded,
+      # - for two elements it'll either be decoded or raw. In the latter
+      #   case there's nothing to improve.
+      # - if AMaViS were to inspect more headers so the array and possible
+      #   permutations grows, we're still best off using the first element and
+      #   not mess with it
+      $decoded_filename = $$name_declared[0];
 
-      # when running under perl 5.22.1 e.g. on Ubuntu 16.04 safe_decode_mime
-      # somehow corrupts the original value of $val so we may get errors in
-      # totally unrelated code later on such as:
-      #   FAILED: Malformed UTF-8 character (fatal) at /usr/sbin/amavisd-new
-      #   line 10210.
-      # We work around that by forcing a copy.
-      $val = Amavis::Util::safe_decode_mime("" . $val) if $field eq "name_declared";
+      my $numnames = @$name_declared;
+      if ($numnames == 3) {
+        # default above would mean first element is decoded second element
 
-      # do not transfer undef values since they're no good for nothing
-      $pmi->{$field} = $val if defined($val);
+        # last element is guaranteed to be raw
+        if (peekaboo_decode_filename($$name_declared[2]) eq $$name_declared[1]) {
+          # second element is actually decoded third element, i.e. filename from
+          # Content-Disposition, so first element is raw, use second element
+          # because it's more good[tm]
+          $decoded_filename = $$name_declared[1];
+        }
+      }
+    }
+
+    # encode our hard-earned decoded filename for transfer as
+    # multipart/form-data. We choose the method according to RFC2388 section
+    # 4.4 (filename*=utf-8''<percent-encoded> derived from RFC2231) because
+    # it's supported by Peekaboo via sanic. Passing it raw but UTF-8-encoded
+    # (i.e. in form charset) is accepted practice as well and legitimated by
+    # RFC7578 sections 4.2 and 5.1.3 but libwww-perl has been observed to
+    # resort to latin1 and cannot be told otherwise (likely perl interpreter
+    # default for file descriptor output - which we do not want to change
+    # because it would affect all of AMaViS). Also, the HTML5 standard has gone
+    # through various iterations of how to encode special characters such as
+    # double quote, newline, linefeed and backslash over the years so that
+    # there's currently total confusion within implementations what to do.
+    # sanic for example decodes double quotes but not newlines or linefeeds as
+    # the current version of the standard requires.
+    #
+    # To make matters somewhat more interesting, RFC7578 indirectly forbids
+    # RFC2231 encoding via forbidding RFC5987. So currently our client will be
+    # RFC2388- but not RFC7578-compliant. Looking at the encoding uncertainty
+    # caused by HTML5 standard evolution this seems the lesser of two evils.
+    # This could be revisited as we find a way to send out UTF-8-encoded
+    # multipart/form-data from AMaViS and support for HTML5-style
+    # percent-encoding stabilizes in client and server libraries (libwww-perl
+    # and sanic in our case).
+    #
+    # Because RFC2388 is directly based on MIME, it requires encoding using
+    # MIME mechanisms and we could re-use existing email handling modules.
+    # Email::MIME::ContentType does not allow to encode just the filename
+    # (flimsy argument, see below) and Encode::MIME:Header does not do RFC2231.
+    # So we do it like python's email.utils.encode_rfc2231() does: Encode
+    # using URI::Escape and add the structure around it ourselves. URI::Escape
+    # is a dependency of LWP::UserAgent which we're using anyway.
+    #
+    # Because libwww-perl does not allow specifying a pre-encoded filename, we
+    # circle back to building the whole Content-Disposition header ourselves if
+    # a filename is to be supplied. Luckily, as per RFC5987 section 3.1 we do
+    # not need to deal with continuations here.
+    my $cd = undef;
+    if (defined($name_declared)) {
+      my $escaped_filename = uri_escape_utf8($decoded_filename);
+      my $encoded_filename = "utf-8''${escaped_filename}";
+      $cd = qq(form-data; name="file"; filename*="$encoded_filename")
     }
 
     my $answer = $ua->post($scan_url,
       Content_Type => 'form-data',
       # could be per-file but complicates handling server-side
-      'X-Content-Disposition' => $pmi->{"content_disposition"},
+      'X-Content-Disposition' => $part->content_disposition(),
       Content => [
         'file' => [
-          $pmi->{"full_name"},
-          $pmi->{"name_declared"} || undef,
-          Content_Type => $pmi->{"type_declared"},
+          $part->full_name(),
+          # suppress deriving from input file name, we add a header with
+          # encoded filename and asterisk for marking it as encoded ourselves
+          '',
+          Content_Type => $part->type_declared(),
+          Content_Disposition => $cd,
         ]
       ]
     );

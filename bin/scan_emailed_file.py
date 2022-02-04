@@ -68,14 +68,14 @@ def send_mail(send_from, send_to, subject, text, files=[],
     msg.attach(MIMEText(text))
 
     for f in files:
+        # triggers encoding as per RFC2231
+        filename_tuple = ('utf-8', '', os.path.basename(f))
         with open(f, "rb") as fil:
-            part = MIMEApplication(
-                fil.read(),
-                Name=os.path.basename(f)
-            )
+            part = MIMEApplication(fil.read(), Name=filename_tuple)
+
         # After the file is closed
-        part['Content-Disposition'] = 'attachment; filename="%s"'\
-                                      % os.path.basename(f)
+        part.add_header(
+            'Content-Disposition', 'attachment', filename=filename_tuple)
         msg.attach(part)
 
     smtp_client = smtplib.SMTP(server, port)
