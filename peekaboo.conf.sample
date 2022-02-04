@@ -12,6 +12,8 @@
 # change socket group and mode to open up client access
 #socket_group     :    <empty>
 #socket_mode      :    0660
+
+# can be set to empty to disable PID file creation
 #pid_file         :    /var/run/peekaboo/peekaboo.pid
 #worker_count     :    3
 #sample_base_dir  :    /tmp
