@@ -152,6 +152,10 @@ class PeekabooDaemonInfrastructure:
     def create_pid_file(self):
         """ Check for stale old and create a new PID file. Look at the socket
         as well. """
+        if not self.pid_file:
+            logger.debug("Creation of PID file is disabled.")
+            return
+
         ourpid = os.getpid()
         if os.path.exists(self.pid_file):
             oldpid = None
