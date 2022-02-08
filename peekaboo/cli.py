@@ -129,7 +129,12 @@ class PeekabooUtil:
                     timeout=self.timeout)
 
             json_resp = response.json()
-            job_id = json_resp['job_id']
+            job_id = json_resp.get('job_id')
+            if job_id is None:
+                logger.error('Job submission failed: %s', json_resp.get(
+                    'message', 'No explanation given by Peekaboo'))
+                continue
+
             logger.debug('File %s submitted as job %d', filename, job_id)
 
             jobs.append(job_id)
