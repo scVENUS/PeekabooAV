@@ -61,6 +61,7 @@ class PeekabooServer:
         """
         logger.debug('Starting up server.')
         self.app = sanic.Sanic("PeekabooAV", configure_logging=False)
+        self.app.config.FALLBACK_ERROR_FORMAT = "json"
 
         # silence sanic to a reasonable amount
         logging.getLogger('sanic.root').setLevel(logging.WARNING)
