@@ -364,9 +364,9 @@ class PeekabooConfig(PeekabooConfigParser):
         # to it.
         self.user = 'peekaboo'
         self.group = None
-        self.pid_file = '/var/run/peekaboo/peekaboo.pid'
         self.host = '127.0.0.1'
         self.port = 8100
+        self.pid_file = None
         self.log_level = logging.INFO
         self.log_format = '%(asctime)s - %(name)s - (%(threadName)s) - ' \
                           '%(levelname)s - %(message)s'
