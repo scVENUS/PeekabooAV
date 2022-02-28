@@ -197,8 +197,7 @@ class TestDefaultConfig(unittest.TestCase):
         self.assertEqual(self.config.group, None)
         self.assertEqual(self.config.host, '127.0.0.1')
         self.assertEqual(self.config.port, 8100)
-        self.assertEqual(
-            self.config.pid_file, '/var/run/peekaboo/peekaboo.pid')
+        self.assertEqual(self.config.pid_file, None)
         self.assertEqual(self.config.worker_count, 3)
         self.assertEqual(
             self.config.processing_info_dir,
