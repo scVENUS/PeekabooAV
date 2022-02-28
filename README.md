@@ -1,6 +1,7 @@
 # PeekabooAV #
 
 [![Testsuite](https://github.com/scVENUS/PeekabooAV/actions/workflows/testsuite.yml/badge.svg)](https://github.com/scVENUS/PeekabooAV/actions/workflows/testsuite.yml)
+[![Container CI pipeline](https://github.com/scVENUS/PeekabooAV/actions/workflows/container-ci.yml/badge.svg)](https://github.com/scVENUS/PeekabooAV/actions/workflows/container-ci.yml)
 
 **Peekaboo Extended Email Attachment Behavior Observation Owl**
 

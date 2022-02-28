@@ -1,0 +1,44 @@
+name: Container CI pipeline
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # Checks-out PeekabooAV-Installer under $GITHUB_WORKSPACE
+      - name: Checkout PeekabooAV-Installer
+        uses: actions/checkout@v2
+        with:
+          repository: michaelweiser/PeekabooAV-Installer
+          ref: pipeline
+
+      # put PeekabooAV below that as expected by the installer
+      - name: Checkout PeekabooAV
+        uses: actions/checkout@v2
+        with:
+          path: PeekabooAV
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install swaks
+
+      - name: Bring up the environment
+        run: docker-compose up --build --detach
+
+      - name: Submit test job
+        run: |
+          # note the glob
+          tf="/opt/peekaboo/lib/python*/site-packages/peekaboo/server.py"
+          docker-compose exec -T peekabooav /bin/sh -c \
+              "/opt/peekaboo/bin/peekaboo-util scan-file -f $tf" | \
+            grep file.has.been.categorized.*bad
+
+      - name: Bring down the environment
+        run: docker-compose down
