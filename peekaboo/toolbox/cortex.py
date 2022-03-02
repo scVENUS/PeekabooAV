@@ -174,7 +174,7 @@ class CortexHashAnalyzer(CortexAnalyzer):
 
 
 class FileInfoAnalyzerReport(CortexAnalyzerReport):
-    """ Represents a Cortex FileInfo_7_0 analysis JSON report. """
+    """ Represents a Cortex FileInfo_8_0 analysis JSON report. """
 
     report_schema = schema.Schema({
         "summary": {
@@ -256,8 +256,8 @@ class FileInfoAnalyzerReport(CortexAnalyzerReport):
 
 
 class FileInfoAnalyzer(CortexFileAnalyzer):
-    """ Interfaces with Cortex Analyzer FileInfo_7_0. """
-    name = 'FileInfo_7_0'
+    """ Interfaces with Cortex Analyzer FileInfo_8_0. """
+    name = 'FileInfo_8_0'
     reportclass = FileInfoAnalyzerReport
 
 
