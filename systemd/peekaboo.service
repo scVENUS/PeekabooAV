@@ -16,8 +16,6 @@ WorkingDirectory=/opt/peekaboo/
 ExecStart=/opt/peekaboo/bin/peekaboo -c /opt/peekaboo/etc/peekaboo.conf -D
 Restart=always
 Type=notify
-StandardOutput=journal
-StandardError=journal
 
 DeviceAllow=/dev/null rw
 CapabilityBoundingSet=~CAP_SYS_PTRACE
