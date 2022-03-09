@@ -18,8 +18,6 @@ Restart=always
 Type=notify
 StandardOutput=journal
 StandardError=journal
-RuntimeDirectory=peekaboo
-RuntimeDirectoryMode=755
 
 DeviceAllow=/dev/null rw
 CapabilityBoundingSet=~CAP_SYS_PTRACE
