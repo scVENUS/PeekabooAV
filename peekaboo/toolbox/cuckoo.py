@@ -63,20 +63,21 @@ class CuckooJob:
         return self.__sample
 
 
-class WhitelistRetry(urllib3.util.retry.Retry):
-    """ A Retry class which has a status code whitelist, allowing to retry all
-    requests not whitelisted in a hard-core, catch-all manner. """
-    def __init__(self, status_whitelist=None, abort=None, **kwargs):
+class AllowedStatusRetry(urllib3.util.retry.Retry):
+    """ A Retry class which has a list of allowed status codes, allowing to
+    retry all status codes not explicitly allowed in a hard-core, catch-all
+    manner. """
+    def __init__(self, allowed_statuses=None, abort=None, **kwargs):
         super().__init__(**kwargs)
-        self.status_whitelist = status_whitelist or set()
+        self.allowed_statuses = allowed_statuses or set()
         # Event that is set if we're not to retry
         self.abort = abort
 
     def new(self, **kwargs):
         """ Adjusted shallow copy method to carry our parameters over into our
         copy. """
-        if 'status_whitelist' not in kwargs:
-            kwargs['status_whitelist'] = self.status_whitelist
+        if 'allowed_statuses' not in kwargs:
+            kwargs['allowed_statuses'] = self.allowed_statuses
         if 'abort' not in kwargs:
             kwargs['abort'] = self.abort
         return super().new(**kwargs)
@@ -89,11 +90,11 @@ class WhitelistRetry(urllib3.util.retry.Retry):
         return super().is_exhausted()
 
     def is_retry(self, method, status_code, has_retry_after=False):
-        """ Override Retry's is_retry to introduce our status whitelist logic.
+        """ Override Retry's is_retry to introduce our allowed statuses logic.
         """
         # we retry all methods so no check if method is retryable here
 
-        if self.status_whitelist and status_code not in self.status_whitelist:
+        if self.allowed_statuses and status_code not in self.allowed_statuses:
             return True
 
         return super().is_retry(method, status_code, has_retry_after)
@@ -147,7 +148,7 @@ class Cuckoo:
         # try 4: fail, sleep(0.5*2^(4-1)==0.5*2^3==4)
         # try 5: fail, abort, sleep would've been 8 before try 6
         #
-        # Also, use method_whitelist=False to enable POST and other methods for
+        # Also, use allowed_methods=None to enable POST and other methods for
         # retry which aren't by default because they're not considered
         # idempotent. We assume that with the REST API a request either
         # succeeds or fails without residual effects, making them atomic and
@@ -155,11 +156,9 @@ class Cuckoo:
         #
         # And finally we retry everything but a 200 response, which admittedly
         # is a bit hard-core but serves our purposes for now.
-        retry_config = WhitelistRetry(total=retries,
-                                      backoff_factor=backoff,
-                                      method_whitelist=False,
-                                      status_whitelist=set([200]),
-                                      abort=self.shutdown_requested)
+        retry_config = AllowedStatusRetry(
+            total=retries, backoff_factor=backoff, allowed_methods=None,
+            allowed_statuses=set([200]), abort=self.shutdown_requested)
         retry_adapter = requests.adapters.HTTPAdapter(max_retries=retry_config)
         self.session = requests.session()
         self.session.mount('http://', retry_adapter)
