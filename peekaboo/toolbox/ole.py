@@ -3,10 +3,10 @@
 # Peekaboo Extended Email Attachment Behavior Observation Owl                 #
 #                                                                             #
 # toolbox/                                                                    #
-#         ole.py                                                           #
+#         ole.py                                                              #
 ###############################################################################
 #                                                                             #
-# Copyright (C) 2016-2020  science + computing ag                             #
+# Copyright (C) 2016-2022 science + computing ag                              #
 #                                                                             #
 # This program is free software: you can redistribute it and/or modify        #
 # it under the terms of the GNU General Public License as published by        #
