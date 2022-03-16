@@ -31,7 +31,7 @@ import logging
 import operator
 import re
 from pyparsing import nums, alphas, alphanums, Word, Combine, Suppress, \
-    oneOf, opAssoc, infixNotation, Literal, Keyword, Group, \
+    oneOf, opAssoc, infixNotation, Literal, Keyword, Group, Optional, \
     delimitedList, QuotedString, ParserElement, ParseException
 from peekaboo.ruleset import Result
 
@@ -520,8 +520,10 @@ class ExpressionParser:
         result = (Keyword('bad') | Keyword('fail') | Keyword('good')
                   | Keyword('ignore') | Keyword('unknown'))
         rval = boolean | none | real | integer | string | regex | result | dereference
-        rvallist = Group(Suppress('[') + delimitedList(rval) + Suppress(']'))
-        rvalset = Group(Suppress('{') + delimitedList(rval) + Suppress('}'))
+        rvallist = Group(Suppress('[') + Optional(
+            delimitedList(rval)) + Suppress(']'))
+        rvalset = Group(Suppress('{') + Optional(
+            delimitedList(rval)) + Suppress('}'))
         operand = rval | rvallist | rvalset
 
         # parse actions replace the parsed tokens with an instantiated object
