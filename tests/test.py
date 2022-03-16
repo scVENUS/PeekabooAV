@@ -1246,6 +1246,24 @@ unknown : baz'''
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.bad)
 
+    def test_rule_expressions_empty_set(self):
+        """ Test generic rule with empty set. """
+        config = '''[expressions]
+            expression.5: {sample.type_declared} & {
+                              'text/plain', 'inode/x-empty'} != {} -> ignore
+        '''
+
+        parsed_config = CreatingConfigParser(config)
+        rule = ExpressionRule(parsed_config, None)
+
+        sample = Sample(None, content_type="text/plain")
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.ignored)
+
+        sample = Sample(None, content_type="text/plan")
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.unknown)
+
     def test_rule_expressions_rtf(self):
         """ Test generic rule on rtf docs and types. """
         config = r'''[expressions]
@@ -1933,6 +1951,7 @@ class TestExpressionParser(unittest.TestCase):
             ["[/foo/, /bar/, /naf/] in ['snafu', 'fuba']", True],
             ["{'text/plain'}|{'test/mime','inode/empty'}",
              {'text/plain', 'test/mime', 'inode/empty'}],
+            ["{}", set()],
             ["{1} <= {1}", True],
             ["{1} <= {2}", False],
             ["{1} <= {2,3}", False],
@@ -1942,6 +1961,7 @@ class TestExpressionParser(unittest.TestCase):
             ["{'1'}|{'2','3'} <= {'1','2'}", False],
             ["{'text/plain'}|{'test/mime','inode/empty'} <="
              "{'text/plain', 'test/mime', 'inode/empty'}", True],
+            ["[]", []],
         ]
         for rule, expected in combinations:
             parsed = self.parser.parse(rule)
