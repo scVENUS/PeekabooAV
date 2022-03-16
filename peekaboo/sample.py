@@ -100,7 +100,6 @@ class Sample:
         self.__result = Result.unchecked
         self.__reason = None
         self.__report = []
-        self.__internal_report = []
         self.__sha256sum = None
         self.__file_extension = None
         self.__processing_info_dir = processing_info_dir
@@ -209,10 +208,14 @@ class Sample:
         peekaboo_report = os.path.join(dump_dir, 'report.txt')
         try:
             with open(peekaboo_report, 'w+') as pr_file:
+                pr_file.write('Declared file name: %s\n' % self.__filename)
+                pr_file.write(
+                    'Declared content type: %s\n' % self.__content_type)
+                pr_file.write(
+                    'Declared content disposition: %s\n' %
+                    self.__content_disposition)
                 if self.__report:
                     pr_file.write('\n'.join(self.__report + [""]))
-                if self.__internal_report:
-                    pr_file.write('\n'.join(self.__internal_report + [""]))
         except (OSError, IOError) as error:
             logger.error('Failure to write report file %s: %s',
                          peekaboo_report, error)
