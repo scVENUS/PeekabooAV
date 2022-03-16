@@ -202,13 +202,11 @@ class Sample:
                              dump_dir, oserr)
                 return
 
-        filename = self.sha256sum
-
         logger.debug('%d: Dumping processing info to %s',
                      self.__id, dump_dir)
 
         # Peekaboo's report
-        peekaboo_report = os.path.join(dump_dir, filename + '_report.txt')
+        peekaboo_report = os.path.join(dump_dir, 'report.txt')
         try:
             with open(peekaboo_report, 'w+') as pr_file:
                 if self.__report:
@@ -222,19 +220,18 @@ class Sample:
 
         # store malicious sample along with the reports
         if self.__result == Result.bad:
-            sample_dump = os.path.join(dump_dir, filename + "_sample.bin")
+            sample_dump = os.path.join(dump_dir, 'sample.bin')
             try:
                 with open(sample_dump, 'wb') as dump_file:
                     dump_file.write(self.__content)
             except (shutil.Error, IOError, OSError) as error:
-                logger.error('Failure to dump sample file %s to dump '
-                             'directory: %s', self.__filename, error)
+                logger.error('Failure to dump sample file to dump '
+                             'directory: %s', error)
                 return
 
         # Cuckoo report
         if self.__cuckoo_report:
-            cuckoo_report = os.path.join(dump_dir,
-                                         filename + '_cuckoo_report.json')
+            cuckoo_report = os.path.join(dump_dir, 'cuckoo_report.json')
             try:
                 with open(cuckoo_report, 'wb+') as cr_json_file:
                     cr_json = json.dumps(self.__cuckoo_report.dump,
