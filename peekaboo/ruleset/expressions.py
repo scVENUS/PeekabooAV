@@ -6,9 +6,9 @@
 #         expressions.py                                                      #
 ###############################################################################
 #                                                                             #
-# Copyright (C) 2016-2020  science + computing ag                             #
-# Based on pyparsing's eval_arith.py.
-# Copyright 2009, 2011 Paul McGuire
+# Copyright (C) 2016-2022 science + computing ag                              #
+# Based on pyparsing's eval_arith.py.                                         #
+# Copyright 2009, 2011 Paul McGuire                                           #
 #                                                                             #
 # This program is free software: you can redistribute it and/or modify        #
 # it under the terms of the GNU General Public License as published by        #
