@@ -9,11 +9,12 @@ See documentation for details.
   on multiple samples. Samples are now submitted individually, yielding a job ID
   for subsequent attempts at retrieving a report. Both inputs and outputs of
   the API are JSON. The AMaViS plugin and peekaboo-util are updated to match.
+- Embedded Cuckoo mode and python2 support are removed.
 - Breaking change: Equality operators in expressions using regexes do now need
   to match the whole string up to the end.
-- New database schema version 8.
+- New database schema version 9.
   Removes tables PeekabooMetadata and AnalysisJournal, and adds field
-  analysis\_time to SampleInfo.
+  analysis\_time as well as state to SampleInfo.
 - Generic rules can now make use of the new analyser `knownreport`
 - Introduce cortexreport toolbox analyser to connect to Cortex by TheHive.
   There already are a few sub analysers that can be used.
@@ -26,6 +27,8 @@ See documentation for details.
 - FileInfoAnalyzerReport has new attibutes md5sum, sha256sum, and ssdeepsum
   (now don't get to excited, ssdeep hashes can only be used as strings)
 - Input validation of reports adds a new pip requirement: schema
+- PID file is no longer created by default (but can be re-enabled by specifying
+  a path).
 
 ## 2.0
 
