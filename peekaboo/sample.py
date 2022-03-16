@@ -202,7 +202,7 @@ class Sample:
                              dump_dir, oserr)
                 return
 
-        filename = self.__filename + '-' + self.sha256sum
+        filename = self.sha256sum
 
         logger.debug('%d: Dumping processing info to %s',
                      self.__id, dump_dir)
