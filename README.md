@@ -1,5 +1,7 @@
 # PeekabooAV #
 
+[![Testsuite](https://github.com/scVENUS/PeekabooAV/actions/workflows/testsuite.yml/badge.svg)](https://github.com/scVENUS/PeekabooAV/actions/workflows/testsuite.yml)
+
 **Peekaboo Extended Email Attachment Behavior Observation Owl**
 
 * PeekabooAV is an Anti Virus software
