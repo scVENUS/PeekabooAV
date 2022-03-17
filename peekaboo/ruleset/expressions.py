@@ -443,8 +443,8 @@ class EvalLogic(EvalIterable):
             "isdisjoint": lambda a, b: a.isdisjoint(b),
             # beware of operator.and_ and operator.or_: these are bitwise not
             # logic
-            "and": lambda a, b: a and b,
-            "or": lambda a, b: a or b,
+            "and": EvalLogic.and_,
+            "or": EvalLogic.or_,
         }
 
     @staticmethod
@@ -458,6 +458,16 @@ class EvalLogic(EvalIterable):
     def not_in(a, b):
         """ Naively implement non-membership test. """
         return a not in b
+
+    @staticmethod
+    def and_(op1, op2):
+        """ Naively implement logic and. """
+        return op1 and op2
+
+    @staticmethod
+    def or_(op1, op2):
+        """ Naively implement logic or. """
+        return op1 or op2
 
     @staticmethod
     def handle_regexes(function, val1, val2):
@@ -486,14 +496,36 @@ class EvalLogic(EvalIterable):
 
     def eval(self, context):
         val1 = self.value[0].eval(context)
+        result = False
         for op, parseobj in operator_operands(self.value[1:]):
+            function = self.operator_map[op]
+
+            # short-circuiting on first operand already: do not evaluate
+            # further operands if evaluation result is already conclusive
+            if function is EvalLogic.and_ and not val1:
+                return False
+            if function is EvalLogic.or_ and val1:
+                return True
+
             val2 = parseobj.eval(context)
             logger.debug("Comparison: %s %s %s", val1, op, val2)
-            function = self.operator_map[op]
-            if not self.handle_regexes(function, val1, val2):
-                break
+            result = self.handle_regexes(function, val1, val2)
+
+            # short-circuiting compound operations on two operands such as
+            # comparison: Do not evaluate further operations if this one has
+            # already turned false.
+            if function not in [EvalLogic.and_, EvalLogic.or_] and not result:
+                return False
+
+            # pass second operand as first operand to next part of compound
+            # operation
             val1 = val2
-        else:
+
+        # very explicit evaluation as boolean to make distinction clear: some
+        # python operations such as 'and' and 'or' return the operand which
+        # caused the operation to terminate, *not* it's boolean value. Others
+        # such as comparisons do. We always return booleans here.
+        if result:
             return True
 
         return False
