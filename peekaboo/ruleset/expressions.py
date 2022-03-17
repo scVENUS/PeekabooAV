@@ -448,16 +448,19 @@ class EvalLogic(EvalIterable):
         }
 
     @staticmethod
-    def in_(a, b):
+    def in_(op1, op2):
         """ Literally implement membership test. Make it a static method so we
         can do identity checks. Do not use operator.contains because it needs
-        operands swapped. """
-        return a in b
+        operands swapped. Also, there's no foreseeable use of the distinction
+        that something cannot be present in nothing in our application. So
+        prevent 'NoneType not iterable' exceptions by checking that op2 is not
+        None. """
+        return op2 is not None and op1 in op2
 
     @staticmethod
-    def not_in(a, b):
-        """ Naively implement non-membership test. """
-        return a not in b
+    def not_in(op1, op2):
+        """ Implement non-membership test. """
+        return op2 is not None and op1 not in op2
 
     @staticmethod
     def and_(op1, op2):

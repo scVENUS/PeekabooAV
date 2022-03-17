@@ -1297,6 +1297,7 @@ unknown : baz'''
                 == "AppleDouble encoded Macintosh file" -> ignore
             expression.1  : sample.file_extension in {"doc", "docx"}
                 and filereport.type_by_content != /application\/.*word/ -> bad
+            expression.2: "text" in filereport.type_by_name -> ignore
         '''
 
         sample_kwargs = {
@@ -1323,6 +1324,13 @@ unknown : baz'''
         sample = FileSample(path, **sample_kwargs)
         result = rule.evaluate(sample)
         self.assertEqual(result.result, Result.ignored)
+
+        # expression.2 should not raise a 'NoneType not iterable' exception due
+        # to type_by_name being None (and it should not match). This happens if
+        # the file name is empty, for example.
+        sample = Sample(b'dummy')
+        result = rule.evaluate(sample)
+        self.assertEqual(result.result, Result.unknown)
 
     @asynctest
     async def test_rule_expression_knowntools(self):
@@ -1944,6 +1952,9 @@ class TestExpressionParser(unittest.TestCase):
             ["'foo' == 'bar'", False],
             ["'foo' == 'foo'", True],
             ["'foo' in 'bar'", False],
+            # we swallow None being non-iterable
+            ["'foo' in None", False],
+            ["'foo' not in None", False],
             # re.search() for "match anywhere in operand"
             ["'foo' in 'foobar'", True],
             ["/foo/ in 'afoobar'", True],
