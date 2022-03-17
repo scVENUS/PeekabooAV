@@ -441,8 +441,10 @@ class EvalLogic(EvalIterable):
             "is": operator.is_,
             "is not": operator.is_not,
             "isdisjoint": lambda a, b: a.isdisjoint(b),
-            "and": operator.and_,
-            "or": operator.or_,
+            # beware of operator.and_ and operator.or_: these are bitwise not
+            # logic
+            "and": lambda a, b: a and b,
+            "or": lambda a, b: a or b,
         }
 
     @staticmethod

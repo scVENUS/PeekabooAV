@@ -1912,6 +1912,9 @@ class TestExpressionParser(unittest.TestCase):
         combinations = [
             ["True", True],
             ["False", False],
+            # these two would break if bitwise operators were used
+            ["True and 2", True],
+            ["True or 2", True],
             ["5", 5],
             ["5 == 5", True],
             ["5 == 7", False],
