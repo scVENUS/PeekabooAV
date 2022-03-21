@@ -367,23 +367,6 @@ class Cuckoo:
 
     def start_tracker(self):
         """ Start tracking running jobs in a separate thread. """
-        # do a simple initial test of connectivity. With this we require the
-        # API to be reachable at startup (with the usual retries to account for
-        # a bit of a race condition in parallel startup) but later on hope
-        # that all errors are transient and retry endlessly
-        status = self.__get("cuckoo/status")
-        if status is None:
-            logger.critical("Connection to Cuckoo REST API failed")
-            return False
-        if "tasks" not in status or "reported" not in status["tasks"]:
-            logger.critical("Invalid status JSON structure from Cuckoo REST "
-                            "API: %s", status)
-            return False
-
-        reported = status["tasks"]["reported"]
-        logger.info("Connection to Cuckoo seems to work, "
-                    "%i reported tasks seen", reported)
-
         self.tracker = threading.Thread(target=self.track,
                                         name="CuckooJobTracker")
         self.tracker.start()

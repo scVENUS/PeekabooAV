@@ -753,18 +753,8 @@ class Cortex:
 
     def start_tracker(self):
         """ Start tracking running jobs in a separate thread. """
-        # do a simple initial test of connectivity. With this we require the
-        # API to be reachable at startup (with the usual retries to account for
-        # a bit of a race condition in parallel startup) but later on hope
-        # that all errors are transient and retry endlessly
         self.api = cortex4py.api.Api(
             self.url, self.api_token, session=self.session)
-        try:
-            self.api.analyzers.find_all({}, range='all')
-        except cortex4py.exceptions.CortexException as error:
-            logger.error('Initial connection to Cortex API failed: %s', error)
-            return False
-
         self.tracker = threading.Thread(target=self.track,
                                         name="CortexJobTracker")
         self.tracker.start()

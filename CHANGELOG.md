@@ -27,6 +27,9 @@ See documentation for details.
 - FileInfoAnalyzerReport has new attibutes md5sum, sha256sum, and ssdeepsum
   (now don't get to excited, ssdeep hashes can only be used as strings)
 - Input validation of reports adds a new pip requirement: schema
+- Availability of external resources, particularly Cuckoo and Cortex APIs is no
+  longer checked at startup. Lack of availability is reported as individual job
+  failure.
 - PID file is no longer created by default (but can be re-enabled by specifying
   a path).
 
