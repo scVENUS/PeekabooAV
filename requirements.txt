@@ -6,7 +6,5 @@ yara-python>=3.6.3
 requests>=2.19.0
 configparser
 pyparsing
-#cortex4py
-git+https://github.com/michaelweiser/cortex4py@data-provided-session#egg=cortex4py
 schema
 sanic
