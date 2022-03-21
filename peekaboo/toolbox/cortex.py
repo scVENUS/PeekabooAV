@@ -27,13 +27,13 @@
 
 import datetime
 import http.cookiejar
+import json
 import logging
 import os
 import threading
+import urllib.parse
 import enum
 
-import cortex4py.api
-import cortex4py.exceptions
 import requests.sessions
 import schema
 import urllib3.util.retry
@@ -136,11 +136,25 @@ class CortexAnalyzer:
 
 class CortexFileAnalyzer:
     """ An analyzer which accepts a file as main input. """
-    @classmethod
-    def get_submit_parameters(cls, sample, sample_tlp,
-                              submit_original_filename=False):
-        """ Return this analyzer's submit parameters for a given sample and a
-        filtered, loggable version of them. """
+    @staticmethod
+    def get_submit_parameters(sample, sample_tlp):
+        """ Return this analyzer's submit parameters for a given sample. """
+        del sample
+
+        # data is merged with files into multipart/form-data field list
+        return {'_json': json.dumps(
+            {
+                'dataType': 'file',
+                'tlp': sample_tlp.value,
+                # 'pap' ?
+            })
+        }
+
+    @staticmethod
+    def get_submit_files(sample, submit_original_filename=True):
+        """ Return this analyzer's list of files to submit for a given sample
+        in the format expected by requests.post() potentially including the
+        original file name. """
         filename = sample.sha256sum
 
         # append file extension to aid backend analyzers in file type detection
@@ -151,40 +165,32 @@ class CortexFileAnalyzer:
         if submit_original_filename and sample.filename:
             filename = sample.filename
 
-        # log-friendly params prevent flooding the log with superfluous data
-        # and can prevent information leakage
-        log_params = {
-            'data': '<%d bytes of sample data>' % sample.file_size,
-            'dataProvided': True,
-            'dataType': 'file',
-            'tlp': sample_tlp.value,
-            'parameters': {
-                'filename': filename,
-            }
-        }
-
-        params = log_params.copy()
-        params['data'] = sample.content
-
-        return params, log_params
+        # submit with declared content type as well
+        return {"data": (filename, sample.content, sample.type_declared)}
 
 
 class CortexHashAnalyzer(CortexAnalyzer):
     """ An analyzer which accepts hashes as main input. """
-    @classmethod
-    def get_submit_parameters(cls, sample, sample_tlp,
-                              submit_original_filename=False):
-        """ Return this analyzer's submit parameters for a given sample and a
-        filtered, loggable version of them. """
-        del submit_original_filename
-
-        params = {
+    @staticmethod
+    def get_submit_parameters(sample, sample_tlp):
+        """ Return this analyzer's submit parameters for a given sample. """
+        return {
             'data': sample.sha256sum,
             'dataType': 'hash',
             'tlp': sample_tlp.value,
+            # 'pap' ?
         }
 
-        return params, params
+    @staticmethod
+    def get_submit_files(sample, submit_original_filename=True):
+        """ Return this analyzer's list of files to submit for a given sample
+        in the format expected by requests.post() potentially including the
+        original file name. """
+        del sample
+        del submit_original_filename
+
+        # hash-based analyzers don't upload file contents
+        return None
 
 
 class FileInfoAnalyzerReport(CortexAnalyzerReport):
@@ -463,8 +469,6 @@ class CortexJob:
 
         @param sample: The sample in analysis.
         @type sample: Sample
-        @param job: The Cortex analysis job
-        @type job: cortex4py.controllers.JobController
         @param analyzer: Our analyzer object
         @type analyzer: CortexAnalyzer
         """
@@ -574,7 +578,6 @@ class Cortex:
         self.running_jobs_lock = threading.RLock()
         self.url = url
         self.tlp = tlp
-        self.api_token = api_token
         self.poll_interval = poll_interval
         self.submit_original_filename = submit_original_filename
         self.max_job_age = max_job_age
@@ -612,8 +615,10 @@ class Cortex:
         # Cortex on subsequent requests.
         self.session.cookies = requests.cookies.RequestsCookieJar(
             NocookiesPolicy())
+        # NOTE: Make sure to review this for new requests with regarding
+        # potential for unintentional credential leakage.
+        self.session.headers.update({"Authorization": f"Bearer {api_token}"})
 
-        self.api = None
         self.tracker = None
 
     def register_running_job(self, job_id, job):
@@ -664,9 +669,9 @@ class Cortex:
 
         return None
 
-    def resubmit_with_analyzer_report(self, job_id):
+    def resubmit_with_analyzer_report(self, job_id, report):
         """ Resubmit a sample to the job queue after an analyzer report became
-        available. Retrieves the report from Cortex.
+        available.
 
         @param job_id: ID of job which has finished.
         @type job_id: string
@@ -682,17 +687,9 @@ class Cortex:
             logger.debug('No job found for job ID %s', job_id)
             return None
 
-        logger.debug('%d: Requesting Cortex report', job.sample.id)
         try:
-            report = self.api.jobs.get_report(job_id)
             # register this job's analysis report with our main report object
-            job.sample.cortex_report.register_report(
-                job.analyzer, report.report)
-        except cortex4py.exceptions.CortexException as error:
-            logger.error('Retrieval of report from Cortex failed: %s', error)
-            # mark analysis as failed if we could not get the report e.g.
-            # because it was corrupted or the API connection failed.
-            job.sample.mark_cortex_failure()
+            job.sample.cortex_report.register_report(job.analyzer, report)
         except schema.SchemaError as error:
             logger.warning('Report returned from Cortex contained '
                            'invalid data: %s', error)
@@ -737,24 +734,68 @@ class Cortex:
         @raises: CortexSubmitFailedException if submission failed
         @returns: ID of the submitted Cortex job.
         """
-        params, log_params = analyzer.get_submit_parameters(
-            sample, self.tlp, self.submit_original_filename)
+        request_url = urllib.parse.urljoin(
+            self.url, '/api/analyzer/_search?range=0-1')
+        query = {'query': {'_field': 'name', '_value': analyzer.name}}
+
+        try:
+            response = self.session.post(request_url, json=query)
+        # all requests exceptions are derived from RequestsException, including
+        # RetryError, TooManyRedirects and Timeout
+        except requests.exceptions.RequestException as error:
+            raise CortexSubmitFailedException(
+                f'Error looking up analyzer {analyzer.name}: '
+                f'{error}') from error
+
+        # no check for status code here since we retry all but 200
+        # responses and raise an exception if retries fail
+        try:
+            analyzers = schema.Schema([{
+                    'id': str,
+                }], ignore_extra_keys=True).validate(
+                    response.json())
+        except (ValueError, schema.SchemaError) as error:
+            raise CortexSubmitFailedException(
+                'Invalid JSON in response when looking up analyzer '
+                f'{analyzer.name}: {error}') from error
+
+        if not analyzers:
+            raise CortexSubmitFailedException(
+                f'Analyzer {analyzer.name} not found')
+
+        if len(analyzers) > 1:
+            raise CortexSubmitFailedException(
+                f'Multiple analyzers found for {analyzer.name}')
+
+        analyzer_id = analyzers[0]['id']
+        request_url = urllib.parse.urljoin(
+            self.url, f'/api/analyzer/{analyzer_id}/run')
+        data = analyzer.get_submit_parameters(sample, self.tlp)
+        files = analyzer.get_submit_files(sample, self.submit_original_filename)
 
         logger.debug("Creating Cortex job with analyzer %s and "
-                     "parameters %s", analyzer.name, log_params)
+                     "parameters %s", analyzer.name, data)
         try:
-            job = self.api.analyzers.run_by_name(analyzer.name, params)
-        except cortex4py.exceptions.CortexException as error:
+            response = self.session.post(request_url, data=data, files=files)
+        except requests.exceptions.RequestException as error:
             raise CortexSubmitFailedException(
                 'Error submitting Cortex job: %s' % error)
 
-        self.register_running_job(job.id, CortexJob(sample, analyzer))
-        return job.id
+        try:
+            job = schema.Schema({
+                    'id': str,
+                }, ignore_extra_keys=True).validate(
+                    response.json())
+        except (ValueError, schema.SchemaError) as error:
+            raise CortexSubmitFailedException(
+                f'Invalid JSON in response to job submit: {error}') from error
+
+        job_id = job['id']
+        self.register_running_job(job_id, CortexJob(sample, analyzer))
+        return job_id
 
     def start_tracker(self):
         """ Start tracking running jobs in a separate thread. """
-        self.api = cortex4py.api.Api(
-            self.url, self.api_token, session=self.session)
         self.tracker = threading.Thread(target=self.track,
                                         name="CortexJobTracker")
         self.tracker.start()
@@ -779,19 +820,38 @@ class Cortex:
             # only meant to iterate over the job list in blocks but not to
             # return data about a specific range of job IDs from that list.
             for job_id in running_jobs:
-                cortexjob = None
+                # report is an extended version of job status, so we can
+                # optimise the number of requests here
+                request_url = urllib.parse.urljoin(
+                    self.url, f'/api/job/{job_id}/report')
                 try:
-                    cortexjob = self.api.jobs.get_by_id(job_id)
-                except cortex4py.exceptions.CortexException as error:
+                    response = self.session.get(request_url)
+                except requests.exceptions.RequestException as error:
                     logger.error('Querying Cortex job status failed: %s', error)
-                    # ignore and retry on next polling run
                     continue
 
-                if cortexjob.status in ['Success']:
-                    self.resubmit_with_analyzer_report(job_id)
+                try:
+                    json_resp = response.json()
+                    cortexjob = schema.Schema({
+                            'status': str,
+                            # only to make sure the key is there, is status
+                            # string while not finished, dict afterwards
+                            'report': schema.Or(
+                                {}, str, ignore_extra_keys=True),
+                        }, ignore_extra_keys=True).validate(json_resp)
+                except (ValueError, schema.SchemaError) as error:
+                    logger.error('Invalid JSON in job status: %s', error)
                     continue
 
-                if cortexjob.status in ['Failure', 'Deleted']:
+                job_status = cortexjob['status']
+                if job_status in ['Success']:
+                    # pass original report element from json response for
+                    # validation and storage
+                    self.resubmit_with_analyzer_report(
+                        job_id, json_resp['report'])
+                    continue
+
+                if job_status in ['Failure', 'Deleted']:
                     logger.warning("Dropping job %s because it has failed "
                                    "in Cortex", job_id)
                     self.resubmit_as_failed(job_id)
