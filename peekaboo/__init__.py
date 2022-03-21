@@ -25,7 +25,7 @@
 """ Peekaboo constant module data. """
 
 
-VERSION = (2, '1rc1')
+VERSION = (2, '1rc2')
 
 __version__ = '.'.join(map(str, VERSION))
 __author__ = 'Felix Bauer'
