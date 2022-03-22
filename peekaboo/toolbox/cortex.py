@@ -34,9 +34,9 @@ import os
 import urllib.parse
 import enum
 
-import requests.sessions
+import aiohttp
 import schema
-import urllib3.util.retry
+import tenacity
 
 from peekaboo.exceptions import PeekabooException
 
@@ -137,24 +137,10 @@ class CortexAnalyzer:
 class CortexFileAnalyzer:
     """ An analyzer which accepts a file as main input. """
     @staticmethod
-    async def get_submit_parameters(sample, sample_tlp):
-        """ Return this analyzer's submit parameters for a given sample. """
-        del sample
-
-        # data is merged with files into multipart/form-data field list
-        return {'_json': json.dumps(
-            {
-                'dataType': 'file',
-                'tlp': sample_tlp.value,
-                # 'pap' ?
-            })
-        }
-
-    @staticmethod
-    async def get_submit_files(sample, submit_original_filename=True):
-        """ Return this analyzer's list of files to submit for a given sample
-        in the format expected by requests.post() potentially including the
-        original file name. """
+    async def get_submit_parameters(
+            sample, sample_tlp, submit_original_filename=True):
+        """ Return this analyzer's submit parameters for a given sample and a
+        filtered, loggable version of them. """
         filename = await sample.sha256sum
 
         # append file extension to aid backend analyzers in file type detection
@@ -165,32 +151,55 @@ class CortexFileAnalyzer:
         if submit_original_filename and sample.filename:
             filename = sample.filename
 
+        # log-friendly params prevent flooding the log with superfluous data
+        # and can prevent information leakage
+        params = {
+            'dataType': 'file',
+            'tlp': sample_tlp.value,
+            # 'pap' ?
+        }
+
+        content_type = sample.type_declared
+
+        # produce a separate set of loggable params
+        # NOTE: beware of leaking sensitive or flooding with large amounts of
+        # data from params
+        log_params = params.copy().update({
+            'data': '<%d bytes of sample data>' % sample.file_size,
+            'content-type': content_type,
+            'filename': filename,
+        })
+
         # submit with declared content type as well
-        return {"data": (filename, sample.content, sample.type_declared)}
+        payload = aiohttp.FormData()
+        payload.add_field('_json', json.dumps(params))
+        payload.add_field(
+            'data', sample.content,
+            content_type=content_type,
+            filename=filename)
+
+        # calling the callable FormData finalises it into a BytesPayload and
+        # makes it reusable across retries
+        return payload(), log_params
 
 
 class CortexHashAnalyzer(CortexAnalyzer):
     """ An analyzer which accepts hashes as main input. """
     @staticmethod
-    async def get_submit_parameters(sample, sample_tlp):
-        """ Return this analyzer's submit parameters for a given sample. """
-        return {
+    async def get_submit_parameters(
+            sample, sample_tlp, submit_original_filename=True):
+        """ Return this analyzer's submit parameters for a given sample and a
+        filtered, loggable version of them. """
+        del submit_original_filename
+
+        params = {
             'data': await sample.sha256sum,
             'dataType': 'hash',
             'tlp': sample_tlp.value,
             # 'pap' ?
         }
 
-    @staticmethod
-    async def get_submit_files(sample, submit_original_filename=True):
-        """ Return this analyzer's list of files to submit for a given sample
-        in the format expected by requests.post() potentially including the
-        original file name. """
-        del sample
-        del submit_original_filename
-
-        # hash-based analyzers don't upload file contents
-        return None
+        return aiohttp.JsonPayload(params), params
 
 
 class FileInfoAnalyzerReport(CortexAnalyzerReport):
@@ -517,52 +526,21 @@ class CortexJob:
         return self.__analyzer
 
 
-class AllowedStatusRetry(urllib3.util.retry.Retry):
-    """ A Retry class which has a list of allowed status codes, allowing to
-    retry all status codes not explicitly allowed in a hard-core, catch-all
-    manner. """
-    def __init__(self, allowed_statuses=None, abort=None, **kwargs):
-        super().__init__(**kwargs)
-        self.allowed_statuses = allowed_statuses or set()
-        # Event that is set if we're not to retry
-        self.abort = abort
-
-    def new(self, **kwargs):
-        """ Adjusted shallow copy method to carry our parameters over into our
-        copy. """
-        if 'allowed_statuses' not in kwargs:
-            kwargs['allowed_statuses'] = self.allowed_statuses
-        if 'abort' not in kwargs:
-            kwargs['abort'] = self.abort
-        return super().new(**kwargs)
-
-    def is_exhausted(self):
-        """ Allow to abort a retry chain through an external signal. """
-        if self.abort and self.abort.is_set():
-            return True
-
-        return super().is_exhausted()
-
-    def is_retry(self, method, status_code, has_retry_after=False):
-        """ Override Retry's is_retry to introduce our allowed statuses logic.
-        """
-        # we retry all methods so no check if method is retryable here
-
-        if self.allowed_statuses and status_code not in self.allowed_statuses:
-            return True
-
-        return super().is_retry(method, status_code, has_retry_after)
+class PickyClientResponse(aiohttp.ClientResponse):
+    """ A picky client response that only considers status 200 as ok. """
+    @property
+    def ok(self) -> bool:
+        """ Accept only status 200 as ok because we expect all our requests to
+        return that code. """
+        return self.status == 200
 
 
-class NocookiesPolicy(http.cookiejar.DefaultCookiePolicy):
-    """ A cookie policy that denies to accept any cookies. """
-
-    # CookiePolicy as a base class is not enough. CookieJar makes assumptions
-    # about the expansive interface of DefaultCookiePolicy.
-
-    def set_ok(self, cookie, request):
-        """ No cookie will be accepted ever. """
-        return False
+def log_retry(retry_state):
+    """ Log a warning message on retries of requests. """
+    exception = retry_state.outcome.exception()
+    wait = retry_state.next_action.sleep
+    logger.log(logging.WARNING, "%s. Retrying in %.2f seconds.",
+               exception, wait)
 
 
 class Cortex:
@@ -602,46 +580,21 @@ class Cortex:
         self.submit_original_filename = submit_original_filename
         self.max_job_age = max_job_age
 
-        # urrlib3 backoff formula:
-        # <backoff factor> * (2 ^ (<retry count so far> - 1))
-        # with second try intentionally having no sleep,
-        # e.g. with retry count==5 and backoff factor==0.5:
-        # try 1: fail, sleep(0.5*2^(1-1)==0.5*2^0==0.5*1==0.5->intentionally
-        #   overridden to 0)
-        # try 2: fail, sleep(0.5*2^(2-1)==0.5*2^1==1)
-        # try 3: fail, sleep(0.5*2^(3-1)==0.5*2^2==2)
-        # try 4: fail, sleep(0.5*2^(4-1)==0.5*2^3==4)
-        # try 5: fail, abort, sleep would've been 8 before try 6
-        #
-        # Also, use allowed_methods=None to enable POST and other methods for
-        # retry which aren't by default because they're not considered
-        # idempotent. We assume that with the REST API a request either
-        # succeeds or fails without residual effects, making them atomic and
-        # idempotent.
-        #
-        # And finally we retry everything but a 200 response, which admittedly
-        # is a bit hard-core but serves our purposes for now.
-        retry_config = AllowedStatusRetry(
-            total=retries, backoff_factor=backoff, allowed_methods=None,
-            allowed_statuses=set([200]), abort=self.shutdown_requested)
-        retry_adapter = requests.adapters.HTTPAdapter(max_retries=retry_config)
-        self.session = requests.sessions.Session()
-        self.session.mount('http://', retry_adapter)
-        self.session.mount('https://', retry_adapter)
-        # attach a cookie policy that refuses to learn any cookies from
-        # responses. This is because Cortex sometimes hands out CSRF tokens and
-        # even session cookies in response to our bearer-token-authenticated
-        # API requests which we don't need but have the potential to confuse
-        # Cortex on subsequent requests.
-        self.session.cookies = requests.cookies.RequestsCookieJar(
-            NocookiesPolicy())
-        # NOTE: Make sure to review this for new requests with regarding
-        # potential for unintentional credential leakage.
-        self.session.headers.update({"Authorization": f"Bearer {api_token}"})
+        self.retrier = tenacity.AsyncRetrying(
+                stop=tenacity.stop_after_attempt(retries),
+                wait=tenacity.wait_exponential(multiplier=backoff),
+                retry=tenacity.retry_if_exception_type(aiohttp.ClientError),
+                before_sleep=log_retry)
+
+        headers = {"Authorization": f"Bearer {api_token}"}
+        cookie_jar = aiohttp.DummyCookieJar()
+        self.session = aiohttp.ClientSession(
+            raise_for_status=True, response_class=PickyClientResponse,
+            headers=headers, cookie_jar=cookie_jar)
 
         self.tracker = None
 
-    def register_running_job(self, job_id, job):
+    async def register_running_job(self, job_id, job):
         """ Register a job as running. Detect if another sample has already
         been registered with the same job ID which obviously must never happen
         because it corrupts our internal housekeeping. Guarded by a lock
@@ -662,7 +615,7 @@ class Cortex:
                 'for different sample %d will be marked failed',
                 job.sample.id, job_id,
                 self.running_jobs[job_id].sample.id)
-            self.resubmit_as_failed(job_id)
+            await self.resubmit_as_failed(job_id)
 
         self.running_jobs[job_id] = job
 
@@ -756,25 +709,25 @@ class Cortex:
         query = {'query': {'_field': 'name', '_value': analyzer.name}}
 
         try:
-            response = self.session.post(request_url, json=query)
-        # all requests exceptions are derived from RequestsException, including
-        # RetryError, TooManyRedirects and Timeout
-        except requests.exceptions.RequestException as error:
-            raise CortexSubmitFailedException(
-                f'Error looking up analyzer {analyzer.name}: '
-                f'{error}') from error
-
-        # no check for status code here since we retry all but 200
-        # responses and raise an exception if retries fail
-        try:
-            analyzers = schema.Schema([{
-                    'id': str,
-                }], ignore_extra_keys=True).validate(
-                    response.json())
+            async for attempt in self.retrier:
+                with attempt:
+                    async with self.session.post(
+                            request_url, json=query) as response:
+                        # no check for status code here since we retry all but
+                        # 200 responses and raise an exception if retries fail
+                        analyzers = schema.Schema([{
+                                'id': str,
+                            }], ignore_extra_keys=True).validate(
+                                await response.json())
         except (ValueError, schema.SchemaError) as error:
             raise CortexSubmitFailedException(
                 'Invalid JSON in response when looking up analyzer '
                 f'{analyzer.name}: {error}') from error
+        except tenacity.RetryError as error:
+            # retries expired
+            raise CortexSubmitFailedException(
+                f'Error looking up analyzer {analyzer.name}: '
+                f'{error}') from error
 
         if not analyzers:
             raise CortexSubmitFailedException(
@@ -787,29 +740,29 @@ class Cortex:
         analyzer_id = analyzers[0]['id']
         request_url = urllib.parse.urljoin(
             self.url, f'/api/analyzer/{analyzer_id}/run')
-        data = await analyzer.get_submit_parameters(sample, self.tlp)
-        files = await analyzer.get_submit_files(
-            sample, self.submit_original_filename)
+        data, log_params = await analyzer.get_submit_parameters(
+            sample, self.tlp, self.submit_original_filename)
 
         logger.debug("Creating Cortex job with analyzer %s and "
-                     "parameters %s", analyzer.name, data)
+                     "parameters %s", analyzer.name, log_params)
         try:
-            response = self.session.post(request_url, data=data, files=files)
-        except requests.exceptions.RequestException as error:
-            raise CortexSubmitFailedException(
-                'Error submitting Cortex job: %s' % error)
-
-        try:
-            job = schema.Schema({
-                    'id': str,
-                }, ignore_extra_keys=True).validate(
-                    response.json())
+            async for attempt in self.retrier:
+                with attempt:
+                    async with self.session.post(
+                            request_url, data=data) as response:
+                        job = schema.Schema({
+                                'id': str,
+                            }, ignore_extra_keys=True).validate(
+                                await response.json())
         except (ValueError, schema.SchemaError) as error:
             raise CortexSubmitFailedException(
                 f'Invalid JSON in response to job submit: {error}') from error
+        except tenacity.RetryError as error:
+            raise CortexSubmitFailedException(
+                f'Error submitting Cortex job: {error}') from error
 
         job_id = job['id']
-        self.register_running_job(job_id, CortexJob(sample, analyzer))
+        await self.register_running_job(job_id, CortexJob(sample, analyzer))
         return job_id
 
     async def start_tracker(self):
@@ -842,36 +795,39 @@ class Cortex:
                 request_url = urllib.parse.urljoin(
                     self.url, f'/api/job/{job_id}/report')
                 try:
-                    response = self.session.get(request_url)
-                except requests.exceptions.RequestException as error:
-                    logger.error('Querying Cortex job status failed: %s', error)
-                    continue
-
-                try:
-                    json_resp = response.json()
-                    cortexjob = schema.Schema({
-                            'status': str,
-                            # only to make sure the key is there, is status
-                            # string while not finished, dict afterwards
-                            'report': schema.Or(
-                                {}, str, ignore_extra_keys=True),
-                        }, ignore_extra_keys=True).validate(json_resp)
+                    async for attempt in self.retrier:
+                        with attempt:
+                            async with self.session.get(
+                                    request_url) as response:
+                                json_resp = await response.json()
+                                cortexjob = schema.Schema({
+                                        'status': str,
+                                        # only to make sure the key is there,
+                                        # is status string while not finished,
+                                        # dict afterwards
+                                        'report': schema.Or(
+                                            {}, str, ignore_extra_keys=True),
+                                    }, ignore_extra_keys=True).validate(
+                                        json_resp)
                 except (ValueError, schema.SchemaError) as error:
                     logger.error('Invalid JSON in job status: %s', error)
+                    continue
+                except tenacity.RetryError as error:
+                    logger.error('Querying Cortex job status failed: %s', error)
                     continue
 
                 job_status = cortexjob['status']
                 if job_status in ['Success']:
                     # pass original report element from json response for
                     # validation and storage
-                    self.resubmit_with_analyzer_report(
+                    await self.resubmit_with_analyzer_report(
                         job_id, json_resp['report'])
                     continue
 
                 if job_status in ['Failure', 'Deleted']:
                     logger.warning("Dropping job %s because it has failed "
                                    "in Cortex", job_id)
-                    self.resubmit_as_failed(job_id)
+                    await self.resubmit_as_failed(job_id)
                     continue
 
                 # drop jobs which have been running for too long. This is
@@ -880,7 +836,8 @@ class Cortex:
                 # even though our client might not be interested any more so
                 # that we have the result cached for the next time we get the
                 # same sample.
-                self.resubmit_as_failed_if_too_old(job_id, self.max_job_age)
+                await self.resubmit_as_failed_if_too_old(
+                    job_id, self.max_job_age)
 
             await asyncio.sleep(self.poll_interval)
 
@@ -901,3 +858,5 @@ class Cortex:
             # we cancelled the task so a CancelledError is expected
             except asyncio.CancelledError:
                 pass
+
+        await self.session.close()
