@@ -59,14 +59,20 @@ class Oletools:
                 # office document with no macros
                 pass
 
+            # When called on an empty or text document oletools will falsely
+            # report that it contains macros and returns a one item list of
+            # macros which contains only the filename again.
+            #
+            # Oletool assume the submitted file is the plain text macro if
+            # it can not determine another file type.
+            #
+            # Add a workaround to detect this behaviour and override the
+            # result.
             all_macros = vbaparser.extract_all_macros()
             if (report['has_macros'] and len(all_macros) == 1
                     and isinstance(all_macros[0], tuple)
                     and len(all_macros[0]) >= 3
                     and all_macros[0][2] == filename):
-                logger.warning(
-                    "Buggy oletools version detected, result overridden. May "
-                    "lead to false negatives, please update to fixed version")
                 report['has_macros'] = False
 
             if vbaparser.detect_vba_macros():
