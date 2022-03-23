@@ -348,6 +348,30 @@ class VirusTotalQuery(CortexHashAnalyzer):
 class CuckooSandboxFileAnalysisReport(CortexAnalyzerReport):
     """ Represents a Cortex CuckooSandbox_File_Analysis_Inet_1_2 analysis JSON
         report. """
+    report_schema = schema.Schema({
+        "summary": {
+            "taxonomies": [schema.Or(
+                {
+                    "level": schema.Or("info", "malicious", "safe"),
+                    "namespace": "Cuckoo",
+                    "predicate": "Malscore",
+                    "value": schema.Regex(r'^[0-9\./]*$')
+                }, {
+                    "level": schema.Or("info", "malicious", "safe"),
+                    "namespace": "Cuckoo",
+                    "predicate": "Malfamily",
+                    "value": str,
+                })
+            ]
+        },
+        "full": schema.Schema({
+            "signatures": schema.Schema([str]),
+        }, ignore_extra_keys=True),
+        "success": bool,
+        "artifacts": CortexAnalyzerReport.report_schema_artifacts,
+        "operations": []
+    })
+
     def __init__(self, report):
         super().__init__(report)
         self.taxonomies = report.get("summary", {}).get("taxonomies", [{}])
