@@ -102,6 +102,13 @@ class Report(QueueResource):
                             "DDE has been identified",
                     }
                 ],
+                "target": {
+                    "file": {
+                        "type": "magic",
+                        "yara": [],
+                    },
+                },
+                "network": {},
                 "debug": {
                     "cuckoo": [
                         "analysis completed successfully",
@@ -132,8 +139,9 @@ def run():
 
     api.add_resource(Status, '/cuckoo/status', resource_class_args=[queue])
     api.add_resource(View, '/tasks/view/<job_id>', resource_class_args=[queue])
-    api.add_resource(Report, '/tasks/report/<job_id>',
-                     resource_class_args=[queue])
+    api.add_resource(
+        Report, '/tasks/report/<job_id>', '/tasks/report/<job_id>/json',
+        resource_class_args=[queue])
     api.add_resource(Create, '/tasks/create/file', resource_class_args=[queue])
 
     app.run(port='5002')
