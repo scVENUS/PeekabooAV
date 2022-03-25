@@ -27,11 +27,6 @@ Dummy Cuckoo
 For development and testing purposes we developed some scripts to simulate the behaviour required for us to
 communicate with Cuckoo. These scripts can be found in the ``bin/`` folder of our repository.
 
-* ``dummy_cukcoo.py``: Simulates the Cuckoo output if an analysis task is completed.
-* ``dummy_cuckoo_submit.py``: Simulates the Cuckoo output when submitting a file or directory to cuckoo.
-
-To develop in api mode:
-
 * ``dummy_cuckoo_api.py``: Simulates the Cuckoo API. It listens on port ``127.0.0.1:5002``.
 
 
