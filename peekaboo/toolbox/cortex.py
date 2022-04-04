@@ -769,7 +769,7 @@ class Cortex:
         """ Start tracking running jobs in a separate thread. """
         self.tracker = asyncio.ensure_future(self.track())
         self.tracker.set_name("CortexJobTracker")
-        return True
+        return self.tracker
 
     async def track(self):
         """ Do the polling for finished jobs. """
@@ -858,5 +858,9 @@ class Cortex:
             # we cancelled the task so a CancelledError is expected
             except asyncio.CancelledError:
                 pass
+            except Exception:
+                logger.exception(
+                    "Unexpected exception in Cortex job tracker")
 
         await self.session.close()
+        logger.debug("Cortex job tracker shut down.")

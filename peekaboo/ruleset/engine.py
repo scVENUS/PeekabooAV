@@ -128,6 +128,7 @@ class RulesetEngine:
         # instantiate enabled rules and have them check their configuration,
         # user-defined rule order is preserved in enabled_rules and through
         # ordered append() in self.rules
+        awaitables = []
         for rule_name in enabled_rules:
             rule = rule_classes[rule_name](
                 self.config, self.db_con, self.threadpool)
@@ -146,9 +147,12 @@ class RulesetEngine:
                         self.analyzer_config.cuckoo_submit_original_filename,
                         self.analyzer_config.cuckoo_maximum_job_age)
 
-                    if not await self.cuckoo.start_tracker():
+                    awaitable = await self.cuckoo.start_tracker()
+                    if not awaitable:
                         raise PeekabooRulesetConfigError(
                             "Failure to initialize Cuckoo job tracker")
+
+                    awaitables.append(awaitable)
 
                 rule.set_cuckoo_job_tracker(self.cuckoo)
 
@@ -166,9 +170,12 @@ class RulesetEngine:
                         self.analyzer_config.cortex_submit_original_filename,
                         self.analyzer_config.cortex_maximum_job_age)
 
-                    if not await self.cortex.start_tracker():
+                    awaitable = await self.cortex.start_tracker()
+                    if not awaitable:
                         raise PeekabooRulesetConfigError(
                             "Failure to initialize Cortex job tracker")
+
+                    awaitables.append(awaitable)
 
                 rule.set_cortex_job_tracker(self.cortex)
 
@@ -183,6 +190,8 @@ class RulesetEngine:
         # the shutdown request arrived.
         if self.shutdown_requested:
             self.shut_down_resources()
+
+        return awaitables
 
     async def run(self, sample):
         """ Run all the rules in the ruleset against a given sample
@@ -228,6 +237,7 @@ class RulesetEngine:
     def shut_down(self):
         """ Initiate asynchronous shutdown of the ruleset engine and dependent
         logic such as job trackers. """
+        logger.debug("Ruleset engine shutdown requested.")
         self.shutdown_requested = True
         self.shut_down_resources()
 
@@ -238,3 +248,5 @@ class RulesetEngine:
 
         if self.cortex is not None:
             await self.cortex.close_down()
+
+        logger.debug("Ruleset engine shut down.")

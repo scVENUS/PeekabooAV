@@ -329,6 +329,10 @@ async def async_main():
     threadpool = concurrent.futures.ThreadPoolExecutor(
         config.worker_count, 'ThreadPool-')
 
+    # collect a list of awaitables from started subsystems from which to gather
+    # unexpected error conditions such as exceptions
+    awaitables = []
+
     # read in the analyzer and ruleset configuration and start the job queue
     try:
         ruleset_config = PeekabooConfigParser(config.ruleset_config)
@@ -339,7 +343,7 @@ async def async_main():
             cluster_duplicate_check_interval=cldup_check_interval,
             threadpool=threadpool)
         sig_handler.register_listener(job_queue)
-        await job_queue.start()
+        awaitables.extend(await job_queue.start())
     except PeekabooConfigException as error:
         logging.critical(error)
         sys.exit(1)
@@ -357,6 +361,10 @@ async def async_main():
             sample_factory=sample_factory,
             request_queue_size=100,
             db_con=db_con)
+        sig_handler.register_listener(server)
+        # the server runs completely inside the event loop and does not expose
+        # any awaitable to extract exceptions from.
+        await server.start()
     except Exception as error:
         logger.critical('Failed to start Peekaboo Server: %s', error)
         job_queue.shut_down()
@@ -367,16 +375,25 @@ async def async_main():
     if sig_handler.shutdown_requested:
         sys.exit(0)
 
-    sig_handler.register_listener(server)
     SystemdNotifier().notify("READY=1")
-    await server.serve()
 
-    # trigger shutdowns of other components (if not already ongoing triggered
-    # by e.g. the signal handler), server will already be shut down at this
-    # point signaled by the fact that serve() above returned
-    job_queue.shut_down()
+    try:
+        await asyncio.gather(*awaitables)
+    # CancelledError is derived from BaseException, not Exception
+    except asyncio.exceptions.CancelledError as error:
+        # cancellation is expected in the case of shutdown via signal handler
+        pass
+    except Exception:
+        logger.error("Shutting down due to unexpected exception")
+
+    # trigger shutdowns of other components if not already ongoing triggered
+    # by the signal handler
+    if not sig_handler.shutdown_requested:
+        server.shut_down()
+        job_queue.shut_down()
 
     # close down components after they've shut down
+    await server.close_down()
     await job_queue.close_down()
 
     # do a final cleanup pass through the database
