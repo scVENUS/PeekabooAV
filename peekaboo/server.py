@@ -269,8 +269,8 @@ class PeekabooServer:
             # 'report': report,
             }, 200)
 
-    async def serve(self):
-        """ Serves requests until shutdown is requested from the outside. """
+    async def start(self):
+        """ Makes the server start serving requests. """
         self.server = await self.server_coroutine
 
         # sanic 21.9 introduced an explicit startup that finalizes the app,
@@ -281,8 +281,6 @@ class PeekabooServer:
         await self.server.start_serving()
         logger.info('Peekaboo server is now listening on %s:%d',
                     self.host, self.port)
-        await self.server.wait_closed()
-        logger.debug('Server shut down.')
 
     def shut_down(self):
         """ Triggers a shutdown of the server, used by the signal handler and
@@ -290,3 +288,10 @@ class PeekabooServer:
         logger.debug('Server shutdown requested.')
         if self.server is not None:
             self.server.close()
+
+    async def close_down(self):
+        """ Wait for the server to close down. """
+        if self.server is not None:
+            await self.server.wait_closed()
+
+        logger.debug('Server shut down.')

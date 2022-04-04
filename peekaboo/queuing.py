@@ -102,18 +102,19 @@ class JobQueue:
 
     async def start(self):
         """ Start up the job queue including resource initialisation. """
+        awaitables = []
         for worker in self.workers:
-            await worker.start()
+            awaitables.append(await worker.start())
 
         if self.cluster_duplicate_handler:
-            await self.cluster_duplicate_handler.start()
+            awaitables.append(await self.cluster_duplicate_handler.start())
 
         # create a single ruleset engine for all workers, instantiates all the
         # rules based on the ruleset configuration, may start up long-lived
         # analyzer instances which are shared as well, is otherwise stateless
         # to allow concurrent use by multiple worker
         try:
-            await self.ruleset_engine.start()
+            awaitables.extend(await self.ruleset_engine.start())
         except (KeyError, ValueError, PeekabooConfigException) as error:
             self.shut_down()
             await self.close_down()
@@ -123,6 +124,8 @@ class JobQueue:
             self.shut_down()
             await self.close_down()
             raise PeekabooConfigException(error)
+
+        return awaitables
 
     async def submit(self, sample):
         """
@@ -326,8 +329,6 @@ class JobQueue:
 
     async def close_down(self):
         """ Wait for workers to stop and free up resources. """
-        logger.info("Closing down.")
-
         for worker in self.workers:
             await worker.close_down()
 
@@ -336,6 +337,9 @@ class JobQueue:
 
         if self.ruleset_engine is not None:
             await self.ruleset_engine.close_down()
+
+        logger.info("Queue shut down.")
+
 
 class ClusterDuplicateHandler:
     """ A housekeeper handling submission and cleanup of cluster duplicates.
@@ -349,6 +353,7 @@ class ClusterDuplicateHandler:
     async def start(self):
         self.task = asyncio.ensure_future(self.run())
         self.task.set_name(self.task_name)
+        return self.task
 
     async def run(self):
         logger.debug("Cluster duplicate handler started.")
@@ -359,13 +364,8 @@ class ClusterDuplicateHandler:
             logger.debug("Checking for samples in processing by other "
                          "instances to submit")
 
-            # TODO: Error handling: How do we cause Peekaboo to exit with an
-            # error from here? For now just keep trying and hope (database)
-            # failure is transient.
             await self.job_queue.clear_stale_in_flight_samples()
             await self.job_queue.submit_cluster_duplicates()
-
-        logger.debug("Cluster duplicate handler shut down.")
 
     def shut_down(self):
         """ Asynchronously initiate cluster duplicate handler shutdown. """
@@ -382,6 +382,11 @@ class ClusterDuplicateHandler:
             # we cancelled the task so a CancelledError is expected
             except asyncio.CancelledError:
                 pass
+            except Exception:
+                logger.exception(
+                    "Unexpected exception in cluster duplicate handler")
+
+        logger.debug("Cluster duplicate handler shut down.")
 
 
 class Worker:
@@ -398,6 +403,7 @@ class Worker:
     async def start(self):
         self.task = asyncio.ensure_future(self.run())
         self.task.set_name(self.worker_name)
+        return self.task
 
     async def run(self):
         while True:
@@ -438,10 +444,9 @@ class Worker:
 
             await self.job_queue.done(sample)
 
-        logger.info('Worker %d: Stopped', self.worker_id)
-
     def shut_down(self):
         """ Asynchronously initiate worker shutdown. """
+        logger.info("Worker %d: shutdown requested.", self.worker_id)
         if self.task is not None:
             self.task.cancel()
 
@@ -454,3 +459,8 @@ class Worker:
             # we cancelled the task so a CancelledError is expected
             except asyncio.CancelledError:
                 pass
+            except Exception:
+                logger.exception(
+                    "Unexpected exception in worker %d", self.worker_id)
+
+        logger.info('Worker %d: Stopped', self.worker_id)

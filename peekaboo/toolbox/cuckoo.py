@@ -339,7 +339,7 @@ class Cuckoo:
         """ Start tracking running jobs in a separate thread. """
         self.tracker = asyncio.ensure_future(self.track())
         self.tracker.set_name("CuckooJobTracker")
-        return True
+        return self.tracker
 
     async def track(self):
         """ Do the polling for finished jobs. """
@@ -401,8 +401,12 @@ class Cuckoo:
             # we cancelled the task so a CancelledError is expected
             except asyncio.CancelledError:
                 pass
+            except Exception:
+                logger.exception(
+                    "Unexpected exception in Cuckoo job tracker")
 
         await self.session.close()
+        logger.debug("Cuckoo job tracker shut down.")
 
 
 class CuckooReport:
