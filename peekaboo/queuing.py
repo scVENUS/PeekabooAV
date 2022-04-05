@@ -64,8 +64,8 @@ class JobQueue:
         self.worker_count = worker_count
         self.threadpool = threadpool
 
-        # keep a backlog of samples with hashes identical to samples currently
-        # in analysis to avoid analysing multiple identical samples
+        # keep a backlog of samples with identities identical to samples
+        # currently in analysis to avoid analysing multiple identical samples
         # simultaneously. Once one analysis has finished, we can submit the
         # others and the ruleset will notice that we already know the result.
         self.duplicates = {}
@@ -136,7 +136,7 @@ class JobQueue:
         @param sample: The Sample object to add to the queue.
         @raises Full: if the queue is full.
         """
-        sample_hash = await sample.sha256sum
+        identity = await sample.identity
         duplicate = None
         cluster_duplicate = None
         resubmit = None
@@ -144,8 +144,8 @@ class JobQueue:
         # we have to lock this down because async routines called from here may
         # allow us to be called again concurrently from the event loop
         async with self.duplock:
-            # check if a sample with same hash is currently in flight
-            duplicates = self.duplicates.get(sample_hash)
+            # check if a sample with same identity is currently in flight
+            duplicates = self.duplicates.get(identity)
             if duplicates is not None:
                 # we are regularly resubmitting samples, e.g. after we've
                 # noticed that cuckoo is finished analysing them. This
@@ -171,18 +171,18 @@ class JobQueue:
                 if locked:
                     # initialise a per-duplicate backlog for this sample which
                     # also serves as in-flight marker and submit to queue
-                    self.duplicates[sample_hash] = {
+                    self.duplicates[identity] = {
                         'master': sample,
                         'duplicates': [],
                     }
                     await self.jobs.put(sample)
                 else:
                     # another instance is working on this
-                    if self.cluster_duplicates.get(sample_hash) is None:
-                        self.cluster_duplicates[sample_hash] = []
+                    if self.cluster_duplicates.get(identity) is None:
+                        self.cluster_duplicates[identity] = []
 
                     cluster_duplicate = sample.id
-                    self.cluster_duplicates[sample_hash].append(sample)
+                    self.cluster_duplicates[identity].append(sample)
 
         if duplicate is not None:
             logger.debug(
@@ -214,7 +214,7 @@ class JobQueue:
             # because we will change it by removing entries which would raise a
             # RuntimeException
             cluster_duplicates = self.cluster_duplicates.copy().items()
-            for sample_hash, sample_duplicates in cluster_duplicates:
+            for identity, sample_duplicates in cluster_duplicates:
                 # try to mark as in-flight
                 try:
                     locked = await self.db_con.mark_sample_in_flight(
@@ -224,7 +224,7 @@ class JobQueue:
                     return False
 
                 if locked:
-                    if self.duplicates.get(sample_hash) is not None:
+                    if self.duplicates.get(identity) is not None:
                         logger.error(
                             "Possible backlog corruption for sample %d! "
                             "Please file a bug report. Trying to continue...",
@@ -238,13 +238,13 @@ class JobQueue:
                     # using the stored result, causing all the duplicates to be
                     # submitted and finish quickly as well.
                     sample = sample_duplicates.pop()
-                    self.duplicates[sample_hash] = {
+                    self.duplicates[identity] = {
                         'master': sample,
                         'duplicates': sample_duplicates,
                     }
                     submitted_cluster_duplicates.append(sample.id)
                     await self.jobs.put(sample)
-                    del self.cluster_duplicates[sample_hash]
+                    del self.cluster_duplicates[identity]
 
         if len(submitted_cluster_duplicates) > 0:
             logger.debug(
@@ -263,12 +263,12 @@ class JobQueue:
 
         return cleared
 
-    async def submit_duplicates(self, sample_hash):
+    async def submit_duplicates(self, identity):
         """ Check if any samples have been held from processing as duplicates
         and submit them now. Clear the original sample whose duplicates have
         been submitted from the in-flight list.
 
-        @param sample_hash: Hash of sample to check for duplicates
+        @param identity: identity of sample to check for duplicates
         """
         submitted_duplicates = []
 
@@ -279,21 +279,21 @@ class JobQueue:
             # already known and process them quickly now that the first
             # instance has gone through full analysis. Therefore we can ignore
             # them here.
-            if sample_hash not in self.duplicates:
+            if identity not in self.duplicates:
                 return
 
             # submit all samples which have accumulated in the backlog
-            for sample in self.duplicates[sample_hash]['duplicates']:
+            for sample in self.duplicates[identity]['duplicates']:
                 submitted_duplicates.append(sample.id)
                 await self.jobs.put(sample)
 
-            sample = self.duplicates[sample_hash]['master']
+            sample = self.duplicates[identity]['master']
             try:
                 await self.db_con.clear_sample_in_flight(sample)
             except PeekabooDatabaseError as dberr:
                 logger.error(dberr)
 
-            del self.duplicates[sample_hash]
+            del self.duplicates[identity]
 
         logger.debug("%d: Cleared sample from in-flight list", sample.id)
         if len(submitted_duplicates) > 0:
@@ -306,7 +306,7 @@ class JobQueue:
         2. notify request handler that sample processing is done.
 
         @param sample: The Sample object to post-process. """
-        await self.submit_duplicates(await sample.sha256sum)
+        await self.submit_duplicates(await sample.identity)
 
     async def dequeue(self):
         """ Remove a sample from the queue. Used by the workers to get their

@@ -103,6 +103,7 @@ class Sample:
         self.__report = []
         self.__sha256sum = None
         self.__file_extension = None
+        self.__identity = None
         self.__processing_info_dir = processing_info_dir
         self.__threadpool = threadpool
 
@@ -256,26 +257,67 @@ class Sample:
                              cuckoo_report, error)
                 return
 
+    async def __maybe_run_on_threadpool(self, func):
+        if self.__threadpool is not None:
+            loop = asyncio.get_running_loop()
+            return await loop.run_in_executor(
+                self.__threadpool, func)
+
+        return func()
+
     def __sha256sum_internal(self):
         """ Actual calculation of the SHA256 checksum called by wrapper
         routines. """
-        return hashlib.sha256(self.__content).hexdigest()
+        # need to duplicate the cache check between here and the async property
+        # so both can be used from synchronous or asynchronous code
+        # respectively
+        if self.__sha256sum is not None:
+            return self.__sha256sum
+
+        self.__sha256sum = hashlib.sha256(self.__content).hexdigest()
+        return self.__sha256sum
 
     @property
     async def sha256sum(self):
         """ Returns the SHA256 checksum/fingerprint of this sample. Determines
         it automatically on first call. """
+        # check for chached value here already so we do not needlessly congest
+        # the threadpool
         if self.__sha256sum is not None:
             return self.__sha256sum
 
-        if self.__threadpool is not None:
-            loop = asyncio.get_running_loop()
-            self.__sha256sum = await loop.run_in_executor(
-                self.__threadpool, self.__sha256sum_internal)
-        else:
-            self.__sha256sum = self.__sha256sum_internal()
+        return await self.__maybe_run_on_threadpool(self.__sha256sum_internal)
 
-        return self.__sha256sum
+    def __identity_internal(self):
+        """ Returns a criterion for distinguishing samples from one another,
+        particularly for caching and locking decisions. It includes all sample
+        properties which might cause different results when analyzed using any
+        of our analyzers or otherwise influence decisions made by the ruleset.
+        It is a string that is to be treated as opaque. Currently we use the
+        sha256 hexdigest of various properties.
+        """
+        if self.__identity is not None:
+            return self.__identity
+
+        criterion = hashlib.sha256(self.__sha256sum_internal().encode('ascii'))
+
+        # includes file extension, if any
+        if self.__filename is not None:
+            criterion.update(self.__filename.encode('utf-8'))
+        if self.__content_type is not None:
+            criterion.update(self.__content_type.encode('utf-8'))
+        if self.__content_disposition is not None:
+            criterion.update(self.__content_disposition.encode('utf-8'))
+
+        self.__identity = criterion.hexdigest()
+        return self.__identity
+
+    @property
+    async def identity(self):
+        if self.__identity is not None:
+            return self.__identity
+
+        return await self.__maybe_run_on_threadpool(self.__identity_internal)
 
     @property
     def content_disposition(self):

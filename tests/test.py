@@ -825,8 +825,9 @@ class TestSample(AsyncioTestCase):
         cls.db_con = PeekabooDatabase('sqlite:///' + cls.test_db)
         loop = asyncio.new_event_loop()
         loop.run_until_complete(cls.db_con.start())
+        cls.dumpdir = 'dump'
         cls.sample = Sample(
-            b'test', 'test.py', 'text/x-python', 'inline', 'dump', 11)
+            b'test', 'test.py', 'text/x-python', 'inline', cls.dumpdir, 11)
 
     @asynctest
     async def test_3_sample_attributes(self):
@@ -839,6 +840,9 @@ class TestSample(AsyncioTestCase):
         self.assertEqual(
             await self.sample.sha256sum,
             '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08')
+        self.assertEqual(
+            await self.sample.identity,
+            '39296b9e8c2ce1fba38a60fd9cc97ccf45464cf11bbc174f92658f213381229f')
         self.assertEqual(self.sample.result, Result.unchecked)
         self.assertEqual(self.sample.reason, None)
         self.assertRegex(
@@ -848,6 +852,70 @@ class TestSample(AsyncioTestCase):
         self.assertEqual(self.sample.cuckoo_report, None)
         self.assertEqual(self.sample.state, JobState.ACCEPTED)
         self.assertEqual(self.sample.file_size, 4)
+
+    @asynctest
+    async def test_4_identity(self):
+        """ Test the cache criterion. """
+        self.assertEqual(
+            await self.sample.identity,
+            '39296b9e8c2ce1fba38a60fd9cc97ccf45464cf11bbc174f92658f213381229f')
+
+        # content change
+        sample = Sample(
+            self.sample.content + b'-changed', self.sample.name_declared,
+            self.sample.type_declared, self.sample.content_disposition,
+            self.dumpdir, self.sample.id)
+        self.assertEqual(
+            await sample.identity,
+            'd3e971b4eb78da7b23476dad7e8200bc372a7384d1e5f7794ae2d49a5fe429da')
+
+        # file name change
+        sample = Sample(
+            self.sample.content, self.sample.name_declared + '-changed',
+            self.sample.type_declared, self.sample.content_disposition,
+            self.dumpdir, self.sample.id)
+        self.assertEqual(
+            await sample.identity,
+            'b618a285751df7d3d7dbd73ec1c1a6ed10879bc204528fd1ae547fbb2d8ffc45')
+
+        # content type change
+        sample = Sample(
+            self.sample.content, self.sample.name_declared,
+            self.sample.type_declared + '-changed',
+            self.sample.content_disposition, self.dumpdir, self.sample.id)
+        self.assertEqual(
+            await sample.identity,
+            '6125280e3d0b593a4c6d1fc6b648432763594ebdc95e7ecda97255af3d97151a')
+
+        # content disposition change
+        sample = Sample(
+            self.sample.content, self.sample.name_declared,
+            self.sample.type_declared, self.sample.content_disposition +
+            '-changed', self.dumpdir, self.sample.id)
+        self.assertEqual(
+            await sample.identity,
+            '2c2161e2326c2c65961f644f4bd5ca3688b258aa6edd0f5a3fae969ac057aded')
+
+        # irrelevant change
+        sample = Sample(
+            self.sample.content, self.sample.name_declared,
+            self.sample.type_declared, self.sample.content_disposition,
+            self.dumpdir + '-changed', self.sample.id + 1)
+        sample.mark_done()
+        result = RuleResult('Unittest', Result.failed,
+                            'This is just a test case.',
+                            further_analysis=False)
+        sample.add_rule_result(result)
+        sample.mark_cuckoo_failure()
+        sample.register_cuckoo_report(object())
+        sample.mark_cortex_failure()
+        sample.register_cortex_report(object())
+        sample.register_oletools_report(object())
+        sample.register_filetools_report(object())
+        sample.register_knowntools_report(object())
+        self.assertEqual(
+            await sample.identity,
+            '39296b9e8c2ce1fba38a60fd9cc97ccf45464cf11bbc174f92658f213381229f')
 
     def test_5_mark_done(self):
         """ Test the marking of a sample as done. """
