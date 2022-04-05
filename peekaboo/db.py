@@ -69,26 +69,26 @@ class InFlightSample(Base):
     #   lock
     # - column: we delete our own stale locks by instance_id.
     # - column: we delete other's stale locks by start_time.
-    # - compound: we delete our own locks by sha256sum and instance_id.
+    # - compound: we delete our own locks by identity and instance_id.
     #   (admittedly a bit of overkill since the individual columns are already
     #   indexed.)
 
-    sha256sum = Column(String(64), primary_key=True)
+    identity = Column(String(64), primary_key=True)
     instance_id = Column(Integer, nullable=False, index=True)
     start_time = Column(DateTime, nullable=False, index=True)
 
     __table_args__ = (
         # Index names need to be unique per schema in postgresql.
-        Index('ix_%s_sha_iid' % __tablename__, sha256sum, instance_id),
-        )
+        Index(f'ix_{__tablename__}_sha_iid', identity, instance_id),
+    )
 
     def __str__(self):
+        sid = self.identity
+        iid = self.instance_id
+        ststr = self.start_time.strftime("%Y%m%dT%H%M%S")
         return (
-            '<InFlightSample(sha256sum="%s", instance_id="%s", '
-            'start_time="%s")>'
-            % (self.sha256sum,
-               self.instance_id,
-               self.start_time.strftime("%Y%m%dT%H%M%S"))
+            f'<InFlightSample(identity="{sid}", instance_id="{iid}", '
+            f'start_time="{ststr}")>'
         )
 
     __repr__ = __str__
@@ -102,29 +102,29 @@ class SampleInfo(Base):
     # - general considerations: The table grows very large over time. Every
     #   sample is checked against it to find a cached analysis result.
     #   Otherwise it's quite unused currently.
-    # - compound: we fetch the analsysis journal by id, state, result,
-    #   sha256sum and file extension
+    # - compound: we fetch the analsysis journal by id, state, result
+    #   and identity
 
     id = Column(Integer, primary_key=True)
     state = Column(Enum(JobState), nullable=False)
-    sha256sum = Column(String(64), nullable=False)
-    file_extension = Column(String(16), nullable=True)
+    identity = Column(String(64), nullable=False)
     analysis_time = Column(DateTime, nullable=False)
     result = Column(Enum(Result), nullable=False)
     reason = Column(Text, nullable=True)
 
     __table_args__ = (
-        Index('ix_%s_st_sha_fe_at_re_id' % __tablename__,
-              state, sha256sum, file_extension, analysis_time, result, id),
+        Index(f'ix_{__tablename__}_st_idt_at_re_id',
+              state, identity, analysis_time, result, id),
     )
 
     def __str__(self):
-        return ('<SampleInfo(sample_sha256_hash="%s", file_extension="%s", '
-                'reason="%s", analysis_time="%s")>'
-                % (self.sha256sum,
-                   self.file_extension,
-                   self.reason,
-                   self.analysis_time.strftime("%Y%m%dT%H%M%S")))
+        sid = self.identity
+        reason = self.reason
+        atstr = self.analysis_time.strftime("%Y%m%dT%H%M%S")
+        return (
+            f'<SampleInfo(identity="{sid}", reason="{reason}", '
+            f'analysis_time="{atstr}")>'
+        )
 
     __repr__ = __str__
 
@@ -327,8 +327,7 @@ class PeekabooDatabase:
         """
         sample_info = SampleInfo(
             state=sample.state,
-            sha256sum=await sample.sha256sum,
-            file_extension=sample.file_extension,
+            identity=await sample.identity,
             analysis_time=datetime.now(),
             result=sample.result,
             reason=sample.reason)
@@ -412,8 +411,7 @@ class PeekabooDatabase:
                 SampleInfo.id != sample.id).where(
                     SampleInfo.result != Result.failed).filter_by(
                         state=JobState.FINISHED,
-                        sha256sum=await sample.sha256sum,
-                        file_extension=sample.file_extension).order_by(
+                        identity=await sample.identity).order_by(
                             SampleInfo.analysis_time)
 
         sample_journal = None
@@ -500,9 +498,10 @@ class PeekabooDatabase:
         if start_time is None:
             start_time = datetime.utcnow()
 
-        in_flight_marker = InFlightSample(sha256sum=await sample.sha256sum,
-                                          instance_id=instance_id,
-                                          start_time=start_time)
+        in_flight_marker = InFlightSample(
+            identity=await sample.identity, instance_id=instance_id,
+            start_time=start_time)
+
         attempt = 1
         delay = 0
         while attempt <= self.retries:
@@ -558,7 +557,7 @@ class PeekabooDatabase:
 
         statement = sqlalchemy.sql.expression.delete(
             InFlightSample).where(
-                InFlightSample.sha256sum == await sample.sha256sum).where(
+                InFlightSample.identity == await sample.identity).where(
                     InFlightSample.instance_id == instance_id)
 
         attempt = 1

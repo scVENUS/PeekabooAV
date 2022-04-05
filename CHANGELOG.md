@@ -4,6 +4,11 @@ See documentation for details.
 
 ## devel
 
+- Samples now have an identity that includes sha256sum, declared name and type
+  as well as content disposition. This allows for more reliable and efficient
+  in-flight locking and cached result usage decisions. DB schema version raised
+  to 10.
+
 ## 2.1
 
 - Peekaboo now provides a REST API. The old UNIX domain socket is gone and
