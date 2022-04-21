@@ -4,6 +4,8 @@ See documentation for details.
 
 ## devel
 
+## 2.1
+
 - Peekaboo now provides a REST API. The old UNIX domain socket is gone and
   there's no longer a long-lived client connection providing a summary report
   on multiple samples. Samples are now submitted individually, yielding a job ID
