@@ -38,6 +38,26 @@ from peekaboo.toolbox.cortex import tlp
 
 logger = logging.getLogger(__name__)
 
+
+class ListInterpolation(configparser.BasicInterpolation):
+    """ An interpolation that correlates options of the form
+    <option>.<distinguisher> into lists. """
+    def before_read(self, parser, section, option, value):
+        """ Massage value after read before insert into section. In our case we
+        detect if it's supposed to be a list and insert it into a special
+        structure in the parser. """
+        value = super().before_read(parser, section, option, value)
+
+        # is it a list?
+        name_parts = option.split('.')
+        if len(name_parts) != 2:
+            return value
+
+        key = name_parts[0]
+        parser.add_list_value(section, key, value)
+        return None
+
+
 class PeekabooConfigParser( # pylint: disable=too-many-ancestors
         configparser.ConfigParser):
     """ A config parser that gives error feedback if a required file does not
@@ -48,7 +68,12 @@ class PeekabooConfigParser( # pylint: disable=too-many-ancestors
     IRELIST = object()
 
     def __init__(self, config_file):
-        super().__init__()
+        super().__init__(interpolation=ListInterpolation())
+
+        # interpolation calls our add_list_value() from read_file() and read()
+        # which needs these defined
+        self.lists = {}
+        self.relists = {}
 
         try:
             self.read_file(open(config_file))
@@ -90,61 +115,29 @@ class PeekabooConfigParser( # pylint: disable=too-many-ancestors
                 'Some configuration drop files could not be read: '
                 f'{missing_files}')
 
-        self.lists = {}
-        self.relists = {}
+    def add_list_value(self, section, option, value):
+        """ Add a value to a list option. """
+        if section not in self.lists:
+            self.lists[section] = {}
+
+        if option not in self.lists[section]:
+            self.lists[section][option] = []
+
+        self.lists[section][option].append(value)
 
     def getlist(self, section, option, raw=False, vars=None, fallback=None):
         """ Special getter where multiple options in the config file
         distinguished by a .<no> suffix form a list. Matches the signature for
         configparser getters. """
-        # cache results because the following is somewhat inefficient
-        if section not in self.lists:
-            self.lists[section] = {}
+        if section in self and option in self[section]:
+            raise PeekabooConfigException(
+                f'Option {option} in section {section} is supposed to be a '
+                'list but given as individual setting')
 
-        if option in self.lists[section]:
+        if section in self.lists and option in self.lists[section]:
             return self.lists[section][option]
 
-        if section not in self:
-            self.lists[section][option] = fallback
-            return fallback
-
-        # Go over all options in this section we want to allow "holes" in
-        # the lists, i.e setting.1, setting.2 but no setting.3 followed by
-        # setting.4. We use here that ConfigParser retains option order from
-        # the file.
-        value = []
-        for setting in self[section]:
-            if not setting.startswith(option):
-                continue
-
-            # Parse 'setting' into (key) and 'setting.subscript' into
-            # (key, subscript) and use it to determine if this setting is a
-            # list. Note how we do not use the subscript at all here.
-            name_parts = setting.split('.')
-            key = name_parts[0]
-            is_list = len(name_parts) > 1
-
-            if key != option:
-                continue
-
-            if not is_list:
-                raise PeekabooConfigException(
-                    'Option %s in section %s is supposed to be a list '
-                    'but given as individual setting' % (setting, section))
-
-            # Potential further checks:
-            # - There are no duplicate settings with ConfigParser. The last
-            #   one always wins.
-
-            value.append(self[section].get(setting, raw=raw, vars=vars))
-
-        # it's not gonna get any better on the next call, so cache even the
-        # default
-        if not value:
-            value = fallback
-
-        self.lists[section][option] = value
-        return value
+        return fallback
 
     def getirelist(self, section, option, raw=False, vars=None, fallback=None, flags=None):
         """ Special getter for lists of regular expressions that are compiled to match
