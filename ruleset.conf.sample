@@ -19,6 +19,18 @@ rule.11  : cuckoo_analysis_failed
 #rule.12 : contains_peekabooyar
 rule.12 : final_rule
 
+# special syntax for resetting lists: distinguisher - (dash) *and* value -
+# (dash). This can be used in drop files to clear a list and start from
+# scratch.
+#rule.-: -
+
+# Distinguishers of list items (even though suggested by their typical use
+# here) are not indices into an array, are required to be unique only within a
+# single file and items are only ever appended to lists. Since distinguishers
+# are not interpreted beyond above special reset syntax, they can *not* be used
+# to seletively replace list items from drop files. If replacement is required,
+# the list can be reset and rebuilt from scratch.
+
 # rule specific configuration options
 # the section name equals the name of the rule
 #[file_larger_than]

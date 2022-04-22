@@ -134,6 +134,13 @@ option2.2: baz
 rule.1 : rule1
 #rule.2 : rule2
 rule.3 : rule3
+
+[resettest]
+reset.1: val1
+reset.2: val2
+reset.-: -
+reset.3: val3
+reset.4: val4
 ''')
 
     def test_2_values(self):
@@ -144,6 +151,8 @@ rule.3 : rule3
         self.assertEqual(self.config['rule1'].getoctal('octal'), 0o0717)
         self.assertEqual(self.config['rule1'].getlist('option2'),
                          ['bar', 'baz'])
+        self.assertEqual(self.config['resettest'].getlist('reset'),
+                         ['val3', 'val4'])
 
     def test_3_type_mismatch(self):
         """ Test correct error is thrown if the option type is mismatched """
@@ -194,12 +203,26 @@ class TestConfigDropFiles(unittest.TestCase):
 [section1]
 option1: value2
 option3: value3
+list1.1: value1appended
+list1.2: value2appended
+list1.3: value3appended
+
+[resettest]
+reset.-: -
+reset.1: value1reset
+reset.10: value2reset
 ''')
 
         cls.config = CreatingConfigParser('''
 [section1]
 option1: value1
 option2: value2
+list1.1: value1
+list1.2: value2
+
+[resettest]
+reset.1: value1
+reset.2: value2
 ''', filename=cls.created_config_file)
 
         cls.custom_drop_dir = tempfile.mkdtemp(suffix='.drop')
@@ -225,6 +248,11 @@ option2: value2
         self.assertEqual(self.config['section1']['option1'], 'value2')
         self.assertEqual(self.config['section1']['option2'], 'value2')
         self.assertEqual(self.config['section1']['option3'], 'value3')
+        self.assertEqual(self.config['section1'].getlist('list1'), [
+            'value1', 'value2',
+            'value1appended', 'value2appended', 'value3appended'])
+        self.assertEqual(self.config['resettest'].getlist(
+            'reset'), ['value1reset', 'value2reset'])
 
     def test_2_drop_file_sorting(self):
         """ Test drop file sorting. """
