@@ -54,6 +54,11 @@ class ListInterpolation(configparser.BasicInterpolation):
             return value
 
         key = name_parts[0]
+        distinguisher = name_parts[1]
+        if distinguisher == '-' and value == '-':
+            parser.reset_list(section, key)
+            return None
+
         parser.add_list_value(section, key, value)
         return None
 
@@ -114,6 +119,33 @@ class PeekabooConfigParser( # pylint: disable=too-many-ancestors
             raise PeekabooConfigException(
                 'Some configuration drop files could not be read: '
                 f'{missing_files}')
+
+    def reset_list(self, section, option):
+        """ Reset a list option. """
+        if section not in self.lists:
+            self.lists[section] = {}
+
+        self.lists[section][option] = []
+
+    def _join_multiline_values(self):
+        super()._join_multiline_values()
+
+        # remove options with None values created by our list merges. Apart
+        # from keeping data structures tidy we need to do this so that the
+        # config parser thinks it's never seen the individual options we merge
+        # into a list when looking at the next config file, so those options
+        # stay in the order they're given in the file so that list resetting
+        # works as intended.
+        for options in self._sections.values():
+            to_del = []
+            for option, value in options.items():
+                if value is None:
+                    # can not delete directly because dict must not change size
+                    # during iteration
+                    to_del.append(option)
+
+            for option in to_del:
+                del options[option]
 
     def add_list_value(self, section, option, value):
         """ Add a value to a list option. """
