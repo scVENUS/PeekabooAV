@@ -25,6 +25,20 @@
 # order applies.
 #report_locale    :    <unset>
 
+# main configuration file may contain options in global section that configure
+# drop-file read behaviour
+
+# available format specifiers:
+# - config_path: full path of the main configuration file
+# - config_file: basename of the main configuration file
+# - config_dir: directory containing the main configuration file
+#drop_dir_template: {config_path}.d
+
+# drop files are sorted lexicographically before being read. Therefore, a
+# leading (constant length!) numbering or ordering scheme allows to govern read
+# order. Making it part of the globbing pattern is not required and only
+# provides some more robustness regarding stray files and typos.
+#drop_file_glob: [0-9][0-9]-*.conf
 
 [ruleset]
 #config           :    /opt/peekaboo/etc/ruleset.conf

@@ -26,6 +26,8 @@
 defaults as well as reading a configuration file. """
 
 
+import glob
+import os
 import re
 import sys
 import logging
@@ -58,6 +60,35 @@ class PeekabooConfigParser( # pylint: disable=too-many-ancestors
             raise PeekabooConfigException(
                 'Configuration file "%s" can not be parsed: %s' %
                 (config_file, cperror))
+
+        # main configuration file may contain options in global section that
+        # configure drop-file read behaviour
+        drop_dir_template = self.get(
+            'global', 'drop_dir_template', fallback='{config_path}.d')
+        drop_file_glob = self.get(
+            'global', 'drop_file_glob', fallback='[0-9][0-9]-*.conf')
+
+        config_dir = os.path.dirname(config_file)
+        config_basename = os.path.basename(config_file)
+
+        drop_dir = drop_dir_template.format(
+            config_path=config_file, config_dir=config_dir,
+            config_file=config_basename)
+
+        drop_files = sorted(glob.glob(os.path.join(drop_dir, drop_file_glob)))
+
+        try:
+            read_files = self.read(drop_files)
+        except configparser.Error as cperror:
+            raise PeekabooConfigException(
+                    f'Configuration drop file can not be parsed: {cperror}'
+                ) from cperror
+
+        missing_files = set(drop_files) - set(read_files)
+        if missing_files:
+            raise PeekabooConfigException(
+                'Some configuration drop files could not be read: '
+                f'{missing_files}')
 
         self.lists = {}
         self.relists = {}
