@@ -95,7 +95,8 @@ class CreatingConfigMixIn:
     def create_config(self, content):
         """ Create a configuration file with defined content and pass it to the
         parent constructor for parsing. """
-        _, self.created_config_file = tempfile.mkstemp()
+        if self.created_config_file is None:
+            _, self.created_config_file = tempfile.mkstemp()
         with open(self.created_config_file, 'w') as file_desc:
             file_desc.write(content)
 
@@ -107,8 +108,8 @@ class CreatingConfigMixIn:
 class CreatingConfigParser(PeekabooConfigParser, CreatingConfigMixIn):
     """ A special kind of config parser that creates the configuration file
     with defined content. """
-    def __init__(self, content=''):
-        self.created_config_file = None
+    def __init__(self, content='', filename=None):
+        self.created_config_file = filename
         self.create_config(content)
         super().__init__(self.created_config_file)
 
@@ -168,6 +169,188 @@ nonoctal2: deadbeef'''
                     'Invalid value for octal option %s in section section: '
                     % nonoctal):
                 CreatingConfigParser(config).getoctal('section', nonoctal)
+
+
+class ConfigDropFile:
+    """ A helper for creating config drop files with defined content. """
+    def __init__(self, directory, filename, content):
+        self.drop_file = os.path.join(directory, filename)
+        with open(self.drop_file, 'w', encoding='utf-8') as file_desc:
+            file_desc.write(content)
+
+    def __del__(self):
+        os.unlink(self.drop_file)
+
+
+class TestConfigDropFiles(unittest.TestCase):
+    """ Tests of drop file support. """
+    @classmethod
+    def setUpClass(cls):
+        """ Set up common test case resources. """
+        _, cls.created_config_file = tempfile.mkstemp()
+        cls.drop_dir = cls.created_config_file + '.d'
+        os.mkdir(cls.drop_dir)
+        cls.drop_file = ConfigDropFile(cls.drop_dir, '50-override.conf', '''
+[section1]
+option1: value2
+option3: value3
+''')
+
+        cls.config = CreatingConfigParser('''
+[section1]
+option1: value1
+option2: value2
+''', filename=cls.created_config_file)
+
+        cls.custom_drop_dir = tempfile.mkdtemp(suffix='.drop')
+        cls.custom_drop_file = ConfigDropFile(
+            cls.custom_drop_dir, 'ddd-dofferent.drop', '''
+[section2]
+option1: value2
+option3: value3
+''')
+
+        cls.custom_config = CreatingConfigParser(f'''
+[global]
+drop_dir_template: {cls.custom_drop_dir}
+drop_file_glob: [a-z][a-z][a-z]-*.drop
+
+[section2]
+option1: value1
+option2: value2
+''')
+
+    def test_1_drop_file(self):
+        """ Test standard drop files. """
+        self.assertEqual(self.config['section1']['option1'], 'value2')
+        self.assertEqual(self.config['section1']['option2'], 'value2')
+        self.assertEqual(self.config['section1']['option3'], 'value3')
+
+    def test_2_drop_file_sorting(self):
+        """ Test drop file sorting. """
+        # should not take effect due to sorting
+        drop_file3 = ConfigDropFile(self.drop_dir, '05-override2.conf', '''
+[section1]
+option1: value3
+''')
+        config = PeekabooConfigParser(self.created_config_file)
+        self.assertEqual(config['section1']['option1'], 'value2')
+
+        drop_file2 = ConfigDropFile(self.drop_dir, '90-override3.conf', '''
+[section1]
+option1: value4
+''')
+
+        # both should be ignored
+        drop_file4 = ConfigDropFile(self.drop_dir, 'aa-override2.conf', '''
+[section1]
+option1: value5
+''')
+        drop_file5 = ConfigDropFile(self.drop_dir, '95-override2.drop', '''
+[section1]
+option1: value6
+''')
+
+        config = PeekabooConfigParser(self.created_config_file)
+        self.assertEqual(config['section1']['option1'], 'value4')
+        del drop_file2, drop_file3, drop_file4, drop_file5
+
+    def test_3_inaccessible_drop_file(self):
+        """ Test inaccessible drop files. """
+        inaccessible_drop_file = ConfigDropFile(
+            self.drop_dir, '10-inaccessible.conf', '''
+[section1]
+option1: value4
+''')
+        os.chmod(inaccessible_drop_file.drop_file, 0o000)
+        with self.assertRaisesRegex(
+                PeekabooConfigException,
+                'Some configuration drop files could not be read: '
+                "{'" + inaccessible_drop_file.drop_file + "'}"):
+            PeekabooConfigParser(self.created_config_file)
+
+        del inaccessible_drop_file
+
+    def test_4_invalid_drop_file(self):
+        """ Test standard drop files. """
+        invalid_drop_file = ConfigDropFile(self.drop_dir, '04-invalid.conf', '''
+[section
+option4: value4
+''')
+        with self.assertRaisesRegex(
+                PeekabooConfigException,
+                'Configuration drop file can not be parsed: '
+                'File contains no section headers.\n'
+                f"file: '{invalid_drop_file.drop_file}'"):
+            PeekabooConfigParser(self.created_config_file)
+
+        # make it sort before other invalid files
+        invalid_drop_file2 = ConfigDropFile(
+            self.drop_dir, '03-invalid2.conf', '''
+[section]
+option4 value4
+''')
+        with self.assertRaisesRegex(
+                PeekabooConfigException,
+                'Configuration drop file can not be parsed: '
+                'Source contains parsing errors: '
+                f"'{invalid_drop_file2.drop_file}'"):
+            PeekabooConfigParser(self.created_config_file)
+
+        del invalid_drop_file, invalid_drop_file2
+
+    def test_5_custom_drop_files(self):
+        """ Test custom drop file configuration. """
+        self.assertEqual(self.custom_config['section2']['option1'], 'value2')
+        self.assertEqual(self.custom_config['section2']['option2'], 'value2')
+        self.assertEqual(self.custom_config['section2']['option3'], 'value3')
+
+    def test_6_custom_drop_file_sorting(self):
+        """ Test custom drop file sorting. """
+        # should not take effect due to sorting
+        custom_drop_file2 = ConfigDropFile(
+            self.custom_drop_dir, 'aaa-dofferent.drop', '''
+[section2]
+option1: value5
+''')
+
+        config = PeekabooConfigParser(self.custom_config.created_config_file)
+        self.assertEqual(config['section2']['option1'], 'value2')
+
+        custom_drop_file3 = ConfigDropFile(
+            self.custom_drop_dir, 'ggg-dofferent.drop', '''
+[section2]
+option1: value5
+''')
+
+        # should be ignored
+        custom_drop_file4 = ConfigDropFile(
+            self.custom_drop_dir, 'aaa-dofferent.conf', '''
+[section2]
+option1: value6
+''')
+        custom_drop_file5 = ConfigDropFile(
+            self.custom_drop_dir, '05-dofferent.conf', '''
+[section2]
+option1: value7
+''')
+
+        config = PeekabooConfigParser(self.custom_config.created_config_file)
+        self.assertEqual(config['section2']['option1'], 'value5')
+        self.assertEqual(config['section2']['option2'], 'value2')
+        self.assertEqual(config['section2']['option3'], 'value3')
+
+        del custom_drop_file2, custom_drop_file3, custom_drop_file4
+        del custom_drop_file5
+
+    @classmethod
+    def tearDownClass(cls):
+        """ Clean up after the tests. """
+        del cls.drop_file
+        os.rmdir(cls.drop_dir)
+
+        del cls.custom_drop_file
+        os.rmdir(cls.custom_drop_dir)
 
 
 class CreatingPeekabooConfig(PeekabooConfig, CreatingConfigMixIn):
@@ -2047,6 +2230,7 @@ def main():
 
     suite = unittest.TestSuite()
     suite.addTest(unittest.makeSuite(TestConfigParser))
+    suite.addTest(unittest.makeSuite(TestConfigDropFiles))
     suite.addTest(unittest.makeSuite(TestDefaultConfig))
     suite.addTest(unittest.makeSuite(TestValidConfig))
     suite.addTest(unittest.makeSuite(TestInvalidConfig))
