@@ -1,0 +1,138 @@
+name: Publish container images (scheduled)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "20 1 * * *"
+
+jobs:
+  get-refs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out PeekabooAV
+        uses: actions/checkout@v3
+        with:
+          # get all history, branches and tags so we can build a list of refs
+          # to build from
+          fetch-depth: 0
+
+      - name: Get refs to build
+        id: refs
+        run: |
+          # in addition to the default branch (which for scheduled workflows is
+          # the GITHUB_REF) we select all release branches and release tags
+          # starting at 2.1
+          refs=$(git show-ref | cut -d" " -f2 | grep \
+              -e "^refs/remotes/origin" \
+              -e "^refs/tags/" \
+            | sed \
+              -e "s,^refs/remotes/origin/,refs/heads/," \
+            | grep \
+              -e "^$GITHUB_REF\$" \
+              -e '^refs/heads/[2-9]\.[1-9][0-9]*$' \
+              -e '^refs/heads/[0-9][0-9]\+\.[0-9]\+$' \
+              -e '^refs/tags/v[2-9]\.[1-9][0-9]*\(\.[0-9]\+\)\?\(rc[0-9]\+\)\?$' \
+              -e '^refs/tags/v[0-9][0-9]\+\.[0-9]\+\(\.[0-9]\+\)\?\(rc[0-9]\+\)\?$' \
+            | jq --raw-input --slurp -c 'split("\n") | .[0:-1]')
+          echo "::set-output name=refs::$refs"
+
+          # diagnostics
+          echo "::group::Refs to consider"
+          echo "$refs" | jq
+          echo "::endgroup::"
+
+      - name: Identify latest release ref
+        id: latest
+        env:
+          REFS: ${{ steps.refs.outputs.refs }}
+        shell: python
+        run: |
+          import os
+          import json
+          import sys
+          import packaging.version
+
+          tags = json.loads(os.environ['REFS'])
+          versions=[]
+          majors={}
+          for tag in tags:
+            if not tag.startswith('refs/tags/v'):
+              continue
+
+            tag = tag[len('refs/tags/v'):]
+            version = packaging.version.parse(tag)
+            if version.is_prerelease or version.is_devrelease:
+              continue
+
+            versions.append(version)
+
+            major = version.major
+            if major not in majors:
+              majors[major] = []
+            majors[major].append(version)
+
+          versions = sorted(versions, reverse=True)
+
+          include = [{
+            'latest': False,
+            'latest-major': False,
+          }]
+
+          for major, rels in majors.items():
+            rels = sorted(rels, reverse=True)
+
+            for rel in rels:
+              include.append({
+                'ref': f'refs/tags/v{rel}',
+                'latest': rel is versions[0],
+                'latest-major': rel is rels[0],
+              })
+
+          print("::group::Latest")
+          print(include)
+          print("::endgroup::")
+
+          include_json = json.dumps(include)
+          print(f"::set-output name=include::{include_json}")
+
+    outputs:
+      refs: ${{ steps.refs.outputs.refs }}
+      include: ${{ steps.latest.outputs.include }}
+
+  build-refs:
+    runs-on: ubuntu-latest
+    needs: get-refs
+    strategy:
+      fail-fast: false
+      matrix:
+        ref: ${{ fromJson(needs.get-refs.outputs.refs) }}
+        include: ${{ fromJson(needs.get-refs.outputs.include) }}
+
+    permissions:
+      contents: read
+      packages: write
+      # This is used to complete the identity challenge
+      # with sigstore/fulcio when running outside of PRs.
+      id-token: write
+
+    steps:
+      # required for access to the local publish action
+      - name: Check out PeekabooAV
+        uses: actions/checkout@v3
+        with:
+          path: actions
+
+      - name: Work around checkout action pruning the workspace
+        run: |
+          cp -a actions/.github/actions/container-image-publish ..
+
+      # we cannot use a reuseable workflow here because it's not supported in
+      # conjunction with matrix strategy. But a custom action can do exactly
+      # the same and isn't any more complicated. Unfortunately, the separation
+      # of output by steps gets lost on the way.
+      - uses: ./../container-image-publish
+        with:
+          ref: ${{ matrix.ref }}
+          latest: ${{ matrix.latest }}
+          latest-major: ${{ matrix.latest-major }}
+          registry_password: ${{ secrets.GITHUB_TOKEN }}

@@ -11,11 +11,6 @@ on:
   # Allows to run this workflow manually from the Actions tab
   workflow_dispatch:
 
-env:
-  REGISTRY: ghcr.io
-  # github.repository as <account>/<repo>
-  IMAGE_NAME: ${{ github.repository }}
-
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -27,183 +22,19 @@ jobs:
       id-token: write
 
     steps:
-      # Dockerfile and its dependencies live in the Installer
-      - name: Checkout Installer repository
-        uses: actions/checkout@v3
-        with:
-          repository: scVENUS/PeekabooAV-Installer
-          # get all history, branches and tags because we figure out which to
-          # use later on
-          fetch-depth: 0
-
-      - name: Select Installer version
-        run: |
-          # for pull requests decide which Installer version to use based on the
-          # target branch
-          if [ -z "${GITHUB_REF%refs/pull/*}" -a -n "$GITHUB_BASE_REF" ] ; then
-            echo "::notice::Considering base ref $GITHUB_BASE_REF" \
-              "of $GITHUB_REF"
-            GITHUB_REF=refs/heads/$GITHUB_BASE_REF
-          fi
-
-          # use the Installers's devel branch when triggered on our devel
-          # branch - so we just don't do anything here
-          if [ "$GITHUB_REF" = refs/heads/master ] ; then
-            echo "::notice::Staying on devel branch"
-            exit 0
-          fi
-
-          # use the latest corresponding Installer point release when
-          # triggered on a tag or release branch, split these up if the
-          # Installer starts using release branches as well
-          if echo "$GITHUB_REF" | grep \
-                -e '^refs/tags/v[0-9]\+\.[0-9]\+' \
-                -e '^refs/heads/[0-9]\+\.[0-9]\+$' \
-              >/dev/null ; then
-            # GITHUB_REF_NAME is no good since we tamper with GITHUB_REF above
-            prelease=${GITHUB_REF#refs/heads/}
-            prelease=${prelease#refs/tags/v}
-
-            # drop point release
-            echo "$prelease" | grep '^[0-9]\+\.[0-9]\+\.[0-9]\+$' && \
-              prelease=${prelease%.[0-9]*}
-
-            venv=$(mktemp -d)
-            python3 -mvenv "$venv"
-            "$venv"/bin/pip install packaging
-
-            # look for installer point release to use
-            findrel=$(mktemp)
-            cat <<EOF | sed -e "s,^    ,," > "$findrel"
-              import sys
-              import packaging.version
-
-              versions=[]
-              for line in sys.stdin:
-                if line.startswith('v$prelease'):
-                  versions.append(packaging.version.parse(line))
-
-              if versions:
-                versions = sorted(versions, reverse=True)
-                print(versions[0])
-          EOF
-
-            irelease=$(git tag | "$venv"/bin/python3 "$findrel")
-
-            # stay on devel branch of installer if no matching release can be
-            # found
-            if [ -z "$irelease" ] ; then
-              echo "::notice::No matching Installer version found - " \
-                "staying on devel branch"
-              exit 0
-            fi
-
-            git checkout v"$irelease"
-            exit 0
-          fi
-
-          # fail loudly in unsupported case
-          exit 1
-
-      # put PeekabooAV below that as expected by the installer
+      # required for access to the local publish action
       - name: Check out PeekabooAV
         uses: actions/checkout@v3
         with:
-          path: PeekabooAV
+          path: actions
 
-      # Install the cosign tool except on PR
-      # https://github.com/sigstore/cosign-installer
-      - name: Install cosign
-        if: github.event_name != 'pull_request'
-        uses: sigstore/cosign-installer@v2.3.0
-
-      # Workaround: https://github.com/docker/build-push-action/issues/461
-      - name: Setup Docker buildx
-        uses: docker/setup-buildx-action@v2
-
-      # Login against a Docker registry except on PR
-      # https://github.com/docker/login-action
-      - name: Log into registry ${{ env.REGISTRY }}
-        if: github.event_name != 'pull_request'
-        uses: docker/login-action@v2
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Select image tagging scheme
-        id: tags
+      - name: Work around checkout action pruning the workspace
+        id: actions
         run: |
-          # use pep440/semver versioning, particularly only moving latest to
-          # release versions (no prerelease and no branches).
-          # build edge from last commit on devel branch
-          echo "::notice::Defaulting to pep440/edge/ref tagging scheme"
-          tags="type=pep440,pattern={{version}}
-            type=pep440,pattern={{major}}.{{minor}}
-            type=edge
-            type=ref,event=branch
-            type=ref,event=pr"
+          cp -a actions/.github/actions/container-image-publish ..
 
-          # build release branch edges
-          if echo "$GITHUB_REF" | grep \
-                -e '^refs/heads/[0-9]\+\.[0-9]\+$' \
-              >/dev/null ; then
-            echo "::notice::Switching to release edge tagging scheme"
-            tags="type=ref,event=branch,suffix=-edge"
-          fi
-
-          # preserve newlines
-          tags=${tags//$'\n'/'%0A'}
-
-          echo "::set-output name=tags::$tags"
-
-      # Extract metadata (tags, labels) for Docker
-      # https://github.com/docker/metadata-action
-      - name: Extract Docker metadata
-        id: meta
-        uses: docker/metadata-action@v4.0.1
+      - uses: ./../container-image-publish
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            ${{ steps.tags.outputs.tags }}
-
-      # Build and push Docker image with Buildx (don't push on PR)
-      # https://github.com/docker/build-push-action
-      - name: Build and push Docker image
-        id: build-and-push
-        uses: docker/build-push-action@v3
-        with:
-          context: .
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-
-      # metadata-action sanitizes the image name but doesn't communicate it
-      # separately, extract it from tags, contains registry as a boon
-      - name: Get sanitized image name
-        id: imagename
-        env:
-          TAGS: ${{ steps.meta.outputs.tags }}
-        run: |
-          # we assume here that all tags use the same image name
-          imagename=$(echo "$TAGS" | head -1 | cut -d: -f 1)
-          echo "::set-output name=imagename::$imagename"
-
-          # diagnostics
-          echo "::group::Extracted image name"
-          echo "$imagename"
-          echo "::endgroup::"
-
-      # Sign the resulting Docker image digest except on PRs.
-      # This will only write to the public Rekor transparency log when the
-      # Docker repository is public to avoid leaking data. If you would like
-      # to publish transparency data even for private images, pass --force to
-      # cosign below.  https://github.com/sigstore/cosign
-      - name: Sign the published Docker image
-        if: ${{ github.event_name != 'pull_request' }}
-        env:
-          COSIGN_EXPERIMENTAL: "true"
-        # This step uses the identity token to provision an ephemeral
-        # certificate against the sigstore community Fulcio instance.
-        run: cosign sign ${{ steps.imagename.outputs.imagename }}@${{
-          steps.build-and-push.outputs.digest }}
+          ref: ${{ github.ref }}
+          base-ref: ${{ github.base_ref }}
+          registry_password: ${{ secrets.GITHUB_TOKEN }}
