@@ -10,6 +10,7 @@ Allows testing the API link to Cuckoo Sandbox
 import json
 import random
 import sys
+import threading
 import flask
 import flask_restful
 
@@ -17,15 +18,17 @@ import flask_restful
 class Queue():
     """ Internal data structure to keep track of submitted tasks """
     def __init__(self):
-        self.nextid = 1
+        self.lastid = 0
         self.jobs = []
 
     def register_job(self):
         """ Adds a new job to the Queue and returns its id """
-        self.nextid = self.nextid + 1
-        self.jobs.append(self.nextid - 1)
-        print("New job created %d. Queue %s" % (self.nextid-1, self.jobs))
-        return self.nextid - 1
+        with threading.Lock():
+            jobid = self.lastid = self.lastid + 1
+
+        self.jobs.append(jobid)
+        print("New job created %d. Queue %s" % (jobid, self.jobs))
+        return jobid
 
     def delete_job(self, job_id):
         """ Removes a job from the Queue """
@@ -45,9 +48,9 @@ class Status(QueueResource):
         """ Returns number of tasks in the respective state """
         result = {
             'tasks': {
-                'reported': self.queue.nextid - 1 - len(self.queue.jobs),
+                'reported': self.queue.lastid - len(self.queue.jobs),
                 'running': len(self.queue.jobs),
-                'total': self.queue.nextid - 1,
+                'total': self.queue.lastid,
                 'dummyAPIqueue': self.queue.jobs,
             }
         }
@@ -62,7 +65,7 @@ class View(QueueResource):
         job_id = int(job_id)
 
         # job doesn't exist
-        if job_id >= self.queue.nextid:
+        if job_id > self.queue.lastid:
             print("Job_id {} not found".format(job_id))
             flask_restful.abort(404,
                                 message="Job_id %d doesn't exist" % job_id)
