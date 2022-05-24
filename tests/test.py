@@ -647,36 +647,58 @@ class TestDatabase(AsyncioTestCase):
     @asynctest
     async def test_3_analysis_journal_fetch_journal(self):
         """ Test retrieval of analysis results. """
+        sample_id = self.sample.id
+
         await self.db_con.analysis_add(self.sample)
         # sample now contains another, new job ID
         # mark sample done so journal and result retrieval tests can work
         self.sample.mark_done()
         await self.db_con.analysis_update(self.sample)
 
-        # add a failed analysis to check that it is ignored
+        # add a bad analysis to check that it is worst
         result = RuleResult('Unittest',
-                            Result.failed,
-                            'This is just a test case.',
+                            Result.bad,
+                            'This is just a third test case.',
                             further_analysis=False)
         self.sample.add_rule_result(result)
         await self.db_con.analysis_add(self.sample)
         self.sample.mark_done()
         await self.db_con.analysis_update(self.sample)
 
+        # add a failed analysis to check that it is ignored
+        result = RuleResult('Unittest',
+                            Result.failed,
+                            'This is just a second test case.',
+                            further_analysis=False)
+        # new sample with same content so bad result from above does not
+        # dominate result
+        sample = Sample(b'test', 'test.py')
+        sample.add_rule_result(result)
+        await self.db_con.analysis_add(sample)
+        sample.mark_done()
+        await self.db_con.analysis_update(sample)
+
         # reset the job id so this sample is not ignored when fetching the
         # journal
         self.sample.update_id(None)
 
-        journal = await self.db_con.analysis_journal_fetch_journal(self.sample)
-        self.assertEqual(journal[0].result, Result.good)
-        self.assertEqual(journal[0].reason, 'This is just a test case.')
-        self.assertIsNotNone(journal[0].analysis_time)
-        self.assertEqual(journal[1].result, Result.good)
-        self.assertEqual(journal[1].reason, 'This is just a test case.')
-        self.assertIsNotNone(journal[1].analysis_time)
-        self.assertNotEqual(journal[0].analysis_time, journal[1].analysis_time)
-        # does not contain the failed result
-        self.assertEqual(len(journal), 2)
+        first = await self.db_con.analysis_journal_get_first(self.sample)
+        self.assertEqual(first.result, Result.good)
+        self.assertEqual(first.reason, 'This is just a test case.')
+        self.assertIsNotNone(first.analysis_time)
+
+        last = await self.db_con.analysis_journal_get_last(self.sample)
+        self.assertEqual(last.result, Result.bad)
+        self.assertEqual(last.reason, 'This is just a third test case.')
+        self.assertIsNotNone(last.analysis_time)
+
+        worst = await self.db_con.analysis_journal_get_worst(self.sample)
+        self.assertEqual(worst.result, Result.bad)
+        self.assertEqual(worst.reason, 'This is just a third test case.')
+        self.assertIsNotNone(worst.analysis_time)
+
+        # restore initial ID for further tests
+        self.sample.update_id(sample_id)
 
     @asynctest
     async def test_4_analysis_retrieve(self):
@@ -685,8 +707,8 @@ class TestDatabase(AsyncioTestCase):
         # sample now contains a job ID
         reason, result = await self.db_con.analysis_retrieve(self.sample.id)
         # does not ignore failed analyses like the journal above
-        self.assertEqual(result, Result.failed)
-        self.assertEqual(reason, 'This is just a test case.')
+        self.assertEqual(result, Result.bad)
+        self.assertEqual(reason, 'This is just a third test case.')
 
     @asynctest
     async def test_5_in_flight_no_cluster(self):

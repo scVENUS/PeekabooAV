@@ -113,6 +113,8 @@ class SampleInfo(Base):
     reason = Column(Text, nullable=True)
 
     __table_args__ = (
+        Index(f'ix_{__tablename__}_st_idt_re_id',
+              state, identity, result, id),
         Index(f'ix_{__tablename__}_st_idt_at_re_id',
               state, identity, analysis_time, result, id),
     )
@@ -243,6 +245,25 @@ class PeekabooDatabase:
         # attempt 4: 10 * 2**(4) == 80-160msecs
         self.deadlock_backoff_base = 10
         self.connect_backoff_base = 2000
+
+        # prepare a case statement to order results by enum value, i.e. badness
+        badness_when = {member.name: member.value for member in Result}
+        sorting_column = SampleInfo.result
+
+        # postgres is particular regarding case statements in that explicit
+        # type conversion is added to everything but the sorting colum
+        # specification leading to error:
+        # operator does not exist: result = character varying
+        #
+        # It is unclear at this point whether this is happening at the
+        # sqlalchemy or asyncpg level. Let's just work around it for now by
+        # adding that type conversion ourselves.
+        if backend == 'postgresql':
+            sorting_column = sqlalchemy.sql.expression.cast(
+                sorting_column, String())
+
+        self.badness_case = sqlalchemy.sql.expression.case(
+            badness_when, value=sorting_column)
 
     async def start(self):
         attempt = 1
@@ -396,12 +417,15 @@ class PeekabooDatabase:
 
             await asyncio.sleep(delay)
 
-    async def analysis_journal_fetch_journal(self, sample):
+    async def analysis_journal_query(self, sample, order_by):
         """
         Fetch information stored in the database about a given sample object.
 
         @param sample: The sample object of which the information shall be
                        fetched from the database.
+        @param order_by: A single schema column including direction for
+                         ordering of the result. This ordering governs e.g. if
+                         the oldest, newest or worst sample will be returned.
         @return: A sorted list of (analysis_time, result, reason) of the
                  requested sample.
         """
@@ -412,7 +436,7 @@ class PeekabooDatabase:
                     SampleInfo.result != Result.failed).filter_by(
                         state=JobState.FINISHED,
                         identity=await sample.identity).order_by(
-                            SampleInfo.analysis_time)
+                            order_by).limit(1)
 
         sample_journal = None
         attempt = 1
@@ -421,7 +445,7 @@ class PeekabooDatabase:
             async with self.__session_factory() as session:
                 try:
                     proxy = await session.execute(statement)
-                    sample_journal = proxy.all()
+                    sample_journal = proxy.first()
                     break
                 except (OperationalError, DBAPIError,
                         SQLAlchemyError) as error:
@@ -438,6 +462,45 @@ class PeekabooDatabase:
             await asyncio.sleep(delay)
 
         return sample_journal
+
+    async def analysis_journal_get_first(self, sample):
+        """
+        Fetch the first analysis result stored in the database about a given
+        sample object.
+
+        @param sample: The sample object of which the information shall be
+                       fetched from the database.
+        @return: A dict containing the attributes of the requested sample as
+                 stored in the journal.
+        """
+        return await self.analysis_journal_query(
+            sample, SampleInfo.analysis_time.asc())
+
+    async def analysis_journal_get_last(self, sample):
+        """
+        Fetch the last/most current analysis result stored in the database
+        about a given sample object.
+
+        @param sample: The sample object of which the information shall be
+                       fetched from the database.
+        @return: A dict containing id, result, reason and report of the
+                  requested sample.
+         """
+        return await self.analysis_journal_query(
+            sample, SampleInfo.analysis_time.desc())
+
+    async def analysis_journal_get_worst(self, sample):
+        """
+        Fetch the worst analysis result stored in the database about a given
+        sample object.
+
+        @param sample: The sample object of which the information shall be
+                       fetched from the database.
+        @return: A dict containing id, result, reason and report of the
+                 requested sample.
+        """
+        return await self.analysis_journal_query(
+            sample, self.badness_case.desc())
 
     async def analysis_retrieve(self, job_id):
         """
