@@ -46,7 +46,7 @@ from peekaboo.ruleset import Result
 from peekaboo.sample import JobState
 from peekaboo.exceptions import PeekabooDatabaseError
 
-DB_SCHEMA_VERSION = 9
+DB_SCHEMA_VERSION = 10
 
 logger = logging.getLogger(__name__)
 Base = declarative_base()
@@ -111,14 +111,13 @@ class SampleInfo(Base):
     state = Column(Enum(JobState), nullable=False)
     sha256sum = Column(String(64), nullable=False)
     file_extension = Column(String(16), nullable=True)
-    analysis_time = Column(DateTime, nullable=False,
-                           index=True)
+    analysis_time = Column(DateTime, nullable=False)
     result = Column(Enum(Result), nullable=False)
     reason = Column(Text, nullable=True)
 
     __table_args__ = (
-        Index('ix_%s_id_st_re_sha_fe' % __tablename__,
-              id, state, result, sha256sum, file_extension),
+        Index('ix_%s_st_sha_fe_at_re_id' % __tablename__,
+              state, sha256sum, file_extension, analysis_time, result, id),
     )
 
     def __str__(self):
