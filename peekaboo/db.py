@@ -46,7 +46,7 @@ from peekaboo.ruleset import Result
 from peekaboo.sample import JobState
 from peekaboo.exceptions import PeekabooDatabaseError
 
-DB_SCHEMA_VERSION = 9
+DB_SCHEMA_VERSION = 10
 
 logger = logging.getLogger(__name__)
 Base = declarative_base()
@@ -114,11 +114,16 @@ class SampleInfo(Base):
     analysis_time = Column(DateTime, nullable=False,
                            index=True)
     result = Column(Enum(Result), nullable=False)
+    # this is only required for sorting by "worseness". Can go as soon as we
+    # figure out a way to sort by union members with sqlite.
+    result_numeric = Column(Integer, nullable=False)
     reason = Column(Text, nullable=True)
 
     __table_args__ = (
-        Index('ix_%s_id_st_re_sha_fe' % __tablename__,
-              id, state, result, sha256sum, file_extension),
+        Index(f'ix_{__tablename__}_st_sha_fe_rn_re_id',
+              state, sha256sum, file_extension, result_numeric, result, id),
+        Index(f'ix_{__tablename__}_st_sha_fe_at_re_id',
+              state, sha256sum, file_extension, analysis_time, result, id),
     )
 
     def __str__(self):
@@ -330,6 +335,7 @@ class PeekabooDatabase:
             file_extension=sample.file_extension,
             analysis_time=datetime.now(),
             result=sample.result,
+            result_numeric=sample.result.value,
             reason=sample.reason)
 
         job_id = None
@@ -397,12 +403,15 @@ class PeekabooDatabase:
 
             time.sleep(delay)
 
-    def analysis_journal_fetch_journal(self, sample):
+    def analysis_journal_query(self, sample, order_by):
         """
         Fetch information stored in the database about a given sample object.
 
         @param sample: The sample object of which the information shall be
                        fetched from the database.
+        @param order_by: A single schema column including direction for
+                         ordering of the result. This ordering governs e.g. if
+                         the oldest, newest or worst sample will be returned.
         @return: A sorted list of (analysis_time, result, reason) of the
                  requested sample.
         """
@@ -414,7 +423,7 @@ class PeekabooDatabase:
                         state=JobState.FINISHED,
                         sha256sum=sample.sha256sum,
                         file_extension=sample.file_extension).order_by(
-                            SampleInfo.analysis_time)
+                                order_by).limit(1)
 
         sample_journal = None
         attempt = 1
@@ -422,7 +431,7 @@ class PeekabooDatabase:
         while attempt <= self.retries:
             with self.__session() as session:
                 try:
-                    sample_journal = session.execute(statement).all()
+                    sample_journal = session.execute(statement).first()
                     break
                 except (OperationalError, DBAPIError,
                         SQLAlchemyError) as error:
@@ -439,6 +448,48 @@ class PeekabooDatabase:
             time.sleep(delay)
 
         return sample_journal
+
+    def analysis_journal_get_first(self, sample):
+        """
+        Fetch the first analysis result stored in the database about a given
+        sample object.
+
+        @param sample: The sample object of which the information shall be
+                       fetched from the database.
+        @return: A dict containing the attributes of the requested sample as
+                 stored in the journal.
+        """
+        return self.analysis_journal_query(
+            sample, SampleInfo.analysis_time.asc())
+
+    def analysis_journal_get_last(self, sample):
+        """
+        Fetch the last/most current analysis result stored in the database
+        about a given sample object.
+
+        @param sample: The sample object of which the information shall be
+                       fetched from the database.
+        @return: A dict containing id, result, reason and report of the
+                  requested sample.
+         """
+        return self.analysis_journal_query(
+            sample, SampleInfo.analysis_time.desc())
+
+    def analysis_journal_get_worst(self, sample):
+        """
+        Fetch the worst analysis result stored in the database about a given
+        sample object.
+
+        @param sample: The sample object of which the information shall be
+                       fetched from the database.
+        @return: A dict containing id, result, reason and report of the
+                 requested sample.
+        """
+        # order_by on an enum sorts according to the order in which the enum
+        # values were declared for MariaDB and PostgreSQL.
+        # FIXME: sqlite is another matter...
+        return self.analysis_journal_query(
+            sample, SampleInfo.result_numeric.desc())
 
     async def analysis_retrieve(self, job_id):
         """

@@ -244,8 +244,8 @@ class KnownRule(Rule):
         processing. """
         ktreport = self.get_knowntools_report(sample)
         if ktreport.known:
-            result, reason = ktreport.worst()
-            return self.result(result, reason, False)
+            return self.result(
+                ktreport.worst.result, ktreport.worst.reason, False)
 
         return self.result(Result.unknown,
                            _("File is not yet known to the system"),

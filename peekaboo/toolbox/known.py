@@ -44,7 +44,9 @@ class Knowntools:
             return self.sample.knowntools_report
 
         ktreport = KnowntoolsReport(
-            self.db_con.analysis_journal_fetch_journal(self.sample)
+            self.db_con.analysis_journal_get_first(self.sample),
+            self.db_con.analysis_journal_get_last(self.sample),
+            self.db_con.analysis_journal_get_worst(self.sample)
         )
 
         self.sample.register_knowntools_report(ktreport)
@@ -53,63 +55,62 @@ class Knowntools:
 
 class KnowntoolsReport:
     """ Represents a custom Knowntools report. """
-    def __init__(self, sample_journal=None):
-        if sample_journal is None:
-            sample_journal = []
-        self.sample_journal = sample_journal
+    def __init__(self, first=None, last=None, worst=None):
+        self.__first = first
+        self.__last = last
+        self.__worst = worst
 
     def __str__(self):
-        return "<KnowntoolsReport('%s'>" % self.sample_journal
+        return "<KnowntoolsReport(first='%s', last='%s', worst='%s')>" % (
+            self.__first, self.__last, self.__worst)
 
     @property
     def known(self):
         """ Determines if there is a database entry for this sample """
-        return bool(self.sample_journal)
+        return bool(self.__last)
 
     @property
     def last_result(self):
         """ Return the cached result """
-        if self.sample_journal:
-            return self.sample_journal[-1].result
-        return Result.unknown
+        if self.__last is None:
+            return Result.unknown
+
+        return self.__last['result']
+
+    result = last_result
 
     @property
-    def result(self):
-        """ Return the cached result """
-        return self.last_result
-
     def worst(self):
-        """ Return the worst (result, reason) cached """
-        worst_result = Result.unchecked
-        worst_reason = ""
-        for _, result, reason in self.sample_journal:
-            if result > worst_result:
-                worst_result = result
-                worst_reason = reason
-        return (worst_result, worst_reason)
+        """ Return the worst cached result's attribute dict. Can be None. """
+        return self.__worst
 
     @property
     def worst_result(self):
         """ Return the worst result cached """
-        return self.worst()[0]
+        if self.__worst is None:
+            return Result.unknown
+
+        return self.worst.result
 
     @property
     def first(self):
         """ Calculates the age in days since first record of this sample """
-        if self.sample_journal:
-            first = self.sample_journal[0].analysis_time
-            now = datetime.today()
-            difference = now - first
-            return difference.days
-        return 0
+        if self.__first is None:
+            return 0
+
+        first = self.__first.analysis_time
+        now = datetime.today()
+        difference = now - first
+        return difference.days
 
     @property
     def last(self):
         """ Calculates the age in days since most recent record of this
         sample """
-        if self.sample_journal:
-            last = self.sample_journal[-1].analysis_time
-            now = datetime.today()
-            difference = now - last
-            return difference.days
-        return 0
+        if self.__last is None:
+            return 0
+
+        last = self.__last.analysis_time
+        now = datetime.today()
+        difference = now - last
+        return difference.days
