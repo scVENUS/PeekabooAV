@@ -248,10 +248,9 @@ class KnownRule(Rule):
         """ Try to get information about the sample from the database. Return
         the old result and reason if found and advise the engine to stop
         processing. """
-        ktreport = await self.get_knowntools_report(sample)
-        if ktreport.known:
-            return self.result(
-                ktreport.worst.result, ktreport.worst.reason, False)
+        worst = await self.db_con.analysis_journal_get_worst(sample)
+        if worst:
+            return self.result(worst.result, worst.reason, False)
 
         return self.result(Result.unknown,
                            _("File is not yet known to the system"),
