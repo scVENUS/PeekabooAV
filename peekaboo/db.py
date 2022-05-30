@@ -26,11 +26,11 @@
 SQLAlchemy. """
 
 import asyncio
+import datetime
 import random
 import time
 import threading
 import logging
-from datetime import datetime, timedelta
 from sqlalchemy import Column, Integer, String, Text, DateTime, \
         Enum, Index
 import sqlalchemy.sql.expression
@@ -333,7 +333,7 @@ class PeekabooDatabase:
             state=sample.state,
             sha256sum=sample.sha256sum,
             file_extension=sample.file_extension,
-            analysis_time=datetime.now(),
+            analysis_time=datetime.datetime.now(datetime.timezone.utc),
             result=sample.result,
             result_numeric=sample.result.value,
             reason=sample.reason)
@@ -548,7 +548,7 @@ class PeekabooDatabase:
             instance_id = self.instance_id
 
         if start_time is None:
-            start_time = datetime.utcnow()
+            start_time = datetime.datetime.now(datetime.timezone.utc)
 
         in_flight_marker = InFlightSample(sha256sum=sample.sha256sum,
                                           instance_id=instance_id,
@@ -716,10 +716,13 @@ class PeekabooDatabase:
             '(%d seconds)', self.stale_in_flight_threshold)
 
         def clear_statement(statement_class):
+            now = datetime.datetime.now(datetime.timezone.utc)
+            threshold = datetime.timedelta(
+                seconds=self.stale_in_flight_threshold)
+
             # delete only the locks of a specific instance
             return statement_class(InFlightSample).where(
-                InFlightSample.start_time <= datetime.utcnow() - timedelta(
-                    seconds=self.stale_in_flight_threshold))
+                InFlightSample.start_time <= now - threshold)
 
         delete_statement = clear_statement(sqlalchemy.sql.expression.delete)
         select_statement = clear_statement(sqlalchemy.sql.expression.select)

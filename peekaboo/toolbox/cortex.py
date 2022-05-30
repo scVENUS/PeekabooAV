@@ -497,14 +497,15 @@ class CortexJob:
         @type analyzer: CortexAnalyzer
         """
         self.__sample = sample
-        self.__submission_time = datetime.datetime.utcnow()
+        self.__submission_time = datetime.datetime.now(datetime.timezone.utc)
         self.__analyzer = analyzer
 
     def is_older_than(self, seconds):
         """ Returns True if the difference between submission time and now,
         i.e. the age of the job, is larger than given number of seconds. """
+        now = datetime.datetime.now(datetime.timezone.utc)
         max_age = datetime.timedelta(seconds=seconds)
-        return datetime.datetime.utcnow() - self.__submission_time > max_age
+        return now - self.__submission_time > max_age
 
     @property
     def sample(self):
