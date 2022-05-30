@@ -24,7 +24,7 @@
 ###############################################################################
 
 import logging
-from datetime import datetime
+import datetime
 
 from peekaboo.ruleset import Result
 
@@ -99,7 +99,7 @@ class KnowntoolsReport:
             return 0
 
         first = self.__first.analysis_time
-        now = datetime.today()
+        now = datetime.datetime.now(datetime.timezone.utc)
         difference = now - first
         return difference.days
 
@@ -111,6 +111,6 @@ class KnowntoolsReport:
             return 0
 
         last = self.__last.analysis_time
-        now = datetime.today()
+        now = datetime.datetime.now(datetime.timezone.utc)
         difference = now - last
         return difference.days
