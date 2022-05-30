@@ -27,6 +27,7 @@
 """ The testsuite. """
 
 import asyncio
+import datetime
 import gettext
 import sys
 import os
@@ -35,7 +36,6 @@ import logging
 import shutil
 import schema
 import unittest
-from datetime import datetime, timedelta
 
 
 # Add Peekaboo to PYTHONPATH
@@ -790,7 +790,8 @@ class TestDatabase(AsyncioTestCase):
     @asynctest
     async def test_8_stale_in_flight(self):
         """ Test the cleaning of stale in-flight markers. """
-        stale = datetime.utcnow() - timedelta(seconds=20)
+        stale = datetime.datetime.now(
+            datetime.timezone.utc) - datetime.timedelta(seconds=20)
         self.assertTrue(await self.db_con.mark_sample_in_flight(
             self.sample, 1, stale))
         sample2 = Sample(b'baz', 'baz.pyc')

@@ -26,9 +26,9 @@
 SQLAlchemy. """
 
 import asyncio
+import datetime
 import random
 import logging
-from datetime import datetime, timedelta
 from sqlalchemy import Column, Integer, String, Text, DateTime, \
         Enum, Index
 import sqlalchemy.sql.expression
@@ -75,7 +75,7 @@ class InFlightSample(Base):
 
     identity = Column(String(64), primary_key=True)
     instance_id = Column(Integer, nullable=False, index=True)
-    start_time = Column(DateTime, nullable=False, index=True)
+    start_time = Column(DateTime(timezone=True), nullable=False, index=True)
 
     __table_args__ = (
         # Index names need to be unique per schema in postgresql.
@@ -108,7 +108,7 @@ class SampleInfo(Base):
     id = Column(Integer, primary_key=True)
     state = Column(Enum(JobState), nullable=False)
     identity = Column(String(64), nullable=False)
-    analysis_time = Column(DateTime, nullable=False)
+    analysis_time = Column(DateTime(timezone=True), nullable=False)
     result = Column(Enum(Result), nullable=False)
     reason = Column(Text, nullable=True)
 
@@ -349,7 +349,7 @@ class PeekabooDatabase:
         sample_info = SampleInfo(
             state=sample.state,
             identity=await sample.identity,
-            analysis_time=datetime.now(),
+            analysis_time=datetime.datetime.now(datetime.timezone.utc),
             result=sample.result,
             reason=sample.reason)
 
@@ -559,7 +559,7 @@ class PeekabooDatabase:
             instance_id = self.instance_id
 
         if start_time is None:
-            start_time = datetime.utcnow()
+            start_time = datetime.datetime.now(datetime.timezone.utc)
 
         in_flight_marker = InFlightSample(
             identity=await sample.identity, instance_id=instance_id,
@@ -728,10 +728,13 @@ class PeekabooDatabase:
             '(%d seconds)', self.stale_in_flight_threshold)
 
         def clear_statement(statement_class):
+            now = datetime.datetime.now(datetime.timezone.utc)
+            threshold = datetime.timedelta(
+                seconds=self.stale_in_flight_threshold)
+
             # delete only the locks of a specific instance
             return statement_class(InFlightSample).where(
-                InFlightSample.start_time <= datetime.utcnow() - timedelta(
-                    seconds=self.stale_in_flight_threshold))
+                InFlightSample.start_time <= now - threshold)
 
         delete_statement = clear_statement(sqlalchemy.sql.expression.delete)
         select_statement = clear_statement(sqlalchemy.sql.expression.select)
