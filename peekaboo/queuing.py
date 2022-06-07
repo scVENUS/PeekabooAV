@@ -352,7 +352,8 @@ class ClusterDuplicateHandler:
 
     async def start(self):
         self.task = asyncio.ensure_future(self.run())
-        self.task.set_name(self.task_name)
+        if hasattr(self.task, "set_name"):
+            self.task.set_name(self.task_name)
         return self.task
 
     async def run(self):
@@ -402,7 +403,8 @@ class Worker:
 
     async def start(self):
         self.task = asyncio.ensure_future(self.run())
-        self.task.set_name(self.worker_name)
+        if hasattr(self.task, "set_name"):
+            self.task.set_name(self.worker_name)
         return self.task
 
     async def run(self):
