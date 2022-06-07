@@ -414,12 +414,49 @@ def get_running_loop():
     return loop
 
 
+def cancel_all_asyncio_tasks(loop):
+    """ Helper to our asyncio.run() replacement to cancel all tasks. """
+    to_cancel = asyncio.Task.all_tasks(loop)
+    if not to_cancel:
+        return
+
+    for task in to_cancel:
+        task.cancel()
+
+    loop.run_until_complete(
+        asyncio.tasks.gather(*to_cancel, loop=loop, return_exceptions=True))
+
+    for task in to_cancel:
+        if task.cancelled():
+            continue
+        if task.exception() is not None:
+            loop.call_exception_handler({
+                'message': 'unhandled exception during asyncio.run() shutdown',
+                'exception': task.exception(),
+                'task': task,
+            })
+
+
 def run():
     # provide asyncio.get_running_loop in Python 3.6
     if not hasattr(asyncio, "get_running_loop"):
         asyncio.get_running_loop = get_running_loop
 
-    asyncio.run(async_main())
+    # python 3.7+
+    if hasattr(asyncio, 'run'):
+        asyncio.run(async_main())
+    else:
+        loop = asyncio.get_event_loop()
+
+        try:
+            return loop.run_until_complete(async_main())
+        finally:
+            try:
+                cancel_all_asyncio_tasks(loop)
+                loop.run_until_complete(loop.shutdown_asyncgens())
+            finally:
+                loop.close()
+
 
 if __name__ == '__main__':
     run()
