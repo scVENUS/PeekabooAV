@@ -338,7 +338,8 @@ class Cuckoo:
     async def start_tracker(self):
         """ Start tracking running jobs in a separate thread. """
         self.tracker = asyncio.ensure_future(self.track())
-        self.tracker.set_name("CuckooJobTracker")
+        if hasattr(self.tracker, "set_name"):
+            self.tracker.set_name("CuckooJobTracker")
         return self.tracker
 
     async def track(self):
