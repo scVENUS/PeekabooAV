@@ -18,7 +18,8 @@
 If you run mail on-site, distrust security vendors and need a high level of security and secrecy
 PeekabooAV is for you.
 
-For news and announcements follow us on twitter [@peekabooAV](https://twitter.com/peekabooav).
+For news and announcements follow us on twitter [@peekabooAV](https://twitter.com/peekabooav) and
+Fosstodon [@peekabooav@fosstodon.org](https://fosstodon.org/@peekabooav).
 
 
 
