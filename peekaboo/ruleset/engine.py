@@ -29,6 +29,8 @@ from peekaboo.ruleset import Result, RuleResult
 from peekaboo.ruleset.rules import *
 from peekaboo.toolbox.cuckoo import Cuckoo
 from peekaboo.toolbox.cortex import Cortex
+from peekaboo.toolbox.duplicates import DuplicateHandler, \
+        ClusterDuplicateHandler
 from peekaboo.toolbox.peekabooyar import ContainsPeekabooYarRule
 from peekaboo.exceptions import PeekabooAnalysisDeferred, \
         PeekabooConfigException, PeekabooRulesetConfigError
@@ -60,7 +62,7 @@ class RulesetEngine:
     ]
 
     def __init__(self, config, job_queue, db_con, analyzer_config,
-                 threadpool=None):
+                 cluster_duplicate_check_interval=5, threadpool=None):
         """ Create the engine and store its config. Postpone lengthy
         initialisation for later so that it can be registered quickly for
         shutdown requests.
@@ -75,6 +77,10 @@ class RulesetEngine:
         @type db_con: PeekabooDatabase
         @param analyzer_config: analyzer configuration
         @type analyzer_config: PeekabooAnalyzerConfig
+        @param cluster_duplicate_check_interval: How long to wait inbetween
+                                                 checks for stale cluster
+                                                 duplicate locks.
+        @type cluster_duplicate_check_interval: int
         """
         self.config = config
         self.job_queue = job_queue
@@ -83,6 +89,9 @@ class RulesetEngine:
         self.threadpool = threadpool
         self.cuckoo = None
         self.cortex = None
+        self.duplicate_handler = None
+        self.cluster_duplicate_handler = None
+        self.cluster_duplicate_check_interval = cluster_duplicate_check_interval
         self.rules = []
 
         self.shutdown_requested = False
@@ -179,6 +188,31 @@ class RulesetEngine:
 
                 rule.set_cortex_job_tracker(self.cortex)
 
+            if rule.uses_duplicate_handler:
+                if self.duplicate_handler is None:
+                    logger.debug("Creating duplicate handler")
+                    self.duplicate_handler = DuplicateHandler(self.job_queue)
+
+                rule.set_duplicate_handler(self.duplicate_handler)
+
+            if (rule.uses_cluster_duplicate_handler and
+                    self.cluster_duplicate_check_interval):
+                if self.cluster_duplicate_handler is None:
+                    logger.debug(
+                        "Creating cluster duplicate handler with check "
+                        "interval %d.",
+                        self.cluster_duplicate_check_interval)
+
+                    self.cluster_duplicate_handler = ClusterDuplicateHandler(
+                        self.job_queue, self.db_con,
+                        self.cluster_duplicate_check_interval)
+
+                    awaitable = await self.cluster_duplicate_handler.start()
+                    awaitables.append(awaitable)
+
+                rule.set_cluster_duplicate_handler(
+                    self.cluster_duplicate_handler)
+
             self.rules.append(rule)
 
             # abort startup if we've been asked to shut down meanwhile
@@ -225,6 +259,21 @@ class RulesetEngine:
 
         logger.info("%d: Rules evaluated", sample.id)
 
+    async def submit_duplicates(self, sample):
+        """ Submit potential local duplicates to the queue if this sample has
+        been finally analysed. The cluster duplicate handler will do
+        this directly during its polling for other instances analysing
+        the same sample. But we clear the in-flight lock the cluster duplicate
+        handler might have taken out here.
+
+        @param sample: sample to check for withheld duplicates
+        @type sample: Sample """
+        if self.cluster_duplicate_handler is not None:
+            await self.cluster_duplicate_handler.clear_sample_in_flight(sample)
+
+        if self.duplicate_handler is not None:
+            await self.duplicate_handler.submit_duplicates(sample)
+
     def shut_down_resources(self):
         """ Shut down dynamically allocated resources such as job trackers.
         """
@@ -233,6 +282,9 @@ class RulesetEngine:
 
         if self.cortex is not None:
             self.cortex.shut_down()
+
+        if self.cluster_duplicate_handler is not None:
+            self.cluster_duplicate_handler.shut_down()
 
     def shut_down(self):
         """ Initiate asynchronous shutdown of the ruleset engine and dependent

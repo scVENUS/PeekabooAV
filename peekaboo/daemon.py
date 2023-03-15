@@ -316,6 +316,9 @@ async def async_main():
                            "interval to %d seconds.",
                            cldup_check_interval)
 
+    if not cldup_check_interval:
+        logger.debug("Disabling cluster duplicate handler.")
+
     loop = asyncio.get_running_loop()
     sig_handler = SignalHandler(loop)
 
@@ -383,8 +386,8 @@ async def async_main():
     except asyncio.exceptions.CancelledError as error:
         # cancellation is expected in the case of shutdown via signal handler
         pass
-    except Exception:
-        logger.error("Shutting down due to unexpected exception")
+    except Exception as error:
+        logger.error("Shutting down due to unexpected exception: %s", error)
 
     # trigger shutdowns of other components if not already ongoing triggered
     # by the signal handler

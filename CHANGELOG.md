@@ -4,6 +4,10 @@ See documentation for details.
 
 ## devel
 
+- Duplicate detection moved from job submit to long running rules, i.e. those
+  using Cuckoo and Cortex. This should improve throughput for analyses that
+  don't use these rules and avoids a massive performance degredation if a very
+  high number quick-to-analyse samples hits a PeekabooAV cluster.
 - Samples now have an identity that includes sha256sum, declared name and type
   as well as content disposition. This allows for more reliable and efficient
   in-flight locking and cached result usage decisions. DB schema version raised
