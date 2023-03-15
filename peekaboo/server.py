@@ -226,10 +226,8 @@ class PeekabooServer:
             return sanic.response.json(
                 {'message': 'Failed to add analysis to database'}, 500)
 
-        if not await self.job_queue.submit(sample):
-            logger.error('Error submitting sample to job queue')
-            return sanic.response.json(
-                {'message': 'Error submitting sample to job queue'}, 500)
+        # can not fail since our queue is limitless
+        await self.job_queue.submit(sample)
 
         # send answer to client
         return sanic.response.json({'job_id': sample.id}, 200)
