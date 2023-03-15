@@ -52,6 +52,8 @@ class Rule:
     rule_name = 'unimplemented'
     uses_cuckoo = False
     uses_cortex = False
+    uses_duplicate_handler = False
+    uses_cluster_duplicate_handler = False
 
     def __init__(self, config, db_con, threadpool=None):
         """ Initialize common configuration and resources.
@@ -67,6 +69,8 @@ class Rule:
 
         self.cuckoo = None
         self.cortex = None
+        self.duplicate_handler = None
+        self.cluster_duplicate_handler = None
 
         # initialise and validate configuration
         self.config_options = {}
@@ -144,6 +148,24 @@ class Rule:
         """
         self.cortex = cortex
 
+    def set_duplicate_handler(self, duplicate_handler):
+        """ Set the duplicate handler to use for detecting and deferring
+        duplicate local analyses.
+
+        @param duplicate_handler: the duplicate handler to use
+        @type duplicate_handler: DuplicateHandler
+        """
+        self.duplicate_handler = duplicate_handler
+
+    def set_cluster_duplicate_handler(self, cluster_duplicate_handler):
+        """ Set the cluster duplicate handler to use for detecting and
+        deferring duplicate local analyses.
+
+        @param cluster_duplicate_handler: the cluster duplicate handler to use
+        @type cluster_duplicate_handler: ClusterDuplicateHandler
+        """
+        self.cluster_duplicate_handler = cluster_duplicate_handler
+
     async def get_cuckoo_report(self, sample):
         """ Get the samples cuckoo_report or submit the sample for analysis by
             Cuckoo.
@@ -156,6 +178,17 @@ class Rule:
         report = sample.cuckoo_report
         if report is not None:
             return report
+
+        # submitting to Cuckoo is an expensive operation. So try to prevent
+        # redundant analyses by employing duplicate handlers.
+        if (self.duplicate_handler is not None and
+                await self.duplicate_handler.is_duplicate(sample)):
+            raise PeekabooAnalysisDeferred()
+
+        if (self.cluster_duplicate_handler is not None and
+                await self.cluster_duplicate_handler.is_cluster_duplicate(
+                    sample)):
+            raise PeekabooAnalysisDeferred()
 
         logger.debug("%d: Submitting to Cuckoo", sample.id)
         try:
@@ -227,6 +260,17 @@ class Rule:
                                           ruleset run until result has been
                                           retrieved.
         """
+        # submitting to Cortex is an expensive operation. So try to prevent
+        # redundant analyses by employing duplicate handlers.
+        if (self.duplicate_handler is not None and
+                await self.duplicate_handler.is_duplicate(sample)):
+            raise PeekabooAnalysisDeferred()
+
+        if (self.cluster_duplicate_handler is not None and
+                await self.cluster_duplicate_handler.is_cluster_duplicate(
+                    sample)):
+            raise PeekabooAnalysisDeferred()
+
         logger.debug("%d: Submitting to Cortex", sample.id)
         try:
             job_id = await self.cortex.submit(sample, analyzer)
@@ -413,6 +457,8 @@ class OfficeMacroWithSuspiciousKeyword(OleRule):
 class CuckooRule(Rule):
     """ A common base class for rules that evaluate the Cuckoo report. """
     uses_cuckoo = True
+    uses_duplicate_handler = True
+    uses_cluster_duplicate_handler = True
 
     async def evaluate(self, sample):
         """ If a report is present for the sample in question we call method
@@ -424,6 +470,7 @@ class CuckooRule(Rule):
 
         @param sample: The sample to evaluate.
         @raises PeekabooAnalysisDeferred: if the sample was submitted to Cuckoo
+                                          or is a local or cluster duplicate
         @returns: RuleResult containing verdict.
         """
         report = await self.get_cuckoo_report(sample)
@@ -685,6 +732,18 @@ class ExpressionRule(Rule):
         """ Tells if any expression uses the Cortex report. Overrides base
         class variable with a dynamic determination. """
         return self.uses_identifier("cortexreport")
+
+    @property
+    def uses_duplicate_handler(self):
+        """ Tells if any expression uses the duplicate handler. Overrides base
+        class variable with a dynamic determination. """
+        return self.uses_cuckoo or self.uses_cortex
+
+    @property
+    def uses_cluster_duplicate_handler(self):
+        """ Tells if any expression uses the cluster duplicate handler.
+        Overrides base class variable with a dynamic determination. """
+        return self.uses_cuckoo or self.uses_cortex
 
     async def resolve_identifier(self, identifier, context, sample):
         """ Resolves a missing identifer into an object.
