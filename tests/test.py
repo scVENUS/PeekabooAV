@@ -612,18 +612,14 @@ class TestDatabase(AsyncioTestCase):
     @classmethod
     def setUpClass(cls):
         """ Set up common test case resources. """
-        cls.test_db = os.path.abspath('./test.db')
         cls.conf = CreatingPeekabooConfig()
-        cls.db_con = PeekabooDatabase('sqlite:///' + cls.test_db,
-                                      instance_id=1,
-                                      stale_in_flight_threshold=10)
-        # IsolatedAsyncoiTestCase zaps the thread-level event loop after each
-        # test, so we need to create our own here.
-        loop = asyncio.new_event_loop()
-        loop.run_until_complete(cls.db_con.start())
-        cls.no_cluster_db = PeekabooDatabase('sqlite:///' + cls.test_db,
-                                             instance_id=0)
-        loop.run_until_complete(cls.no_cluster_db.start())
+
+        #cls.db_url = 'postgresql://peekaboo:my-secret-pw@localhost/peekaboo'
+        #cls.db_url = 'mysql://root:my-secret-pw@localhost/peekaboo'
+
+        cls.test_db = os.path.abspath('./test.db')
+        cls.db_url = 'sqlite:///' + cls.test_db
+
         cls.sample = Sample(b'test', 'test.py')
         result = RuleResult('Unittest',
                             Result.good,
@@ -634,26 +630,38 @@ class TestDatabase(AsyncioTestCase):
     @asynctest
     async def test_1_analysis_add(self):
         """ Test adding a new analysis. """
-        await self.db_con.analysis_add(self.sample)
+        db_con = PeekabooDatabase(self.db_url,
+                                  instance_id=1,
+                                  stale_in_flight_threshold=10)
+        await db_con.start()
+        await db_con.analysis_add(self.sample)
         # sample now contains a job ID
 
     @asynctest
     async def test_2_analysis_update(self):
         """ Test updating of analysis results. """
         # mark sample done so journal and result retrieval tests can work
+        db_con = PeekabooDatabase(self.db_url,
+                                  instance_id=1,
+                                  stale_in_flight_threshold=10)
+        await db_con.start()
         self.sample.mark_done()
-        await self.db_con.analysis_update(self.sample)
+        await db_con.analysis_update(self.sample)
 
     @asynctest
     async def test_3_analysis_journal_fetch_journal(self):
-        """ Test retrieval of analysis results. """
+        """ Test retrieval of analysis journal. """
         sample_id = self.sample.id
 
-        await self.db_con.analysis_add(self.sample)
+        db_con = PeekabooDatabase(self.db_url,
+                                  instance_id=1,
+                                  stale_in_flight_threshold=10)
+        await db_con.start()
+        await db_con.analysis_add(self.sample)
         # sample now contains another, new job ID
         # mark sample done so journal and result retrieval tests can work
         self.sample.mark_done()
-        await self.db_con.analysis_update(self.sample)
+        await db_con.analysis_update(self.sample)
 
         # add a bad analysis to check that it is worst
         result = RuleResult('Unittest',
@@ -661,9 +669,9 @@ class TestDatabase(AsyncioTestCase):
                             'This is just a third test case.',
                             further_analysis=False)
         self.sample.add_rule_result(result)
-        await self.db_con.analysis_add(self.sample)
+        await db_con.analysis_add(self.sample)
         self.sample.mark_done()
-        await self.db_con.analysis_update(self.sample)
+        await db_con.analysis_update(self.sample)
 
         # add a failed analysis to check that it is ignored
         result = RuleResult('Unittest',
@@ -674,25 +682,25 @@ class TestDatabase(AsyncioTestCase):
         # dominate result
         sample = Sample(b'test', 'test.py')
         sample.add_rule_result(result)
-        await self.db_con.analysis_add(sample)
+        await db_con.analysis_add(sample)
         sample.mark_done()
-        await self.db_con.analysis_update(sample)
+        await db_con.analysis_update(sample)
 
         # reset the job id so this sample is not ignored when fetching the
         # journal
-        self.sample.update_id(None)
+        sample.update_id(None)
 
-        first = await self.db_con.analysis_journal_get_first(self.sample)
+        first = await db_con.analysis_journal_get_first(sample)
         self.assertEqual(first.result, Result.good)
         self.assertEqual(first.reason, 'This is just a test case.')
         self.assertIsNotNone(first.analysis_time)
 
-        last = await self.db_con.analysis_journal_get_last(self.sample)
+        last = await db_con.analysis_journal_get_last(sample)
         self.assertEqual(last.result, Result.bad)
         self.assertEqual(last.reason, 'This is just a third test case.')
         self.assertIsNotNone(last.analysis_time)
 
-        worst = await self.db_con.analysis_journal_get_worst(self.sample)
+        worst = await db_con.analysis_journal_get_worst(sample)
         self.assertEqual(worst.result, Result.bad)
         self.assertEqual(worst.reason, 'This is just a third test case.')
         self.assertIsNotNone(worst.analysis_time)
@@ -703,9 +711,13 @@ class TestDatabase(AsyncioTestCase):
     @asynctest
     async def test_4_analysis_retrieve(self):
         """ Test retrieval of analysis results. """
-        await self.db_con.analysis_add(self.sample)
+        db_con = PeekabooDatabase(self.db_url,
+                                      instance_id=1,
+                                      stale_in_flight_threshold=10)
+        await db_con.start()
+        await db_con.analysis_add(self.sample)
         # sample now contains a job ID
-        reason, result = await self.db_con.analysis_retrieve(self.sample.id)
+        reason, result = await db_con.analysis_retrieve(self.sample.id)
         # does not ignore failed analyses like the journal above
         self.assertEqual(result, Result.bad)
         self.assertEqual(reason, 'This is just a third test case.')
@@ -714,128 +726,150 @@ class TestDatabase(AsyncioTestCase):
     async def test_5_in_flight_no_cluster(self):
         """ Test that marking of samples as in-flight on a non-cluster-enabled
         database are no-ops. """
-        self.assertTrue(await self.no_cluster_db.mark_sample_in_flight(
+        no_cluster_db = PeekabooDatabase(self.db_url,
+                                         instance_id=0)
+        await no_cluster_db.start()
+        self.assertTrue(await no_cluster_db.mark_sample_in_flight(
             self.sample))
-        self.assertTrue(await self.no_cluster_db.mark_sample_in_flight(
+        self.assertTrue(await no_cluster_db.mark_sample_in_flight(
             self.sample))
-        self.assertIsNone(await self.no_cluster_db.clear_sample_in_flight(
+        self.assertIsNone(await no_cluster_db.clear_sample_in_flight(
             self.sample))
-        self.assertIsNone(await self.no_cluster_db.clear_sample_in_flight(
+        self.assertIsNone(await no_cluster_db.clear_sample_in_flight(
             self.sample))
-        self.assertIsNone(await self.no_cluster_db.clear_in_flight_samples())
+        self.assertIsNone(await no_cluster_db.clear_in_flight_samples())
 
     @asynctest
     async def test_6_in_flight_cluster(self):
         """ Test marking of samples as in-flight. """
-        self.assertTrue(await self.db_con.mark_sample_in_flight(
+        db_con = PeekabooDatabase(self.db_url,
+                                  instance_id=1,
+                                  stale_in_flight_threshold=10)
+        await db_con.start()
+        self.assertTrue(await db_con.mark_sample_in_flight(
             self.sample, 1))
         # re-locking the same sample should fail
-        self.assertFalse(await self.db_con.mark_sample_in_flight(
+        self.assertFalse(await db_con.mark_sample_in_flight(
             self.sample, 1))
-        self.assertIsNone(await self.db_con.clear_sample_in_flight(
+        self.assertIsNone(await db_con.clear_sample_in_flight(
             self.sample, 1))
         # unlocking twice should fail
         with self.assertRaisesRegex(
                 PeekabooDatabaseError, "Unexpected inconsistency: Sample not "
                 "recorded as in-flight upon clearing flag"):
-            await self.db_con.clear_sample_in_flight(self.sample, 1)
+            await db_con.clear_sample_in_flight(self.sample, 1)
 
     @asynctest
     async def test_7_in_flight_clear(self):
         """ Test clearing of in-flight markers. """
+        db_con = PeekabooDatabase(self.db_url,
+                                  instance_id=1,
+                                  stale_in_flight_threshold=10)
+        await db_con.start()
+
         sample2 = Sample(b'foo', 'foo.pyc')
         sample3 = Sample(b'bar', 'bar.pyc')
 
-        self.assertTrue(await self.db_con.mark_sample_in_flight(self.sample, 1))
-        self.assertTrue(await self.db_con.mark_sample_in_flight(sample2, 1))
-        self.assertTrue(await self.db_con.mark_sample_in_flight(sample3, 2))
+        self.assertTrue(await db_con.mark_sample_in_flight(self.sample, 1))
+        self.assertTrue(await db_con.mark_sample_in_flight(sample2, 1))
+        self.assertTrue(await db_con.mark_sample_in_flight(sample3, 2))
 
         # should only clear samples of instance 1
-        self.assertIsNone(await self.db_con.clear_in_flight_samples(1))
-        self.assertTrue(await self.db_con.mark_sample_in_flight(self.sample, 1))
-        self.assertTrue(await self.db_con.mark_sample_in_flight(sample2, 1))
-        self.assertFalse(await self.db_con.mark_sample_in_flight(sample3, 2))
+        self.assertIsNone(await db_con.clear_in_flight_samples(1))
+        self.assertTrue(await db_con.mark_sample_in_flight(self.sample, 1))
+        self.assertTrue(await db_con.mark_sample_in_flight(sample2, 1))
+        self.assertFalse(await db_con.mark_sample_in_flight(sample3, 2))
 
         # should only clear samples of instance 2
-        self.assertIsNone(await self.db_con.clear_in_flight_samples(2))
-        self.assertFalse(await self.db_con.mark_sample_in_flight(
+        self.assertIsNone(await db_con.clear_in_flight_samples(2))
+        self.assertFalse(await db_con.mark_sample_in_flight(
             self.sample, 1))
-        self.assertFalse(await self.db_con.mark_sample_in_flight(sample2, 1))
-        self.assertTrue(await self.db_con.mark_sample_in_flight(sample3, 2))
+        self.assertFalse(await db_con.mark_sample_in_flight(sample2, 1))
+        self.assertTrue(await db_con.mark_sample_in_flight(sample3, 2))
 
         # should clear all samples
-        self.assertIsNone(await self.db_con.clear_in_flight_samples(-1))
-        self.assertTrue(await self.db_con.mark_sample_in_flight(self.sample, 1))
-        self.assertTrue(await self.db_con.mark_sample_in_flight(sample2, 1))
-        self.assertTrue(await self.db_con.mark_sample_in_flight(sample3, 2))
+        self.assertIsNone(await db_con.clear_in_flight_samples(-1))
+        self.assertTrue(await db_con.mark_sample_in_flight(self.sample, 1))
+        self.assertTrue(await db_con.mark_sample_in_flight(sample2, 1))
+        self.assertTrue(await db_con.mark_sample_in_flight(sample3, 2))
 
         # should be a no-op because there will never be any entries of instance
         # 0
-        self.assertIsNone(await self.db_con.clear_in_flight_samples(0))
-        self.assertFalse(await self.db_con.mark_sample_in_flight(
+        self.assertIsNone(await db_con.clear_in_flight_samples(0))
+        self.assertFalse(await db_con.mark_sample_in_flight(
             self.sample, 1))
-        self.assertFalse(await self.db_con.mark_sample_in_flight(sample2, 1))
-        self.assertFalse(await self.db_con.mark_sample_in_flight(sample3, 2))
+        self.assertFalse(await db_con.mark_sample_in_flight(sample2, 1))
+        self.assertFalse(await db_con.mark_sample_in_flight(sample3, 2))
 
+        no_cluster_db = PeekabooDatabase(self.db_url,
+                                         instance_id=0)
+        await no_cluster_db.start()
         # should be a no-op because this database is not cluster-enabled
-        self.assertIsNone(await self.no_cluster_db.clear_in_flight_samples())
-        self.assertFalse(await self.db_con.mark_sample_in_flight(
+        self.assertIsNone(await no_cluster_db.clear_in_flight_samples())
+        self.assertFalse(await db_con.mark_sample_in_flight(
             self.sample, 1))
-        self.assertFalse(await self.db_con.mark_sample_in_flight(sample2, 1))
-        self.assertFalse(await self.db_con.mark_sample_in_flight(sample3, 2))
+        self.assertFalse(await db_con.mark_sample_in_flight(sample2, 1))
+        self.assertFalse(await db_con.mark_sample_in_flight(sample3, 2))
 
         # leave as found
-        self.assertIsNone(await self.db_con.clear_in_flight_samples(-1))
+        self.assertIsNone(await db_con.clear_in_flight_samples(-1))
 
     @asynctest
     async def test_8_stale_in_flight(self):
         """ Test the cleaning of stale in-flight markers. """
+        db_con = PeekabooDatabase(self.db_url,
+                                  instance_id=1,
+                                  stale_in_flight_threshold=10)
+        await db_con.start()
+
         stale = datetime.datetime.now(
             datetime.timezone.utc) - datetime.timedelta(seconds=20)
-        self.assertTrue(await self.db_con.mark_sample_in_flight(
+        self.assertTrue(await db_con.mark_sample_in_flight(
             self.sample, 1, stale))
         sample2 = Sample(b'baz', 'baz.pyc')
-        self.assertTrue(await self.db_con.mark_sample_in_flight(sample2, 1))
+        self.assertTrue(await db_con.mark_sample_in_flight(sample2, 1))
+
+        no_cluster_db = PeekabooDatabase(self.db_url,
+                                         instance_id=0)
+        await no_cluster_db.start()
 
         # should not clear anything because the database is not cluster-enabled
         self.assertTrue(
-            await self.no_cluster_db.clear_stale_in_flight_samples())
-        self.assertFalse(await self.db_con.mark_sample_in_flight(
+            await no_cluster_db.clear_stale_in_flight_samples())
+        self.assertFalse(await db_con.mark_sample_in_flight(
             self.sample, 1))
-        self.assertFalse(await self.db_con.mark_sample_in_flight(sample2, 1))
+        self.assertFalse(await db_con.mark_sample_in_flight(sample2, 1))
 
         # should clear sample marker because it is stale but not sample2
-        self.assertTrue(await self.db_con.clear_stale_in_flight_samples())
-        self.assertTrue(await self.db_con.mark_sample_in_flight(self.sample, 1))
-        self.assertFalse(await self.db_con.mark_sample_in_flight(sample2, 1))
+        self.assertTrue(await db_con.clear_stale_in_flight_samples())
+        self.assertTrue(await db_con.mark_sample_in_flight(self.sample, 1))
+        self.assertFalse(await db_con.mark_sample_in_flight(sample2, 1))
 
         # should not clear anything because all markers are fresh
-        self.assertFalse(await self.db_con.clear_stale_in_flight_samples())
-        self.assertFalse(await self.db_con.mark_sample_in_flight(
+        self.assertFalse(await db_con.clear_stale_in_flight_samples())
+        self.assertFalse(await db_con.mark_sample_in_flight(
             self.sample, 1))
-        self.assertFalse(await self.db_con.mark_sample_in_flight(sample2, 1))
+        self.assertFalse(await db_con.mark_sample_in_flight(sample2, 1))
 
         # set up new constellation
-        self.assertIsNone(await self.db_con.clear_in_flight_samples(-1))
-        self.assertTrue(await self.db_con.mark_sample_in_flight(
+        self.assertIsNone(await db_con.clear_in_flight_samples(-1))
+        self.assertTrue(await db_con.mark_sample_in_flight(
             self.sample, 1, stale))
-        self.assertTrue(await self.db_con.mark_sample_in_flight(
+        self.assertTrue(await db_con.mark_sample_in_flight(
             sample2, 1, stale))
 
         # should clear all markers because all are stale
-        self.assertTrue(await self.db_con.clear_stale_in_flight_samples())
-        self.assertTrue(await self.db_con.mark_sample_in_flight(
+        self.assertTrue(await db_con.clear_stale_in_flight_samples())
+        self.assertTrue(await db_con.mark_sample_in_flight(
             self.sample, 1, stale))
-        self.assertTrue(await self.db_con.mark_sample_in_flight(
+        self.assertTrue(await db_con.mark_sample_in_flight(
             sample2, 1, stale))
-
-        # leave as found
-        self.assertTrue(await self.db_con.clear_stale_in_flight_samples())
 
     @classmethod
     def tearDownClass(cls):
         """ Clean up after the tests. """
-        os.unlink(cls.test_db)
+        if hasattr(cls, 'test_db'):
+            os.unlink(cls.test_db)
 
 
 class TestSample(AsyncioTestCase):
