@@ -24,7 +24,7 @@ jobs:
     steps:
       # required for access to the local publish action
       - name: Check out PeekabooAV
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           path: actions
 
