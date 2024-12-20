@@ -13,9 +13,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.7", "3.8", "3.9", "3.10"]
+        python-version: ["3.8", "3.9", "3.10"]
         os: [ubuntu-latest]
         include:
+          - os: ubuntu-22.04
+            python-version: "3.7"
           - os: ubuntu-20.04
             python-version: "3.6"
 
