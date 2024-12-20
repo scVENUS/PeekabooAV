@@ -29,15 +29,15 @@ jobs:
           sudo apt-get install swaks
 
       - name: Bring up the environment
-        run: docker-compose up --build --detach
+        run: docker compose up --build --detach
 
       - name: Submit test job
         run: |
           # note the glob
           tf="/opt/peekaboo/lib/python*/site-packages/peekaboo/server.py"
-          docker-compose exec -T peekabooav /bin/sh -c \
+          docker compose exec -T peekabooav /bin/sh -c \
               "/opt/peekaboo/bin/peekaboo-util scan-file -f $tf" | \
             grep file.has.been.categorized.*bad
 
       - name: Bring down the environment
-        run: docker-compose down
+        run: docker compose down
